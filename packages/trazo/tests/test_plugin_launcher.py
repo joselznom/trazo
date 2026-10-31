@@ -6,6 +6,7 @@ import json
 import os
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -114,7 +115,10 @@ class LauncherTests(unittest.TestCase):
         # An install without the MCP server gives way to the checkout's.
         self.assertEqual(self.started(data), f"{checkout} mcp\n")
 
-        default = install(self.home / "Library" / "Application Support" / "trazo", "0.6.0")
+        # The default folder is trazo.machine.data_dir's for this computer.
+        folder = (self.home / "Library" / "Application Support" if sys.platform == "darwin"
+                  else self.home / ".local" / "share")
+        default = install(folder / "trazo", "0.6.0")
         self.assertEqual(self.started(), f"{default} mcp\n")
         (old.parents[1] / "lib" / "python3.12" / "site-packages" / "trazo").mkdir()
         (old.parents[1] / "lib" / "python3.12" / "site-packages" / "trazo" / "mcp.py").write_text("")

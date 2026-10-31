@@ -5,9 +5,10 @@
                             Chromium is installed, then write machine.json
     trazo setup --plan   print what would be downloaded and where; change nothing
 
-The Pandoc zip is the official release asset for this platform, pinned
-below by version and sha256 (record 002); Chrome is Chrome for Testing's
-headless shell (record 009). Each is downloaded to a temporary file in the
+The Pandoc archive (a zip, or a .tar.gz on Linux) is the official release
+asset for this platform, pinned below by version and sha256 (record 002);
+Chrome is Chrome for Testing's headless shell (record 009). Each is
+downloaded to a temporary file in the
 data folder, checked, unpacked into <data>/pandoc/<version>/ or
 <data>/chrome/<version>/ and deleted; temporary folders an interrupted run
 left are removed first, and so are the folders of other versions once the
@@ -23,18 +24,22 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import io
 import os
 import platform
 import shutil
 import stat
 import subprocess
 import sys
+import tarfile
 import tempfile
 import time
 import urllib.request
 import zipfile
+from collections.abc import Callable, Iterator
+from functools import partial
 from pathlib import Path
-from typing import NamedTuple
+from typing import IO, NamedTuple
 
 from . import machine
 
@@ -43,7 +48,7 @@ class Asset(NamedTuple):
     name: str     # release file name
     size: int     # bytes
     sha256: str
-    binary: str   # the executable inside the zip
+    binary: str   # the executable inside the archive
     unpacked: int  # bytes once unpacked
 
 
@@ -51,7 +56,8 @@ PANDOC_VERSION = "3.9.0.2"  # the version CI pins (scripts/ci-versions.sh)
 PANDOC_URL = "https://github.com/jgm/pandoc/releases/download/{version}/{name}"
 # (platform.system(), platform.machine()) -> asset. Sizes and sha256 are the
 # release's own (api.github.com/repos/jgm/pandoc/releases/tags/3.9.0.2,
-# "digest"), checked by downloading and hashing each zip on 2026-10-22.
+# "digest"), checked by downloading and hashing each zip on 2026-10-22 and
+# each Linux tarball on 2026-10-31.
 PANDOC_ASSETS = {
     ("Darwin", "arm64"): Asset(
         "pandoc-3.9.0.2-arm64-macOS.zip", 36687858,
@@ -65,11 +71,20 @@ PANDOC_ASSETS = {
         "pandoc-3.9.0.2-windows-x86_64.zip", 41250425,
         "c97542f2800f446e788d9f74237856d995421ad1bb3cc8324286840c5f272d3a",
         "pandoc-3.9.0.2/pandoc.exe", 231506020),
+    ("Linux", "x86_64"): Asset(
+        "pandoc-3.9.0.2-linux-amd64.tar.gz", 34520947,
+        "a69abfababda8a56969a254b09f9553a7be89ddec00d4e0fe9fd585d71a67508",
+        "pandoc-3.9.0.2/bin/pandoc", 161708607),
+    ("Linux", "aarch64"): Asset(
+        "pandoc-3.9.0.2-linux-arm64.tar.gz", 36948718,
+        "b6d21e8f9c3b15744f5a7ab40248019157ed7793875dbe0383d4c82ff572b528",
+        "pandoc-3.9.0.2/bin/pandoc", 173231343),
 }
 CHROME_VERSION = "156.0.8078.73"  # Chrome for Testing's stable channel on 2026-10-29
 CHROME_URL = "https://storage.googleapis.com/chrome-for-testing-public/{version}/{platform}/{name}"
 # The headless shell (record 009). Chrome for Testing publishes no digests:
-# sizes and sha256 are those of the zips as downloaded on 2026-10-29.
+# sizes and sha256 are those of the zips as downloaded on 2026-10-29 (Linux
+# on 2026-10-31). There is no Linux arm64 build.
 CHROME_ASSETS = {
     ("Darwin", "arm64"): Asset(
         "chrome-headless-shell-mac-arm64.zip", 103949688,
@@ -79,6 +94,10 @@ CHROME_ASSETS = {
         "chrome-headless-shell-mac-x64.zip", 109508986,
         "be798095cd693357a7a6a0e7a0c4ebd81563e16f51225eb98aacc906d6326519",
         "chrome-headless-shell-mac-x64/chrome-headless-shell", 217459239),
+    ("Linux", "x86_64"): Asset(
+        "chrome-headless-shell-linux64.zip", 126938225,
+        "77eb8d52798efc7a857ab61abcc62a456d8ea9635b02341d06dffee2761768c8",
+        "chrome-headless-shell-linux64/chrome-headless-shell", 287433281),
 }
 QUARANTINE = "com.apple.quarantine"
 
@@ -158,32 +177,57 @@ def download(url: str, target: Path, asset: Asset) -> None:
                          "the download was deleted and nothing was installed")
 
 
-def unpack(archive: Path, folder: Path) -> None:
-    """Unpack a zip into folder (which must not exist), keeping the Unix
-    permission bits and relative symbolic links without "..": Pandoc's
-    links are bare names, and such a link cannot be redirected outside the
-    folder by a later one."""
-    root = folder.resolve()
+def members(archive: Path) -> Iterator[tuple[str, str, int, Callable[[], IO[bytes]]]]:
+    """(name, "dir", "link" or "file", Unix mode, open) for each entry of a
+    zip or a .tar.gz; a link's content is its target. Other tar entries
+    (hard links, devices) are refused: Pandoc's tarballs have none."""
+    if archive.name.endswith(".tar.gz"):
+        with tarfile.open(archive, "r:gz") as tarred:
+            for entry in tarred:
+                if entry.isdir():
+                    yield entry.name, "dir", entry.mode, partial(io.BytesIO)
+                elif entry.issym():
+                    yield entry.name, "link", entry.mode, partial(io.BytesIO, entry.linkname.encode("utf-8"))
+                elif entry.isfile():
+                    yield entry.name, "file", entry.mode, partial(tarred.extractfile, entry)
+                else:
+                    raise SetupError(f"{archive.name}: {entry.name} is not a file, folder or link")
+        return
     with zipfile.ZipFile(archive) as zipped:
         for member in zipped.infolist():
-            target = (folder / member.filename).resolve()
-            if not target.is_relative_to(root):
-                raise SetupError(f"{archive.name}: {member.filename} would be written outside {folder}")
             mode = member.external_attr >> 16
-            if member.is_dir():
+            kind = "dir" if member.is_dir() else "link" if stat.S_ISLNK(mode) else "file"
+            yield member.filename, kind, mode, partial(zipped.open, member)
+
+
+def unpack(archive: Path, folder: Path) -> None:
+    """Unpack a zip or a .tar.gz into folder (which must not exist), keeping
+    the Unix permission bits and relative symbolic links without "..":
+    Pandoc's links are bare names, and such a link cannot be redirected
+    outside the folder by a later one."""
+    root = folder.resolve()
+    try:
+        for name, kind, mode, content in members(archive):
+            target = (folder / name).resolve()
+            if not target.is_relative_to(root):
+                raise SetupError(f"{archive.name}: {name} would be written outside {folder}")
+            if kind == "dir":
                 target.mkdir(parents=True, exist_ok=True)
                 continue
             target.parent.mkdir(parents=True, exist_ok=True)
-            if stat.S_ISLNK(mode) and os.name != "nt":
-                link = zipped.read(member).decode("utf-8")
+            if kind == "link" and os.name != "nt":
+                with content() as source:
+                    link = source.read().decode("utf-8")
                 if os.path.isabs(link) or ".." in Path(link).parts:
-                    raise SetupError(f"{archive.name}: link {member.filename} points outside {folder}")
+                    raise SetupError(f"{archive.name}: link {name} points outside {folder}")
                 target.symlink_to(link)
                 continue
-            with zipped.open(member) as source, open(target, "wb") as out:
+            with content() as source, open(target, "wb") as out:
                 shutil.copyfileobj(source, out)
             if mode & 0o777 and os.name != "nt":
                 target.chmod(mode & 0o755)
+    except tarfile.TarError as exc:
+        raise SetupError(f"{archive.name}: {exc}") from exc
 
 
 def quarantine(path: Path) -> str | None:
@@ -250,7 +294,7 @@ def plan(asset: Asset | None, existing: tuple[str, str], chrome: Asset | None, b
     if existing[0]:
         lines.append(f"Pandoc: {existing[0]} ({existing[1]}); nothing to download")
     elif asset is None:
-        lines.append(f"Pandoc: trazo downloads Pandoc only for macOS and Windows x64, not "
+        lines.append(f"Pandoc: trazo downloads Pandoc only for macOS, Linux and Windows x64, not "
                      f"{platform.system()} {platform.machine()}; install it with the system's package manager")
     elif pandoc_binary(asset).is_file():
         lines.append(f"Pandoc {PANDOC_VERSION}: {pandoc_binary(asset)}; nothing to download")
@@ -260,7 +304,8 @@ def plan(asset: Asset | None, existing: tuple[str, str], chrome: Asset | None, b
     if browser[0]:
         lines.append(f"Chrome: {browser[0]} ({browser[1]}); nothing to download")
     elif chrome is None:
-        lines.append(f"Chrome: trazo downloads Chrome only for macOS, not {platform.system()} {platform.machine()}; "
+        lines.append(f"Chrome: trazo downloads Chrome only for macOS and Linux x64, not "
+                     f"{platform.system()} {platform.machine()}; "
                      "install Google Chrome, Edge or Chromium for diagrams and PNG/PDF exports")
     else:
         lines += download_lines(f"Chrome {CHROME_VERSION} (headless)", chrome_url(chrome), chrome, chrome_folder())

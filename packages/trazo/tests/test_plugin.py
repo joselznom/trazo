@@ -6,7 +6,6 @@ import os
 import shlex
 import shutil
 import subprocess
-import sys
 import tempfile
 import time
 import unittest
@@ -107,9 +106,18 @@ class SessionStartHookTests(unittest.TestCase):
         shutil.copy(REPO / "plugin" / "session-start.sh", root / "plugin")
         return root
 
-    @unittest.skipUnless(sys.platform == "darwin", "the hook's default data folder is macOS's")
-    def test_default_data_folder(self):
+    def test_default_data_folder_follows_the_system(self):
+        home = self.tmp / "home"
         self.assertEqual(run_hook(REPO, {}, self.tmp), NOT_SET_UP)
+        install(home / ".local" / "share" / "trazo", self.version)
+        self.assertEqual(run_hook(REPO, {}, self.tmp, "Linux"), "")
+        self.assertEqual(run_hook(REPO, {}, self.tmp, "Darwin"), NOT_SET_UP)
+        install(home / "Library" / "Application Support" / "trazo", self.version)
+        self.assertEqual(run_hook(REPO, {}, self.tmp, "Darwin"), "")
+        xdg = {"XDG_DATA_HOME": str(self.tmp / "xdg")}
+        self.assertEqual(run_hook(REPO, xdg, self.tmp, "Linux"), NOT_SET_UP)
+        install(self.tmp / "xdg" / "trazo", self.version)
+        self.assertEqual(run_hook(REPO, xdg, self.tmp, "Linux"), "")
 
     def test_not_set_up(self):
         self.assertEqual(self.hook(), NOT_SET_UP)
@@ -151,8 +159,10 @@ class SessionStartHookTests(unittest.TestCase):
         install(self.data, '0.4.0"x')
         self.assertEqual(self.hook(), NOT_SET_UP)
 
-    def test_only_on_macos(self):
-        self.assertEqual(self.hook(system="Linux"), "")
+    def test_linux_gets_the_notes(self):
+        self.assertEqual(self.hook(system="Linux"), NOT_SET_UP)
+        # Where setup.sh does not run, a note would only send the agent to a failing setup.
+        self.assertEqual(self.hook(system="FreeBSD"), "")
 
     def test_reordered_manifest_with_a_nested_version(self):
         manifest = {"name": "trazo", "author": {"name": "x", "version": "9.9.9"}, "version": "0.7.0"}

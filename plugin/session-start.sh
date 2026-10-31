@@ -8,9 +8,13 @@
 # a non-empty machine.json, which `trazo setup` writes last.
 # trazo.machine.installed_version follows the same rule; setup_status is
 # stricter (it also wants uv and Pandoc), this hook checks install and
-# version only. macOS only until phase 4, like plugin/scripts/setup.sh.
+# version only. macOS and Linux, like plugin/scripts/setup.sh.
 # $TRAZO_DATA_DIR must be an absolute path (no ~ expansion here).
-[ "$(uname -s 2>/dev/null)" = Darwin ] || exit 0
+case $(uname -s 2>/dev/null) in
+    Darwin) default="$HOME/Library/Application Support/trazo" ;;
+    Linux) default="${XDG_DATA_HOME:-$HOME/.local/share}/trazo" ;;
+    *) exit 0 ;;
+esac
 
 # Exit 0 when $1 is a newer release than $2, both digits and dots ("0.10.1");
 # other versions (a pre-release) are not ordered, as trazo.machine.release_key.
@@ -27,7 +31,7 @@ newer() {
     return 1
 }
 root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-data=${TRAZO_DATA_DIR:-"$HOME/Library/Application Support/trazo"}
+data=${TRAZO_DATA_DIR:-$default}
 
 # The top-level "version" (two-space indent); tests check it matches json.load.
 plugin=$(sed -n 's/^  "version": *"\([^"]*\)".*/\1/p' "$root/.claude-plugin/plugin.json" 2>/dev/null | head -n 1)
