@@ -1,0 +1,23 @@
+# GitHub shows "Cite this repository" from this file, and Zenodo reads it for
+# the DOI it gives each GitHub release. No version or date: those come from
+# the release itself, so this file does not change at each release.
+cff-version: 1.2.0
+message: If you use trazo in your work, please cite it as below.
+type: software
+title: trazo
+abstract: >-
+  Write scientific papers in Markdown with an AI agent and get a Word
+  document ready for coauthors or a journal. Plugin for the Claude and
+  ChatGPT desktop apps.
+authors:
+  - given-names: Jose
+    family-names: Lozano Montoya
+repository-code: https://github.com/joselznom/trazo
+license: MIT
+keywords:
+  - scientific writing
+  - academic writing
+  - markdown
+  - pandoc
+  - docx
+  - ai agents
