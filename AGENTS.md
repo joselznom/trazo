@@ -86,7 +86,7 @@ Instructions for AI agents working on the trazo suite.
   tag (not of every commit below it). GitHub Actions runs only by hand,
   so this hook is the quality gate.
 - Every change reaches `main` through a pull request, except docs-only
-  changes and version bumps. Release steps are in README.md.
+  changes and version bumps. Release steps are in CONTRIBUTING.md.
 
 ## Risk
 
