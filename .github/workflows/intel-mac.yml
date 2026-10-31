@@ -66,6 +66,7 @@ jobs:
               assert entry["found"] == "data folder" and "x86_64" in kind, name
           with open(os.environ["GITHUB_ENV"], "a") as env:
               print(f"PANDOC_DIR={os.path.dirname(tools['pandoc']['path'])}", file=env)
+              print(f"CHROME_PATH={tools['chrome']['path']}", file=env)
           EOF
       - name: pandoc-crossref for the tests' oracle
         run: |
@@ -80,9 +81,10 @@ jobs:
         run: |
           git config --global user.email ci@example.com
           git config --global user.name ci
-      # Pandoc on PATH for the tests only: the paper below finds it the way a user's does.
+      # Pandoc and Chrome named for the tests only, since some use an empty data
+      # folder; the paper below finds them the way a user's Mac does.
       - name: Package tests
-        run: PATH="$PANDOC_DIR:$RUNNER_TEMP/crossref:$PATH" make test-package
+        run: PATH="$PANDOC_DIR:$RUNNER_TEMP/crossref:$PATH" TRAZO_CHROME="$CHROME_PATH" make test-package
       - name: The example paper builds and verifies with the installed trazo
         if: ${{ !cancelled() }}
         run: |
