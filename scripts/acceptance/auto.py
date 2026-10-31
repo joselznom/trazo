@@ -1,7 +1,8 @@
 """Automatic acceptance: `run.py --auto push|tag` decides by itself what to run.
 
     push   a branch being pushed (pre-push): n1 and n2 for the files the branch changed since it left
-           origin/main, plus uncommitted and untracked ones.
+           origin/develop (the working branch; main moves only at releases), plus uncommitted and
+           untracked ones.
     tag    a release tag being pushed: n1 and n2 for the files changed since the previous release tag
            (passes cached by pushes cost nothing). A skip also blocks it.
 
@@ -37,13 +38,18 @@ def _git(repo: Path, *args: str) -> subprocess.CompletedProcess:
     return subprocess.run(["git", *args], cwd=repo, capture_output=True, text=True)
 
 
+# Work branches off develop; main is only the fallback for a clone without it (a fork that copied
+# main only), since main lags develop until the next release.
+BASES = ("origin/develop", "develop", "origin/main", "main")
+
+
 def base_ref(repo: Path) -> str:
-    """The commit where this branch left main: the merge base of HEAD with origin/main, else main."""
-    for ref in ("origin/main", "main"):
+    """The commit where this branch left develop: the merge base of HEAD with the first of BASES that exists."""
+    for ref in BASES:
         found = _git(repo, "merge-base", ref, "HEAD")
         if found.returncode == 0 and found.stdout.strip():
             return found.stdout.strip()
-    raise registry.CatalogError("neither origin/main nor main exists to compare this branch with; "
+    raise registry.CatalogError("neither develop nor main exists to compare this branch with; "
                                 "name a base with --changed-from <ref>")
 
 

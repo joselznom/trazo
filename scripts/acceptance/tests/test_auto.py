@@ -32,7 +32,7 @@ class GitCase(unittest.TestCase):
         self.root = Path(tmp.name).resolve()
         self.repo = self.root / "repo"
         self.repo.mkdir()
-        git(self.repo, "init", "-q", "-b", "main")
+        git(self.repo, "init", "-q", "-b", "develop")
         self.commit("a.txt", "a")
 
     def commit(self, name, text, repo=None):
@@ -45,7 +45,7 @@ class GitCase(unittest.TestCase):
 
 
 class BaseTests(GitCase):
-    def test_the_base_is_where_the_branch_left_main(self):
+    def test_the_base_is_where_the_branch_left_develop(self):
         start = git(self.repo, "rev-parse", "HEAD")
         git(self.repo, "switch", "-q", "-c", "feature")
         self.commit("b.txt", "b")
@@ -66,15 +66,29 @@ class BaseTests(GitCase):
         entry = Entry("n1-a", "n1", "t", "new", ("plugin/**",))
         self.assertEqual(auto.choose([entry], registry.changed_files(base, self.repo)), [entry])
 
-    def test_origin_main_wins_over_a_main_that_moved_on(self):
+    def test_origin_develop_wins_over_a_develop_that_moved_on(self):
         clone = self.root / "clone"
         git(self.root, "clone", "-q", str(self.repo), str(clone))
-        origin_main = git(clone, "rev-parse", "origin/main")
-        self.commit("local-main.txt", "x", clone)  # the clone's own main moved ahead of origin/main
+        origin_develop = git(clone, "rev-parse", "origin/develop")
+        self.commit("local-develop.txt", "x", clone)  # the clone's own develop moved ahead of origin/develop
         git(clone, "switch", "-q", "-c", "feature")
-        self.assertEqual(auto.base_ref(clone), origin_main)
+        self.assertEqual(auto.base_ref(clone), origin_develop)
 
-    def test_without_main_it_says_what_to_do(self):
+    def test_develop_wins_over_a_main_that_lags_behind(self):
+        git(self.repo, "branch", "main")
+        work = self.commit("unreleased.txt", "x")  # on develop, not yet released to main
+        git(self.repo, "switch", "-q", "-c", "feature")
+        self.commit("b.txt", "b")
+        self.assertEqual(auto.base_ref(self.repo), work)
+
+    def test_a_clone_with_main_only_compares_with_main(self):
+        git(self.repo, "branch", "-m", "main")
+        start = git(self.repo, "rev-parse", "HEAD")
+        git(self.repo, "switch", "-q", "-c", "feature")
+        self.commit("b.txt", "b")
+        self.assertEqual(auto.base_ref(self.repo), start)
+
+    def test_without_develop_or_main_it_says_what_to_do(self):
         git(self.repo, "branch", "-m", "trunk")
         with self.assertRaisesRegex(registry.CatalogError, "--changed-from"):
             auto.base_ref(self.repo)

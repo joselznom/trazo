@@ -104,7 +104,7 @@ acceptance:
 	$(ACCEPTANCE) --level n1 --level n2 $(ACCEPTANCE_FILTER)
 
 # What pre-push runs (AUTO=push, the default; AUTO=tag with ACCEPTANCE_ARGS="--tag vX.Y.Z"): n1 and n2
-# chosen by the files changed since main, passes cached. Nothing to run costs a second.
+# chosen by the files changed since develop, passes cached. Nothing to run costs a second.
 AUTO ?= push
 acceptance-auto:
 	$(ACCEPTANCE) --auto $(AUTO) $(ACCEPTANCE_ARGS)

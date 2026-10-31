@@ -1,3 +1,5 @@
+<!-- Pull requests go to develop; main moves only at releases. A change users notice also adds its line under "Unreleased" in CHANGELOG.md. -->
+
 ## Why
 
 <!-- What changes and the reason behind it. The diff shows the what; months from now only this paragraph explains the why. -->

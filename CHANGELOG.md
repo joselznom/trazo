@@ -1,5 +1,23 @@
 # Changelog
 
+<!--
+Written for users: each section becomes the notes of its GitHub release
+(scripts/release-notes.py). A pull request that changes what users see adds
+its line under "Unreleased"; a release renames that heading to
+"## vX.Y.Z (YYYY-MM-DD)". Shape of a section:
+
+  One sentence: what this release brings.
+
+  ### New / ### Changed / ### Fixed / ### Removed   (only those with entries)
+  - What changed for the user, in the product's words (#PR).
+
+  ### Upgrade notes   (only when the user must do more than update)
+
+Internal changes (tests, CI, refactoring) stay out.
+-->
+
+## Unreleased
+
 ## v1.0.0 (2026-10-31)
 
 First public release. trazo turns a paper written in Markdown, with help

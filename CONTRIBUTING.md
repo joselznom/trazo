@@ -58,13 +58,21 @@ logins, read-only. The desktop apps and what an agent does with the plugin
 are checked by the owner before a release. Agents do not run manual app
 checks. See [the harness README](scripts/acceptance/README.md).
 
+## Branches
+
+Work happens on `develop`: branch from it and open pull requests against
+it. `main` moves only at a release, because both apps install the plugin
+from it.
+
 ## Quality gate
 
-GitHub Actions runs only by hand. With `make hooks`, `git push` runs
+GitHub Actions runs `make lint` and the three test targets on Linux and
+macOS for every pull request and every push to `develop`, `main` or a tag.
+With `make hooks`, `git push` runs
 `test-package`, `test-template` and `test-update` on a clean checkout of
 the tip of each pushed branch or tag (a few minutes), then the acceptance
-scenarios for what the branch changed since main, and cancels the push if
-one fails. Pushing a `vX.Y.Z` tag also needs n1 and n2 to pass for what
+scenarios for what the branch changed since `develop`, and cancels the push
+if one fails. Pushing a `vX.Y.Z` tag also needs n1 and n2 to pass for what
 changed since the previous release, skips included. `git push --no-verify`
 skips it.
 
@@ -103,13 +111,25 @@ uv run --project packages/trazo python packages/trazo/tests/stress_fixture.py be
    template-diagrams` if the renderer changed, then `make
    template-variants` (trazo's copy of the rendered template; `make
    test-template` fails while it is stale).
-3. Add a CHANGELOG entry, run `make test-linux` and commit as
+3. In `CHANGELOG.md`, rename `## Unreleased` to `## vX.Y.Z (YYYY-MM-DD)`
+   and check it reads well for users (the comment at its top gives the
+   shape). Run `make test-linux` and commit on `develop` as
    `chore(release): trazo and template vX.Y.Z`. Do not push yet.
 4. The owner runs the manual desktop-app checks on that commit. Agents
    do not run them.
-5. Push to `main`. The pre-push hook tests the commit and runs the n1 and
-   n2 acceptance scenarios for it (`make acceptance-auto AUTO=push`).
+5. Push to `develop`. The pre-push hook tests the commit and runs the n1
+   and n2 acceptance scenarios for it (`make acceptance-auto AUTO=push`).
 6. Tag `vX.Y.Z` and push the tag. The hook runs n1 and n2 for what changed
    since the previous release; a skip blocks it (`AUTO=tag`).
 7. Publish the GitHub release with the changelog section as its notes:
-   `gh release create vX.Y.Z --title vX.Y.Z --notes-file <section>`.
+   `python3 scripts/release-notes.py vX.Y.Z > .build/notes.md`, then
+   `gh release create vX.Y.Z --title "trazo vX.Y.Z" --notes-file .build/notes.md`.
+   Releases are immutable once published.
+8. Move `main` to the release; from here users get it:
+   `git push origin "vX.Y.Z^{commit}:main"`. This is a fast-forward, the
+   only push `main` accepts, and only from the owner.
+
+A fix that cannot wait for what is on `develop`: branch from `main`, make
+the fix and the release commit there, push that branch in step 5 instead of
+`develop`, finish steps 6 to 8, then merge `main` into `develop` so the
+next release still moves `main` forward.

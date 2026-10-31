@@ -54,7 +54,7 @@ def parse(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--online", action="store_true", help="allow downloads: make the data seed if missing; run scenarios that need the network")
     parser.add_argument("--keep", action="store_true", help="keep each scenario's sandbox and print where it is")
     parser.add_argument("--no-cache", action="store_true", help="run every selected scenario even if it passed before and nothing it depends on changed")
-    parser.add_argument("--auto", choices=auto.MODES, help="choose by the files changed since main and judge for a gate: "
+    parser.add_argument("--auto", choices=auto.MODES, help="choose by the files changed since develop and judge for a gate: "
                         "push (pre-push) or tag (a release tag: the scenarios since the previous release pass, skips included)")
     parser.add_argument("--tag", metavar="vX.Y.Z", help="with --auto tag: the release being pushed (compared with the previous release tag)")
     return parser.parse_args(argv)

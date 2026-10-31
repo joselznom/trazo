@@ -51,7 +51,7 @@ Instructions for AI agents working on the trazo suite.
   `scripts/acceptance/catalog.toml` say. Passes are cached by content, so a
   scenario whose files did not change is not run again.
   - **Push:** `pre-push` runs `make acceptance-auto AUTO=push` (n1 and n2
-    for the files this branch changed since main) on each pushed tip after
+    for the files this branch changed since develop) on each pushed tip after
     the tests. With nothing matching it ends at once. A missing data seed
     (fresh clone, changed `setup.sh`) is downloaded by the run itself, once,
     about 100 MB. A failure blocks the push: read the `report.md` it names
@@ -83,9 +83,19 @@ Instructions for AI agents working on the trazo suite.
   `commit-msg` enforces Conventional Commits without agent attribution.
 - Every push: `pre-push` runs `test-package`, `test-template` and
   `test-update` on a clean checkout of the tip of each pushed branch or
-  tag (not of every commit below it). GitHub Actions runs only by hand,
-  so this hook is the quality gate.
-- Every change reaches `main` through a pull request, except docs-only
+  tag (not of every commit below it). GitHub Actions
+  (`.github/workflows/ci.yml`) runs lint and the same tests on Linux and
+  macOS for every pull request and every push to `develop`, `main` or a
+  tag; only the hook runs the acceptance harness.
+
+## Branches
+
+- `develop` is the working branch: branch from it, and open pull requests
+  against it (`gh pr create --base develop`; GitHub proposes `main`).
+- `main` moves only at a release, by fast-forward to the release commit.
+  Both apps install the plugin from `main`, so whatever reaches it reaches
+  users. Never open a pull request into `main`; only the owner pushes it.
+- Every change reaches `develop` through a pull request, except docs-only
   changes and version bumps. Release steps are in CONTRIBUTING.md.
 
 ## Risk
