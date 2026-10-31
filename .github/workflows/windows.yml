@@ -1,0 +1,47 @@
+name: windows
+
+on:
+  push:
+    branches: [feat/windows-support]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test-package:
+    runs-on: windows-2025
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          python-version: "3.12"
+      - name: Pandoc and pandoc-crossref
+        run: |
+          . scripts/ci-versions.sh
+          mkdir -p "$RUNNER_TEMP/tools"
+          curl -fsSL -o "$RUNNER_TEMP/pandoc.zip" "https://github.com/jgm/pandoc/releases/download/${PANDOC_VERSION}/pandoc-${PANDOC_VERSION}-windows-x86_64.zip"
+          unzip -q -j "$RUNNER_TEMP/pandoc.zip" '*/pandoc.exe' -d "$RUNNER_TEMP/tools"
+          curl -fsSL -o "$RUNNER_TEMP/crossref.7z" "https://github.com/lierdakil/pandoc-crossref/releases/download/${CROSSREF_VERSION}/pandoc-crossref-Windows-X64.7z"
+          7z e -o"$RUNNER_TEMP/tools" "$RUNNER_TEMP/crossref.7z" pandoc-crossref.exe > /dev/null
+          echo "$RUNNER_TEMP/tools" >> "$GITHUB_PATH"
+      - name: Git identity for the test papers
+        run: |
+          git config --global user.email ci@example.com
+          git config --global user.name ci
+      - name: Package tests
+        working-directory: packages/trazo
+        run: |
+          pandoc --version | head -1
+          uv run --quiet python -m unittest discover -s tests 2>&1 | tee "$RUNNER_TEMP/tests.log"
+          exit "${PIPESTATUS[0]}"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: ${{ !cancelled() }}
+        with:
+          name: tests-log
+          path: ${{ runner.temp }}/tests.log
