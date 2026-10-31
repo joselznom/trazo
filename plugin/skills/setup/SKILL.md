@@ -61,6 +61,10 @@ calls; your messages carry only the plain status.
 5. Once it succeeds, read its last lines yourself, then tell the user
    that trazo is ready and that a new chat loads it. Add only what
    changes what they can do:
+   - This chat had no trazo tool at all (step 1): Claude Code remembers
+     a failed server for about 15 minutes, so a new chat may still lack
+     the tools. Tell the user that, in Claude Code, `/mcp`, then trazo,
+     then Reconnect loads them at once.
    - A Chrome line (still no Chrome, Edge or Chromium found): setup
      downloads one on a Mac or an x64 Linux computer that has none, so
      this means the download failed (its error is just above; explain it
