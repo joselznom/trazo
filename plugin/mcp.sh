@@ -12,13 +12,12 @@ root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 # uname by full path, since PATH may lack it: /bin on Linux without merged /usr.
 uname=/usr/bin/uname
 [ -x "$uname" ] || uname=/bin/uname
-if [ -n "${TRAZO_DATA_DIR:-}" ]; then
-    data=$TRAZO_DATA_DIR
-elif [ "$("$uname" -s 2>/dev/null)" = Darwin ]; then
-    data="$HOME/Library/Application Support/trazo"
+if [ "$("$uname" -s 2>/dev/null)" = Darwin ]; then
+    default="$HOME/Library/Application Support/trazo"
 else
-    data="${XDG_DATA_HOME:-$HOME/.local/share}/trazo"
+    default="${XDG_DATA_HOME:-$HOME/.local/share}/trazo"
 fi
+data=${TRAZO_DATA_DIR:-$default}
 # setup_status compares the installed trazo with this plugin's version.
 export TRAZO_PLUGIN_ROOT="$root"
 # An install without trazo/mcp.py (0.5.0 and older) has no `mcp` command.

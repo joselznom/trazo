@@ -24,10 +24,11 @@ if [ "${1:-}" = --offline ]; then offline=1; shift; fi
 root=${1:-$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)}
 system=$(uname -s)
 if [ "$system" = Darwin ]; then
-    data=${TRAZO_DATA_DIR:-$HOME/Library/Application Support/trazo}
+    default="$HOME/Library/Application Support/trazo"
 else
-    data=${TRAZO_DATA_DIR:-${XDG_DATA_HOME:-$HOME/.local/share}/trazo}
+    default="${XDG_DATA_HOME:-$HOME/.local/share}/trazo"
 fi
+data=${TRAZO_DATA_DIR:-$default}
 arch=$(uname -m)
 # Under Rosetta uname says x86_64 on Apple silicon; install arm64 tools.
 if [ "$system" = Darwin ] && [ "$(/usr/sbin/sysctl -n sysctl.proc_translated 2>/dev/null)" = 1 ]; then arch=arm64; fi

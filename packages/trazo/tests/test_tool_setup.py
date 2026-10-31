@@ -298,9 +298,10 @@ class SetupTests(unittest.TestCase):
         # The headless shell on a Linux without a desktop's libraries: found, but it cannot run.
         asset = chrome_asset_for(CHROME_ZIP)
         self.use_chrome(asset)
-        tool_setup.chrome_binary(asset).parent.mkdir(parents=True)
-        tool_setup.chrome_binary(asset).write_text("#!/bin/sh\nexit 127\n")
-        tool_setup.chrome_binary(asset).chmod(0o755)
+        binary = tool_setup.chrome_binary(asset)
+        binary.parent.mkdir(parents=True)
+        binary.write_text("#!/bin/sh\nexit 127\n")
+        binary.chmod(0o755)
         code, out, err = run([])
         self.assertEqual(code, 0, out + err)
         self.assertEqual(self.server.requests[-1:], [f"/{tool_setup.PANDOC_VERSION}/pandoc-test.zip"])

@@ -24,7 +24,6 @@ from __future__ import annotations
 
 import argparse
 import hashlib
-import io
 import os
 import platform
 import shutil
@@ -39,7 +38,7 @@ import zipfile
 from collections.abc import Callable, Iterator
 from functools import partial
 from pathlib import Path
-from typing import IO, NamedTuple
+from typing import IO, NamedTuple, cast
 
 from . import machine
 
@@ -177,27 +176,31 @@ def download(url: str, target: Path, asset: Asset) -> None:
                          "the download was deleted and nothing was installed")
 
 
-def members(archive: Path) -> Iterator[tuple[str, str, int, Callable[[], IO[bytes]]]]:
-    """(name, "dir", "link" or "file", Unix mode, open) for each entry of a
-    zip or a .tar.gz; a link's content is its target. Other tar entries
-    (hard links, devices) are refused: Pandoc's tarballs have none."""
+def members(archive: Path) -> Iterator[tuple[str, int, str | Callable[[], IO[bytes]] | None]]:
+    """(name, Unix mode, content) for each entry of a zip or a .tar.gz:
+    content is None for a folder, the target for a link and an opener for
+    a file (also for a zip's link on Windows, written as a file). Other tar
+    entries (hard links, devices) are refused: Pandoc's tarballs have none."""
     if archive.name.endswith(".tar.gz"):
         with tarfile.open(archive, "r:gz") as tarred:
             for entry in tarred:
-                if entry.isdir():
-                    yield entry.name, "dir", entry.mode, partial(io.BytesIO)
-                elif entry.issym():
-                    yield entry.name, "link", entry.mode, partial(io.BytesIO, entry.linkname.encode("utf-8"))
+                if entry.isdir() or entry.issym():
+                    yield entry.name, entry.mode, entry.linkname if entry.issym() else None
                 elif entry.isfile():
-                    yield entry.name, "file", entry.mode, partial(tarred.extractfile, entry)
+                    # extractfile returns None only for what is not a file.
+                    yield entry.name, entry.mode, cast(Callable[[], IO[bytes]], partial(tarred.extractfile, entry))
                 else:
                     raise SetupError(f"{archive.name}: {entry.name} is not a file, folder or link")
         return
     with zipfile.ZipFile(archive) as zipped:
         for member in zipped.infolist():
             mode = member.external_attr >> 16
-            kind = "dir" if member.is_dir() else "link" if stat.S_ISLNK(mode) else "file"
-            yield member.filename, kind, mode, partial(zipped.open, member)
+            if member.is_dir():
+                yield member.filename, mode, None
+            elif stat.S_ISLNK(mode) and os.name != "nt":
+                yield member.filename, mode, zipped.read(member).decode("utf-8")
+            else:
+                yield member.filename, mode, partial(zipped.open, member)
 
 
 def unpack(archive: Path, folder: Path) -> None:
@@ -207,20 +210,18 @@ def unpack(archive: Path, folder: Path) -> None:
     outside the folder by a later one."""
     root = folder.resolve()
     try:
-        for name, kind, mode, content in members(archive):
+        for name, mode, content in members(archive):
             target = (folder / name).resolve()
             if not target.is_relative_to(root):
                 raise SetupError(f"{archive.name}: {name} would be written outside {folder}")
-            if kind == "dir":
+            if content is None:
                 target.mkdir(parents=True, exist_ok=True)
                 continue
             target.parent.mkdir(parents=True, exist_ok=True)
-            if kind == "link" and os.name != "nt":
-                with content() as source:
-                    link = source.read().decode("utf-8")
-                if os.path.isabs(link) or ".." in Path(link).parts:
+            if isinstance(content, str):
+                if os.path.isabs(content) or ".." in Path(content).parts:
                     raise SetupError(f"{archive.name}: link {name} points outside {folder}")
-                target.symlink_to(link)
+                target.symlink_to(content)
                 continue
             with content() as source, open(target, "wb") as out:
                 shutil.copyfileobj(source, out)
@@ -360,7 +361,7 @@ def main(argv=None) -> int:
     browser_entry = data["tools"]["chrome"]
     if not browser_entry["path"]:
         print(f"  {machine.CHROME_MISSING}.\n  To turn them on: {machine.CHROME_FIX}.")
-    elif not browser_entry["version"] and os.name != "nt":  # Windows records no Chrome version
+    elif not machine.chrome_starts(browser_entry["path"], browser_entry["version"]):
         print(f"  Chrome {machine.CHROME_BROKEN}.\n  To turn them on: {machine.CHROME_BROKEN_FIX}.")
     if not pandoc["path"]:
         print("trazo setup: no Pandoc found" + ("" if asset else
