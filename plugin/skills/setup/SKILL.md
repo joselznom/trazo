@@ -17,7 +17,10 @@ paths, versions, tool names and terminal output stay inside your tool
 calls; your messages carry only the plain status.
 
 1. Call trazo's `setup_status` (no `project` needed), unless this chat
-   already did. Keep its `plugin.root`. Then follow its `next`:
+   already did. When no trazo tool is available at all (a minimal Linux
+   whose Perl lacks the modules of the stand-in server), go on with step
+   2 with an empty `plugin.root`. Keep its `plugin.root`. Then follow its
+   `next`:
    - "plugin": the installed trazo is newer than this plugin (the other
      app's plugin installed it). Tell the user to update the trazo plugin
      in this app's plugin settings, and stop; setup would install the
