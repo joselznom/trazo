@@ -18,6 +18,11 @@ Internal changes (tests, CI, refactoring) stay out.
 
 ## Unreleased
 
+### Fixed
+
+- The preview starts at once on a Mac whose network is slow to answer name
+  lookups; before, it could give up after 20 seconds with an empty message.
+
 ## v1.0.0 (2026-10-31)
 
 First public release. trazo turns a paper written in Markdown, with help
