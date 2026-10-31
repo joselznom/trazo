@@ -71,6 +71,10 @@ class PreviewBrowserTestCase(unittest.TestCase):
         self.session = self.chrome.call("Target.attachToTarget", {"targetId": target, "flatten": True})["sessionId"]
         self.chrome.call("Emulation.setDeviceMetricsOverride", {
             "width": 1280, "height": 800, "deviceScaleFactor": 1, "mobile": False}, self.session)
+        # The tests expect motion; a Mac with Reduce Motion on (GitHub's macOS runners) turns off view
+        # transitions and smooth scrolling. Tests of reduced motion emulate it themselves.
+        self.chrome.call("Emulation.setEmulatedMedia", {"features": [
+            {"name": "prefers-reduced-motion", "value": "no-preference"}]}, self.session)
 
     def evaluate(self, expression, session=None):
         reply = self.chrome.call("Runtime.evaluate", {
