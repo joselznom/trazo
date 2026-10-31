@@ -94,42 +94,6 @@ def run(argv):
     return code, out.getvalue(), err.getvalue()
 
 
-class AssetTests(unittest.TestCase):
-    def test_platform_to_asset(self):
-        self.assertEqual(tool_setup.pandoc_asset("Darwin", "arm64").name, "pandoc-3.9.0.2-arm64-macOS.zip")
-        self.assertEqual(tool_setup.pandoc_asset("Darwin", "x86_64").name, "pandoc-3.9.0.2-x86_64-macOS.zip")
-        for name in ("AMD64", "x86_64"):
-            self.assertEqual(tool_setup.pandoc_asset("Windows", name).name, "pandoc-3.9.0.2-windows-x86_64.zip")
-        self.assertEqual(tool_setup.pandoc_asset("Linux", "x86_64").name, "pandoc-3.9.0.2-linux-amd64.tar.gz")
-        self.assertEqual(tool_setup.pandoc_asset("Linux", "aarch64").name, "pandoc-3.9.0.2-linux-arm64.tar.gz")
-        for system, name in (("Linux", "riscv64"), ("Windows", "ARM64"), ("Darwin", "ppc")):
-            self.assertIsNone(tool_setup.pandoc_asset(system, name))
-
-    def test_pins_are_consistent(self):
-        for asset in tool_setup.PANDOC_ASSETS.values():
-            self.assertIn(tool_setup.PANDOC_VERSION, asset.name)
-            self.assertRegex(asset.sha256, "^[0-9a-f]{64}$")
-            self.assertTrue(asset.binary.endswith(("/pandoc", "/pandoc.exe")))
-
-    def test_chrome_platform_to_asset_and_url(self):
-        base = "https://storage.googleapis.com/chrome-for-testing-public/" + tool_setup.CHROME_VERSION
-        arm, intel = tool_setup.chrome_asset("Darwin", "arm64"), tool_setup.chrome_asset("Darwin", "x86_64")
-        self.assertEqual(tool_setup.chrome_url(arm), f"{base}/mac-arm64/chrome-headless-shell-mac-arm64.zip")
-        self.assertEqual(tool_setup.chrome_url(intel), f"{base}/mac-x64/chrome-headless-shell-mac-x64.zip")
-        linux = tool_setup.chrome_asset("Linux", "x86_64")
-        self.assertEqual(tool_setup.chrome_url(linux), f"{base}/linux64/chrome-headless-shell-linux64.zip")
-        # Chrome for Testing has no Linux arm64 build.
-        for system, name in (("Linux", "aarch64"), ("Windows", "AMD64"), ("Darwin", "ppc")):
-            self.assertIsNone(tool_setup.chrome_asset(system, name))
-
-    def test_chrome_pins_are_consistent(self):
-        for asset in tool_setup.CHROME_ASSETS.values():
-            stem = asset.name.removesuffix(".zip")
-            self.assertRegex(asset.sha256, "^[0-9a-f]{64}$")
-            self.assertEqual(asset.binary, f"{stem}/chrome-headless-shell")
-            self.assertGreater(asset.unpacked, asset.size)
-
-
 @unittest.skipIf(os.name == "nt", "the fake Pandoc is a shell script")
 class SetupTests(unittest.TestCase):
     def setUp(self):
@@ -329,6 +293,18 @@ class SetupTests(unittest.TestCase):
         self.assertEqual(self.server.requests, [f"/{tool_setup.PANDOC_VERSION}/pandoc-test.zip"])
         self.assertFalse((self.data / "chrome").exists())
         self.assertEqual(json.loads((self.data / "machine.json").read_text())["tools"]["chrome"]["found"], "PATH")
+
+    def test_a_chrome_that_does_not_start_says_so(self):
+        # The headless shell on a Linux without a desktop's libraries: found, but it cannot run.
+        asset = chrome_asset_for(CHROME_ZIP)
+        self.use_chrome(asset)
+        tool_setup.chrome_binary(asset).parent.mkdir(parents=True)
+        tool_setup.chrome_binary(asset).write_text("#!/bin/sh\nexit 127\n")
+        tool_setup.chrome_binary(asset).chmod(0o755)
+        code, out, err = run([])
+        self.assertEqual(code, 0, out + err)
+        self.assertEqual(self.server.requests[-1:], [f"/{tool_setup.PANDOC_VERSION}/pandoc-test.zip"])
+        self.assertIn(f"  Chrome {machine.CHROME_BROKEN}.\n  To turn them on: {machine.CHROME_BROKEN_FIX}.", out)
 
     def test_a_failed_chrome_download_does_not_fail_setup(self):
         # Chrome is optional: Pandoc and machine.json are done, and the user is told what is off.

@@ -54,6 +54,12 @@ CHROME_MISSING = ("Chrome, Edge or Chromium not found: diagram export, the diagr
                   "preview PNG/PDF exports and `scripts/trazo verify` are off")
 CHROME_FIX = ("install Google Chrome (https://www.google.com/chrome/) or Microsoft Edge "
               "(https://www.microsoft.com/edge), or set browser.chrome in trazo.toml")
+# A Chrome that is found but cannot run, such as the downloaded headless
+# shell on a Linux without a desktop's libraries (libglib, libnss3, ...).
+CHROME_BROKEN = ("does not start (its --version fails): diagram export, the diagram editor, "
+                 "preview PNG/PDF exports and `scripts/trazo verify` are off")
+CHROME_BROKEN_FIX = ("on Linux it usually lacks system libraries: install Google Chrome or Chromium "
+                     "with the system's package manager, which brings them, or set browser.chrome in trazo.toml")
 _warned: set[str] = set()
 
 

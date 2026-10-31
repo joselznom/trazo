@@ -96,7 +96,11 @@ def check_chrome() -> list[dict[str, str]]:
     if not Path(path).is_file() and not shutil.which(path):
         return [item("chrome", "note", f"Chrome is set to {path} ({where}), which is not found",
                      "fix browser.chrome in trazo.toml or $TRAZO_CHROME")]
-    version = "" if os.name == "nt" else machine.version_line([path])
+    if os.name == "nt":  # chrome.exe --version opens a browser window instead of printing
+        return [found("chrome", "Chrome", "", path, where)]
+    if not (version := machine.version_line([path])):
+        return [item("chrome", "note", f"Chrome at {path} ({where}) {machine.CHROME_BROKEN}",
+                     machine.CHROME_BROKEN_FIX)]
     return [found("chrome", "Chrome", version, path, where)]
 
 

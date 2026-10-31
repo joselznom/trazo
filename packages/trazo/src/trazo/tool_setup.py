@@ -357,8 +357,11 @@ def main(argv=None) -> int:
     print("\n".join(report(data)))
     if pandoc["path"] and (mark := quarantine(Path(pandoc["path"]))) is not None:
         print(f"  quarantine: {mark or 'none'} ({QUARANTINE} on {pandoc['path']})")
-    if not data["tools"]["chrome"]["path"]:
+    browser_entry = data["tools"]["chrome"]
+    if not browser_entry["path"]:
         print(f"  {machine.CHROME_MISSING}.\n  To turn them on: {machine.CHROME_FIX}.")
+    elif not browser_entry["version"] and os.name != "nt":  # Windows records no Chrome version
+        print(f"  Chrome {machine.CHROME_BROKEN}.\n  To turn them on: {machine.CHROME_BROKEN_FIX}.")
     if not pandoc["path"]:
         print("trazo setup: no Pandoc found" + ("" if asset else
               "; install it with the system's package manager"), file=sys.stderr)

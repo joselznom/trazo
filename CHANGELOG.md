@@ -18,6 +18,14 @@ Internal changes (tests, CI, refactoring) stay out.
 
 ## Unreleased
 
+### New
+
+- The plugin now works on Linux (x64 and ARM) in Claude Code and Codex:
+  setup downloads uv, Python and Pandoc into `~/.local/share/trazo`
+  (`$XDG_DATA_HOME/trazo` when that is set), and a headless Chrome on x64
+  when no Chrome, Edge or Chromium is installed. The session hook and the
+  MCP server's launcher now find a Linux install too (#5).
+
 ### Fixed
 
 - The preview starts at once on a Mac whose network is slow to answer name

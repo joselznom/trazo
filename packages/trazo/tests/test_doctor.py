@@ -60,6 +60,12 @@ class DoctorTests(ToolFolderCase):
         code, out = self.run_doctor()
         self.assertEqual(code, 0, out)
         self.assertIn(f"✓ Google Chrome for Testing 156.0.0.0: {chrome} (data folder)", out)
+        # Without a desktop's libraries (Linux) it is found but does not start: say so, not ✓.
+        chrome.write_text("#!/bin/sh\nexit 127\n")
+        code, out = self.run_doctor()
+        self.assertEqual(code, 0, out)
+        self.assertIn(f"! Chrome at {chrome} (data folder) {machine.CHROME_BROKEN}\n"
+                      f"      fix: {machine.CHROME_BROKEN_FIX}", out)
 
     def test_missing_chrome_says_to_download_it_where_trazo_can(self):
         asset = tool_setup.Asset("chrome-headless-shell-test.zip", 1, "0" * 64, "chrome-x/chrome-headless-shell", 1)
