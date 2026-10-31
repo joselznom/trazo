@@ -1,7 +1,8 @@
 """HTTP guards and replies shared by every trazo workspace feature.
 
 - LocalServer: a ThreadingHTTPServer with a listen queue long enough for a
-  page load, that does not report clients leaving mid-reply (see its docstring).
+  page load, that binds without a DNS lookup and does not report clients
+  leaving mid-reply (see its docstring).
 - Request guards: only 127.0.0.1:<port> or localhost:<port> as Host, no
   foreign Origin, no cross-site Sec-Fetch-Site (except following a link to a
   page), no framing, and POST bodies must be application/json.
@@ -12,6 +13,7 @@
 """
 
 import json
+import socketserver
 import sys
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -70,6 +72,14 @@ class LocalServer(ThreadingHTTPServer):
     """
 
     request_queue_size = 128
+
+    def server_bind(self) -> None:
+        # HTTPServer.server_bind names the server with socket.getfqdn, a reverse
+        # DNS lookup that a Mac with a slow resolver answers in tens of seconds
+        # (35 s on GitHub's macOS runners), past preview_start's wait. The
+        # server only listens on loopback and never uses the name.
+        socketserver.TCPServer.server_bind(self)
+        self.server_name, self.server_port = self.server_address[:2]
 
     def handle_error(self, request: Any, client_address: Any) -> None:
         # A closed tab or a reload drops the connection while a reply is being

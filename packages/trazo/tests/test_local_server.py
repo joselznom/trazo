@@ -1,4 +1,4 @@
-"""LocalServer: how it reports a request that fails."""
+"""LocalServer: how it binds and how it reports a request that fails."""
 
 import contextlib
 import io
@@ -6,6 +6,7 @@ import socket
 import threading
 import unittest
 from http.server import BaseHTTPRequestHandler
+from unittest import mock
 
 import _support  # noqa: F401  (sets TRAZO_ROOT before trazo loads)
 
@@ -30,6 +31,16 @@ def serve_once(failure: Exception) -> str:
         thread.join(5)
     server.server_close()
     return stderr.getvalue()
+
+
+class BindTests(unittest.TestCase):
+    def test_binding_asks_no_dns_server(self):
+        # A slow resolver must not delay the preview's start.
+        with mock.patch("socket.getfqdn", side_effect=AssertionError("getfqdn called")):
+            server = LocalServer(("127.0.0.1", 0), BaseHTTPRequestHandler)
+        self.addCleanup(server.server_close)
+        self.assertEqual((server.server_name, server.server_port), server.server_address[:2])
+        self.assertNotEqual(server.server_port, 0)
 
 
 class ErrorReportTests(unittest.TestCase):
