@@ -4,7 +4,7 @@ import http.client
 import json
 import threading
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import _support  # noqa: F401  (sets TRAZO_ROOT first)
 from test_table import DATA, SPECS, Restore, spec
@@ -159,15 +159,14 @@ class EditorTests(Restore):
                 data["title"] = "Edited by hand."
                 source.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
             if polls > 2:
-                raise KeyboardInterrupt
+                return True  # stop the watcher
 
         # The fixture's [commands] tables is the project's own stage, which a spec change would rerun.
         with patch.dict(preview.PROJECT.config["commands"], {"tables": []}), \
-             patch.object(preview.time, "sleep", side_effect=tick), \
              patch.object(preview, "regenerate_tables", side_effect=AssertionError), \
              patch.object(preview, "build") as build:
-            with self.assertRaises(KeyboardInterrupt):
-                preview.watch()
+            # Through stop_event, not a patched time.sleep: another thread\'s sleep would count as a pass.
+            preview.watch(stop_event=Mock(**{"wait.side_effect": tick}))
         self.assertIn("Table: [Edited by hand.]{.caption-title}", table.output_path("results").read_text())
         self.assertTrue(build.called)
         self.assertTrue((DATA / "results.json").is_file())
@@ -185,7 +184,7 @@ class EditorTests(Restore):
                 draft["title"] = "Changed spec."
                 (SPECS / "results.json").write_text(json.dumps(draft))
             if polls > 2:
-                raise KeyboardInterrupt
+                return True  # stop the watcher
 
         def render_then_generate():
             nonlocal renders
@@ -198,11 +197,10 @@ class EditorTests(Restore):
                 path.write_text(json.dumps(data))
 
         with patch.dict(preview.PROJECT.config["commands"], {"tables": []}), \
-             patch.object(preview.time, "sleep", side_effect=tick), \
              patch.object(preview, "render_spec_tables", side_effect=render_then_generate), \
              patch.object(preview, "build"):
-            with self.assertRaises(KeyboardInterrupt):
-                preview.watch()
+            # Through stop_event, not a patched time.sleep: another thread\'s sleep would count as a pass.
+            preview.watch(stop_event=Mock(**{"wait.side_effect": tick}))
         self.assertIn("0.123", table.output_path("results").read_text())
 
 
