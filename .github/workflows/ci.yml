@@ -73,9 +73,12 @@ jobs:
         run: |
           git config --global user.email ci@example.com
           git config --global user.name ci
+      # Each test target runs even when an earlier one failed, so one run shows every failure.
       - name: Package tests
         run: make test-package
       - name: Template variants, built and verified with this trazo
+        if: ${{ !cancelled() }}
         run: make test-template
       - name: Update between template versions
+        if: ${{ !cancelled() }}
         run: make test-update
