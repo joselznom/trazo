@@ -1,0 +1,118 @@
+/* The document page: paragraphs, comments and underlines in the text, figures and tables. */
+/* ---------- document page ---------- */
+.pv-doc-wrap { padding: 28px 24px 72px; width: max(100%, calc(var(--pv-page-width, 860px) * var(--pv-zoom, 1) + 48px)); }
+.pv-page {
+  position: relative; width: var(--pv-page-width, 860px); margin: 0 auto; zoom: var(--pv-zoom, 1);
+  padding: clamp(32px, calc(var(--pv-page-width, 860px) * 0.08), 76px)
+    clamp(26px, calc(var(--pv-page-width, 860px) * 0.09), 96px)
+    clamp(40px, calc(var(--pv-page-width, 860px) * 0.08), 84px);
+  background: var(--pv-page); color: var(--pv-page-ink); box-shadow: var(--pv-shadow-page); border-radius: 3px;
+  font: var(--pv-page-font, 14px)/1.62 var(--pv-serif); hyphens: auto; overflow-wrap: break-word; min-width: 0; text-align: left;
+}
+.pv-page header#title-block-header { margin: 0 0 2em; text-align: left; }
+.pv-page header#title-block-header h1.title { font: 600 1.95em/1.2 var(--pv-sans); letter-spacing: -0.01em; margin: 0 0 0.6em; padding: 0; border: 0; hyphens: manual; }
+.pv-page header#title-block-header p { margin: 0 0 0.2em; text-align: left; font: 500 0.98em/1.5 var(--pv-sans); }
+.pv-page header#title-block-header p.date, .pv-page header#title-block-header .abstract { color: var(--pv-page-muted); font-weight: 400; }
+.pv-page .pk-front { margin: -1em 0 2em; }
+.pv-page .pk-front p { margin: 0 0 0.4em; text-align: left; font: 400 0.85em/1.5 var(--pv-sans); color: var(--pv-page-muted); }
+.pv-page .pk-front [data-custom-style="Author"] p { font-size: 0.98em; font-weight: 500; color: var(--pv-page-ink); }
+.pv-page .pk-keywords { margin: 1em 0; }
+.pv-page .pk-keywords p { text-align: left; }
+.pv-page .pk-form-only { color: var(--pv-page-muted); border-left: 2px solid currentColor; padding-left: 1em; }
+.pv-page .pk-form-badge { font: 500 0.8em/1.5 var(--pv-sans); color: var(--pv-page-muted); }
+.pv-page h1 { font: 600 1.5em/1.25 var(--pv-sans); margin: 1.9em 0 0.6em; padding-bottom: 0.25em; border-bottom: 1px solid var(--pv-page-line); letter-spacing: -0.005em; }
+.pv-page h2 { font: 600 1.18em/1.3 var(--pv-sans); margin: 1.6em 0 0.5em; }
+.pv-page h3 { font: 600 1.02em/1.3 var(--pv-sans); margin: 1.4em 0 0.4em; }
+.pv-page h4 { font: italic 600 1em/1.35 var(--pv-serif); margin: 1.2em 0 0.3em; }
+.pv-page header + section > h1:first-child { margin-top: 1.2em; }
+.pv-page > section:first-child > h1:first-child { margin-top: 0; }
+.pv-page p { margin: 0 0 0.9em; text-align: justify; text-wrap: pretty; }
+.pv-page ul, .pv-page ol { margin: 0 0 0.9em; padding-left: 1.7em; }
+.pv-page li > ul, .pv-page li > ol { margin: 0.3em 0 0; }
+.pv-page sup { font-size: 0.7em; line-height: 0; }
+.pv-page code { font: 0.86em var(--pv-mono); }
+.pv-page pre { overflow-x: auto; max-width: 100%; margin: 0 0 0.9em; padding: 0.6em 0.8em; background: var(--pv-bg); border-radius: 4px; }
+.pv-page pre code { font-size: 0.82em; }
+.pv-page blockquote { margin: 0 0 0.9em; padding-left: 1em; border-left: 3px solid var(--pv-page-line); color: var(--pv-page-muted); }
+.pv-page hr { border: 0; border-top: 1px solid var(--pv-page-line); }
+.pv-page a { color: var(--pv-accent); text-decoration: none; cursor: pointer; }
+.pv-page a:hover { text-decoration: underline; }
+.pv-page .citation a { color: var(--pv-accent); }
+.pv-page img { max-width: 100%; height: auto; }
+.pv-page math[display="block"] { overflow-x: auto; max-width: 100%; }
+.pv-val { border-bottom: 1px dotted var(--pv-page-muted); cursor: help; }
+.pv-val:focus { outline: 2px solid var(--pv-focus); outline-offset: 1px; }
+
+.pv-p { position: relative; }
+.pv-para {
+  position: absolute; left: -3.2em; top: 0.1em; width: 2.6em; text-align: right;
+  font: 500 11px/1.9 var(--pv-sans); color: var(--pv-page-muted); opacity: 0; transition: opacity 0.12s; user-select: none;
+}
+.pv-p:hover > .pv-para, .pv-para:focus-visible, .pv-para.copied { opacity: 1; }
+.pv-para:hover { color: var(--pv-accent); }
+.pv-para.copied { color: var(--pv-ok); }
+@container pvdoc (max-width: 680px) { .pv-para { display: none; } }
+.pv-src-mark { color: var(--pv-page-muted); opacity: 0.55; font-size: 12px; margin-right: 0.4em; user-select: none; }
+.pv-src-mark:hover { opacity: 1; color: var(--pv-accent); }
+
+/* Commented text: a faint tint and a thin line under it; the comment you are
+   on (current or hovered card) gets the palette's full tint. */
+::highlight(pv-open) {
+  background-color: color-mix(in srgb, var(--pv-hl-open) 45%, transparent);
+  text-decoration: underline 1px color-mix(in srgb, var(--pv-hl-open-edge) 70%, transparent); text-underline-offset: 3px;
+}
+::highlight(pv-review) {
+  background-color: color-mix(in srgb, var(--pv-hl-review) 50%, transparent);
+  text-decoration: underline 1px dashed var(--pv-hl-review-sel); text-underline-offset: 3px;
+}
+::highlight(pv-open-sel) { background-color: var(--pv-hl-open); text-decoration: underline 1px var(--pv-hl-open-edge); text-underline-offset: 3px; }
+::highlight(pv-review-sel) { background-color: var(--pv-hl-review); text-decoration: underline 1px var(--pv-hl-review-sel); text-underline-offset: 3px; }
+/* A resolved comment is never painted; "Show in text" lights its text for a moment, in green. */
+::highlight(pv-done-flash) { background-color: color-mix(in srgb, var(--pv-ok) 40%, transparent); text-decoration: underline 1.5px var(--pv-ok); text-underline-offset: 3px; }
+/* A comment whose text is gone has no highlight: strips in the margin of its
+   paragraph, one per state (open, to check, underline; set by the viewer). */
+.pv-lost { box-shadow: var(--pv-lost); }
+.pv-tscroll .pv-lost { box-shadow: var(--pv-lost-in); }
+/* Underlines: the author's reading marks. */
+::highlight(pv-underline) { text-decoration: underline 1.5px color-mix(in srgb, var(--pv-warn-dot) 85%, transparent); text-underline-offset: 3px; }
+.pv-flash { animation: pv-flash 1.7s ease-out; }
+@keyframes pv-flash { from { background: color-mix(in srgb, var(--pv-flash) 50%, transparent); } to { background: transparent; } }
+
+.pv-page figure { margin: 1.7em 0; text-align: center; }
+.pv-page figure img { background: #fff; border-radius: 2px; }
+.pv-page figcaption, .pv-page table caption { font: max(10px, calc(var(--pv-page-font, 14px) * 0.86))/1.5 var(--pv-sans); text-align: justify; margin: 0.7em 0 0; color: var(--pv-page-ink); }
+/* The caption label and its [title]{.caption-title} read as one bold lead. */
+.pv-page figcaption strong, .pv-page table caption strong, .pv-page .caption-title { font-weight: 600; }
+.pv-page figure img[role="button"] { cursor: zoom-in; }
+.pv-page table caption { caption-side: top; margin: 0 0 0.5em; }
+.pv-tscroll { overflow-x: auto; max-width: 100%; margin: 1.7em 0; }
+/* A table note (::: table-note) reads under its table, smaller than the caption. */
+.pv-tscroll:has(+ .table-note) { margin-bottom: 0.4em; }
+.pv-page .table-note { font: max(9px, calc(var(--pv-page-font, 14px) * 0.77))/1.45 var(--pv-sans); text-align: justify; margin: 0 0 1.7em; color: var(--pv-page-ink); }
+.pv-page .table-note p { margin: 0 0 0.25em; }
+.pv-page table { border-collapse: collapse; width: 100%; margin: 0; display: table; font: max(10px, calc(var(--pv-page-font, 14px) * 0.82))/1.4 var(--pv-sans); font-variant-numeric: tabular-nums; }
+.pv-page th, .pv-page td { padding: 0.32em 0.7em; vertical-align: top; }
+.pv-page thead { border-top: 1.5px solid currentColor; border-bottom: 1px solid currentColor; }
+.pv-page th { font-weight: 600; }
+.pv-page tbody { border-bottom: 1.5px solid currentColor; }
+.pv-page #refs { font: 0.86em/1.5 var(--pv-sans); }
+.pv-page .csl-entry { margin: 0 0 0.5em; }
+.pv-page .csl-entry:target, .pv-page .csl-entry.pv-flash { border-radius: 3px; }
+.pv-page .csl-left-margin { min-width: 2.4em; color: var(--pv-page-muted); }
+.pv-page .csl-right-inline { margin-left: 2.4em; padding-left: 0; }
+
+/* "Edit diagram" link under figures exported from figures/diagrams/. */
+.pv-diagram { margin: 0.5em 0 0; text-align: center; }
+.pv-diagram a {
+  display: inline-flex; align-items: center; gap: 5px; padding: 1px 10px; border: 1px solid var(--pv-page-line); border-radius: 999px;
+  font: 500 12px/1.7 var(--pv-sans); color: var(--pv-page-ink); background: var(--pv-page); text-decoration: none;
+}
+.pv-diagram a::before { content: "✎"; color: var(--pv-accent); }
+.pv-diagram a:hover { border-color: var(--pv-accent); color: var(--pv-accent); text-decoration: none; }
+.pv-tbl-edit {
+  margin-left: 0.6em; padding: 0 10px; border: 1px solid var(--pv-page-line); border-radius: 999px;
+  background: var(--pv-page); color: var(--pv-page-ink); font: 500 12px/1.7 var(--pv-sans); vertical-align: 0.05em;
+}
+.pv-tbl-edit::before { content: "✎ "; color: var(--pv-accent); }
+.pv-tbl-edit:hover { border-color: var(--pv-accent); color: var(--pv-accent); text-decoration: none; }
+a.pv-tbl-edit { display: inline-block; text-decoration: none; }

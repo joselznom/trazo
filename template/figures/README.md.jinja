@@ -1,0 +1,26 @@
+# Figures
+
+Data figures are generated from scripts; diagrams are declarative JSON
+exported by trazo. Both are referenced from the manuscript.
+
+```bash
+scripts/trazo build --prepare=inputs        # figures/scripts -> figures/output/
+scripts/trazo diagram export --all          # figures/diagrams/*.json -> figures/external/
+scripts/trazo diagram check --all --exports # lint; fail if an export is missing or stale
+```
+
+The diagram editor is part of the live preview, at `/diagrams`: run
+`scripts/trazo preview serve` after the build above.
+
+| Output | Source | Purpose |
+|---|---|---|
+{% if example %}| `figures/output/png/fig1_trend.png` | `figures/scripts/fig1_trend.py` | Example data figure |
+| `figures/external/fig2_workflow.png` | `figures/diagrams/fig2_workflow.json` | Example diagram |
+{% else %}| `figures/output/png/fig1_name.png` | `figures/scripts/fig1_name.py` | Replace with each figure |
+{% endif %}
+- `figures/style/tokens.json`: colours, fonts, text styles and strokes
+  used by diagrams (and available to figure scripts).
+- `figures/fonts/`: fonts embedded in diagram exports (SIL OFL).
+
+Do not edit files in `figures/output/` or `figures/external/` by hand.
+Update the script or the diagram JSON and regenerate.

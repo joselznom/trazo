@@ -1,0 +1,36 @@
+---
+title: "PKTITLEqz7Wx3Vb"
+short-title: "PKTITLEqz7Wx3Vb"
+
+author:
+  - name: "Your Name"
+    email: "your.name@institution.org"
+    corresponding: true
+    affiliations: [{ref: organisation}]
+  - name: "Coauthor Name"
+    affiliations: [{ref: organisation}]
+
+affiliations:
+  - id: organisation
+    department: "Your Department"
+    name: "Your Institution"
+    city: "Your City"
+    country: "Your Country"
+
+keywords:
+  - "Your keyword"
+  - "Another keyword"
+
+lang: en-US
+link-citations: true
+reference-section-title: "References"
+
+figureTitle: "Figure"
+tableTitle: "Table"
+figPrefix: "Figure"
+tblPrefix: "Table"
+secPrefix: "Section"
+figureTemplate: "**$$figureTitle$$ $$i$$.** $$t$$"
+tableTemplate: "**$$tableTitle$$ $$i$$.** $$t$$"
+numbersections: false
+---

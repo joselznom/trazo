@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "generator": "scripts/build_values.py",
+  "inputs": {
+    "data/example.csv": "7c2b4d82615bbc50965f1801a7b19db70991d9c235ee1de61565fddb73efaa61"
+  },
+  "values": {
+    "example.n": {
+      "value": 16,
+      "text": "16",
+      "source": "data/example.csv"
+    },
+    "example.groups": {
+      "value": 2,
+      "text": "2",
+      "source": "data/example.csv"
+    },
+    "example.score": {
+      "value": {
+        "mean": 0.5872,
+        "sd": 0.0869
+      },
+      "text": "0.59",
+      "source": "data/example.csv"
+    }
+  }
+}

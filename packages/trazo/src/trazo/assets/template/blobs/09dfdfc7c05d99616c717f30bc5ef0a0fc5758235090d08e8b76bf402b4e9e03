@@ -1,0 +1,37 @@
+---
+title: "PKTITLEqz7Wx3Vb"
+short-title: "PKTITLEqz7Wx3Vb"
+
+author:
+  - name: "First Author"
+    email: "first.author@example.org"
+    orcid: "0000-0002-1825-0097"
+    corresponding: true
+    affiliations: [{ref: organisation}]
+  - name: "Second Author"
+    affiliations: [{ref: organisation}]
+
+affiliations:
+  - id: organisation
+    department: "Department of Example"
+    name: "Example University"
+    city: "City"
+    country: "Country"
+
+keywords:
+  - "academic writing"
+  - "reproducible manuscripts"
+
+lang: en-US
+link-citations: true
+reference-section-title: "References"
+
+figureTitle: "Figure"
+tableTitle: "Table"
+figPrefix: "Figure"
+tblPrefix: "Table"
+secPrefix: "Section"
+figureTemplate: "**$$figureTitle$$ $$i$$.** $$t$$"
+tableTemplate: "**$$tableTitle$$ $$i$$.** $$t$$"
+numbersections: false
+---

@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en" class="te-app">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Table editor</title>
+<link rel="stylesheet" href="/__assets/table/editor.css">
+<!-- config -->
+</head>
+<body>
+<header class="te-top">
+  <button class="te-icon te-drawer-btn" id="te-drawer" type="button" aria-label="Show the list of tables" aria-expanded="false" aria-controls="te-tables" title="Tables">☰</button>
+  <a class="te-back" id="te-back" href="/" title="Back to the preview">← Preview</a>
+  <div class="te-crumb">
+    <span class="te-muted te-hide-sm">Figures &amp; Tables</span><span class="te-sep te-hide-sm">/</span>
+    <b id="te-num">Table</b><code class="te-lbl te-muted" id="te-label"></code>
+  </div>
+  <button class="te-pill" id="te-check" type="button" title="trazo table check (opens the Check tab)"><span class="te-dot"></span><span>Check</span></button>
+  <span class="te-grow"></span>
+  <span class="te-muted te-save te-hide-sm" id="te-save" role="status" aria-live="polite"></span>
+  <button class="te-icon" id="te-undo" type="button" aria-label="Undo the last change of this table" title="Undo (⌘Z)">↶</button>
+  <a class="pv-btn te-hide-sm" id="te-open" href="/" title="Show the table in its document">Open in document</a>
+  <button class="te-icon" id="te-theme" type="button" aria-label="Theme" title="Theme">◐</button>
+</header>
+<div class="te-banner" id="te-banner" hidden></div>
+<div class="te-main" id="te-main">
+  <aside class="te-left" id="te-tables" aria-label="Tables">
+    <div class="te-head">Tables</div>
+    <input class="te-search" id="te-filter" type="search" placeholder="Filter tables" aria-label="Filter tables">
+    <div id="te-list"></div>
+  </aside>
+  <section class="te-work" id="te-work" aria-label="Table">
+    <div class="te-tools">
+      <div class="te-menu-wrap">
+        <button class="pv-btn sm" id="te-add" type="button" aria-haspopup="menu" aria-expanded="false">+ Column</button>
+        <div class="te-menu" id="te-add-menu" role="menu" hidden></div>
+      </div>
+      <button class="pv-btn sm" id="te-hidden" type="button" aria-pressed="false">Show hidden (0)</button>
+      <span class="te-grow"></span>
+      <div class="te-seg" role="group" aria-label="Preview width">
+        <button type="button" id="te-w-page" class="on" aria-pressed="true">Page width</button><button type="button" id="te-w-fit" aria-pressed="false">Fit</button>
+      </div>
+    </div>
+    <div class="te-page" id="te-page">
+      <div class="te-empty">Loading…</div>
+    </div>
+  </section>
+  <aside class="te-right" aria-label="Details">
+    <nav class="te-tabs" role="tablist">
+      <button type="button" role="tab" data-tab="props" class="on">Properties</button>
+      <button type="button" role="tab" data-tab="comments">Comments <span class="te-badge" id="te-cbadge" hidden></span></button>
+      <button type="button" role="tab" data-tab="issues">Check <span class="te-dot" id="te-idot"></span></button>
+      <button type="button" role="tab" data-tab="data">Data</button>
+    </nav>
+    <div class="te-panel" id="te-panel" role="tabpanel"></div>
+    <div class="te-foot" role="status"><span class="te-dot" id="te-fdot"></span><span id="te-ftext">Loading…</span></div>
+  </aside>
+</div>
+<script src="/__assets/table/editor.js"></script>
+</body>
+</html>

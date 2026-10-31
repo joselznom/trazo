@@ -1,0 +1,84 @@
+{% raw %}#!/usr/bin/env python3
+"""Compute the table data in tables/output/data/ (run by `scripts/trazo build`).
+
+Numbers are computed here and written unformatted with _data.write_data;
+`scripts/trazo table render` then formats them with
+tables/specs/<label>.json into tables/output/md/<label>.md. The label is
+also the cross-reference: tables/specs/summary.json -> {#tbl:summary}.
+
+    uv run python tables/scripts/generate_tables.py
+"""
+
+from __future__ import annotations
+
+{% endraw %}{% if example %}{% raw %}import csv
+import statistics
+from collections import defaultdict
+{% endraw %}{% else %}{% raw %}import csv
+from collections.abc import Callable
+{% endraw %}{% endif %}{% raw %}from pathlib import Path
+
+from _data import write_data
+
+ROOT = Path(__file__).resolve().parents[2]
+{% endraw %}{% if example %}{% raw %}EXAMPLE = "data/example.csv"
+# Two-sided 95% Student t quantiles for 1-30 degrees of freedom; 1.96 above.
+T975 = (12.706, 4.303, 3.182, 2.776, 2.571, 2.447, 2.365, 2.306, 2.262, 2.228,
+        2.201, 2.179, 2.160, 2.145, 2.131, 2.120, 2.110, 2.101, 2.093, 2.086,
+        2.080, 2.074, 2.069, 2.064, 2.060, 2.056, 2.052, 2.048, 2.045, 2.042)
+
+
+def t975(df: int) -> float:
+    return T975[df - 1] if df <= len(T975) else 1.96
+
+
+def read_rows(path: str) -> list[dict[str, str]]:
+    with (ROOT / path).open(newline="", encoding="utf-8") as handle:
+        return list(csv.DictReader(handle))
+
+
+def summary() -> None:
+    """Score by site, group and visit (Table summary): mean, SD and 95% CI."""
+    rows = read_rows(EXAMPLE)
+    cells: dict[tuple[str, str, str], list[float]] = defaultdict(list)
+    for row in rows:
+        cells[(row["site"], row["group"], row["visit"])].append(float(row["score"]))
+    records = []
+    for (site, group, visit), scores in cells.items():
+        mean, sd = statistics.mean(scores), statistics.stdev(scores)
+        half = t975(len(scores) - 1) * sd / len(scores) ** 0.5
+        records.append({"site": site, "group": group, "visit": visit, "patients": len(scores),
+                        "score": {"mean": mean, "sd": sd, "low": mean - half, "high": mean + half}})
+    write_data("summary", records, inputs=[EXAMPLE],
+               values={"n": len({row["patient"] for row in rows})})
+
+
+DATA = {"summary": summary}
+{% endraw %}{% else %}{% raw %}def read_rows(path: str) -> list[dict[str, str]]:
+    with (ROOT / path).open(newline="", encoding="utf-8") as handle:
+        return list(csv.DictReader(handle))
+
+
+# One function per data file, written with write_data, for example:
+#
+#     def cohort() -> None:
+#         """Patients by site (Table cohort)."""
+#         rows = read_rows("data/cohort.csv")
+#         records = [{"site": site, "patients": sum(row["site"] == site for row in rows)}
+#                    for site in sorted({row["site"] for row in rows})]
+#         write_data("cohort", records, inputs=["data/cohort.csv"])
+#
+# then DATA = {"cohort": cohort} and tables/specs/cohort.json for its
+# presentation.
+DATA: dict[str, Callable[[], None]] = {}
+{% endraw %}{% endif %}{% raw %}
+
+def main() -> None:
+    for name, build in DATA.items():
+        build()
+        print(f"Generated tables/output/data/{name}.json")
+
+
+if __name__ == "__main__":
+    main()
+{% endraw %}

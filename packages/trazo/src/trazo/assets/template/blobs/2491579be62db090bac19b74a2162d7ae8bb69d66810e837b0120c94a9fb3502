@@ -1,0 +1,6 @@
+[project]
+name = "pkprojectqz7wx3vb"
+version = "0.1.0"
+description = "PKTITLEqz7Wx3Vb"
+requires-python = ">=3.12,<3.13"
+dependencies = []

@@ -1,0 +1,13 @@
+# Introduction
+
+Artificial intelligence (AI) can assist with manuscript preparation.
+Academic papers are easier to maintain when source text, references,
+figures, tables, and rendered outputs are kept separate. Pandoc provides
+a practical bridge from plain-text manuscript sources to Word documents
+used by coauthors and journals [@macfarlane2026pandoc].
+
+This template keeps that workflow intentionally small. The manuscript is
+split into ordered Markdown files, generated artifacts are produced by
+scripts, and `scripts/trazo verify` checks that the complete
+paper-generation path still works.
+

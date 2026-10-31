@@ -1,0 +1,58 @@
+{
+  "schema_version": 1,
+  "data": "cohorts",
+  "title": "Cohorts.",
+  "legend": "The {n} patients by cohort.",
+  "rows": {
+    "keys": [
+      "cohort"
+    ],
+    "order": {
+      "cohort": [
+        "train",
+        "test"
+      ]
+    }
+  },
+  "columns": [
+    {
+      "id": "cohort",
+      "field": "cohort",
+      "header": "Cohort"
+    },
+    {
+      "id": "patients",
+      "field": "patients",
+      "header": "*n*",
+      "align": "right"
+    },
+    {
+      "id": "age",
+      "field": "age",
+      "header": "Age, years",
+      "format": "mean_sd",
+      "align": "right"
+    },
+    {
+      "id": "female",
+      "field": "female",
+      "header": "Female",
+      "format": "pct",
+      "align": "center"
+    },
+    {
+      "id": "note",
+      "field": "note",
+      "header": "Note"
+    }
+  ],
+  "maps": {
+    "cohort": {
+      "train": "Training",
+      "test": "Test"
+    }
+  },
+  "formats": {
+    "pct": "{k} ({pct:.1f}%)"
+  }
+}

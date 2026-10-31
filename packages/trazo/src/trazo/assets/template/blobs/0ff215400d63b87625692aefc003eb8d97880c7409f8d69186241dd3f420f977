@@ -1,0 +1,11 @@
+# Results
+
+The example data contain {{v:example.n}} patients in {{v:example.groups}}
+groups at two sites, each scored at baseline and at follow-up. The mean
+(SD) score over all visits was {{v:example.score|mean_sd}}. The example
+trend is shown in [@fig:trend]. Scores by site, group and visit are
+reported in [@tbl:summary].
+
+![[Generated trend.]{.caption-title} Example data used to verify figure handling.](figures/output/png/fig1_trend.png){#fig:trend width=4.5in}
+
+!include tables/output/md/summary.md

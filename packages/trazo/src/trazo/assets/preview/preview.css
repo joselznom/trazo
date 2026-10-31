@@ -1,0 +1,8 @@
+/* Document view, split by part and imported in cascade order. Themes and fonts
+   come from assets/app/theme.css, linked by server.decorate_page and send_stub. */
+@import url("preview-shell.css");
+@import url("preview-layout.css");
+@import url("preview-document.css");
+@import url("preview-sidebar.css");
+@import url("preview-views.css");
+@import url("preview-overlays.css");

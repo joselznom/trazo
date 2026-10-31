@@ -1,0 +1,6 @@
+# Test project for trazo's own tests (the default layout).
+version = "v0.0.0"
+
+[commands]
+tables = ["python3", "-c", "print('tables')"]
+docx = ["python3", "-c", "print('docx')"]

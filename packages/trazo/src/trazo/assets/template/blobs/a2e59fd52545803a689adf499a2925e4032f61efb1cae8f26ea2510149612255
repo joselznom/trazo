@@ -1,0 +1,108 @@
+{
+  "schema_version": 1,
+  "canvas": {
+    "width_mm": 183,
+    "height_mm": 22,
+    "grid": 1
+  },
+  "panels": [],
+  "nodes": [
+    {
+      "id": "src",
+      "kind": "box",
+      "x": 3,
+      "y": 4,
+      "w": 38,
+      "h": 14,
+      "fill": "field",
+      "text": [
+        {
+          "style": "node-title",
+          "t": "Markdown sections"
+        },
+        {
+          "style": "node-body",
+          "t": "manuscript/main/*.md"
+        }
+      ]
+    },
+    {
+      "id": "expand",
+      "kind": "box",
+      "x": 48,
+      "y": 4,
+      "w": 38,
+      "h": 14,
+      "fill": "signal-tint",
+      "text": [
+        {
+          "style": "node-title",
+          "t": "trazo expand"
+        },
+        {
+          "style": "node-body",
+          "t": "includes and computed values"
+        }
+      ]
+    },
+    {
+      "id": "pandoc",
+      "kind": "box",
+      "x": 93,
+      "y": 4,
+      "w": 38,
+      "h": 14,
+      "fill": "field",
+      "text": [
+        {
+          "style": "node-title",
+          "t": "Pandoc"
+        },
+        {
+          "style": "node-body",
+          "t": "citations and cross-references"
+        }
+      ]
+    },
+    {
+      "id": "docx",
+      "kind": "box",
+      "x": 138,
+      "y": 4,
+      "w": 38,
+      "h": 14,
+      "fill": "field",
+      "text": [
+        {
+          "style": "node-title",
+          "t": "Word document"
+        },
+        {
+          "style": "node-body",
+          "t": "output/manuscript.docx"
+        }
+      ]
+    }
+  ],
+  "edges": [
+    {
+      "id": "e0",
+      "from": "src.right",
+      "to": "expand.left"
+    },
+    {
+      "id": "e1",
+      "from": "expand.right",
+      "to": "pandoc.left"
+    },
+    {
+      "id": "e2",
+      "from": "pandoc.right",
+      "to": "docx.left"
+    }
+  ],
+  "raw": [],
+  "meta": {
+    "about": "Example diagram: how a section becomes the Word document."
+  }
+}

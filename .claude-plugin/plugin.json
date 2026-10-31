@@ -1,0 +1,17 @@
+{
+  "name": "trazo",
+  "version": "1.0.0",
+  "description": "Write scientific papers in Markdown: build the Word files, check a submission and review in a live preview.",
+  "author": {
+    "name": "Jose Lozano Montoya"
+  },
+  "repository": "https://github.com/joselznom/trazo",
+  "icon": "./brand/png/trazo-icon-ink-1024.png",
+  "skills": ["./packages/trazo/src/trazo/skills/", "./plugin/skills/"],
+  "mcpServers": {
+    "trazo": {
+      "command": "/bin/sh",
+      "args": ["${CLAUDE_PLUGIN_ROOT}/plugin/mcp.sh"]
+    }
+  }
+}

@@ -1,0 +1,33 @@
+{
+  "name": "trazo",
+  "version": "1.0.0",
+  "description": "Write scientific papers in Markdown: build the Word files, check a submission and review in a live preview.",
+  "author": {
+    "name": "Jose Lozano Montoya"
+  },
+  "repository": "https://github.com/joselznom/trazo",
+  "skills": ["./packages/trazo/src/trazo/skills/", "./plugin/skills/"],
+  "hooks": "./hooks/hooks.json",
+  "mcpServers": "./.codex-mcp.json",
+  "interface": {
+    "displayName": "trazo",
+    "shortDescription": "Write scientific papers in Markdown and build the Word files.",
+    "longDescription": "Write scientific papers in Markdown: build the Word files, check a submission and review in a live preview. Numbers, tables, figures and diagrams come from your data and scripts, and citations from your bibliography.",
+    "developerName": "Jose Lozano Montoya",
+    "category": "Productivity",
+    "defaultPrompt": [
+      "Create a new article in a folder named my-paper",
+      "Build the Word files for this paper and check it for submission",
+      "Add a reference from this DOI to the bibliography"
+    ],
+    "brandColor": "#1C2541",
+    "composerIcon": "./brand/svg/trazo-icon-ink.svg",
+    "logo": "./brand/png/trazo-icon-ink-512.png",
+    "logoDark": "./brand/png/trazo-icon-paper-512.png"
+  },
+  "extensions": {
+    "com.openai": {
+      "onboardingSkill": "./plugin/skills/setup/SKILL.md"
+    }
+  }
+}

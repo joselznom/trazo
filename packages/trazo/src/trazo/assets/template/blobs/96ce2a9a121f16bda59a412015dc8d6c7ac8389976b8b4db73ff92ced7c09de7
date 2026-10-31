@@ -1,0 +1,282 @@
+# PKTITLEqz7Wx3Vb
+
+This paper is written in Markdown and built into Word with Pandoc. It was
+made from the [trazo](https://github.com/joselznom/trazo) template;
+the shared tools (preview, editors, checks, agent skills) come from
+trazo. Requirements and installation are in trazo's README. In
+the Claude desktop app with the trazo plugin, ask the agent to build the
+Word files or open the preview.
+
+In Terminal, run every command from this folder (`cd` into it first).
+
+## First steps
+
+```bash
+scripts/trazo doctor   # check the tools; it says how to fix anything missing
+scripts/trazo verify   # build everything and run every check
+open output/manuscript.docx
+```
+
+Then open the live preview:
+
+```bash
+scripts/trazo build --prepare=inputs && scripts/trazo preview serve
+```
+
+and go to <http://127.0.0.1:8765>. Leave it running while you work; it
+updates when a file changes. Stop it with Ctrl+C in Terminal.
+
+## How you work
+
+1. Write in `manuscript/main/` (one file per section) and
+   `manuscript/supplementary/`. Use any text editor (VS Code, TextEdit in
+   plain-text mode) or the preview's **Source** tab, or ask the agent.
+2. Read the result in the preview. Select text to leave a comment for the
+   agent; the **Diff** tab shows what changed since the last saved version.
+3. Build the Word files (ask the agent, or `scripts/trazo build`):
+   `output/manuscript.docx` and `output/supplementary.docx`.
+4. Save a version when a piece of work is done:
+
+   ```bash
+   git add -A && git commit -m "Draft of the methods"
+   ```
+
+   Saved versions let you compare and undo, and the Diff tab compares
+   against the last one.
+
+Do not edit the Word file: it is rebuilt from the Markdown each time. Send
+it to coauthors, and bring their changes back into the Markdown (the agent
+can do it from their comments).
+
+## Writing in Markdown
+
+| You write | You get |
+|---|---|
+| `# Methods`, `## Participants` | Section and subsection headings |
+| `*italic*`, `**bold**` | *italic*, **bold** |
+| `[@smith2024]`, `[@smith2024; @lee2023]` | Citations, formatted by the journal style |
+| `@smith2024 showed` | Author in the sentence |
+| `[@fig:trend]`, `[@tbl:summary]` | "Figure 1", "Table 1", numbered automatically |
+| `{{v:cohort.n}}` | A number computed from the data (see Numbers) |
+
+A blank line starts a new paragraph. Section files are built in name
+order, so keep the numbers (`02_methods.md`, `03_results.md`). Title,
+authors and keywords are in `manuscript/metadata.yaml`.
+
+## Document metadata
+
+`kind` in `trazo.toml` is `article` or `report`; both use the same sections.
+
+```yaml
+author:
+  - name: Your Name  # or {given: Your, family: Name}
+    email: your.name@institution.org
+    corresponding: true
+    affiliations: [{ref: organisation}]
+affiliations:
+  - id: organisation
+    name: Your Institution
+keywords: [first term, second term]  # optional; shown after # Abstract
+```
+
+Plain-string authors still work; affiliations accept names, inline maps or
+refs matching an id, and `equal-contributor: true` adds a shared-contribution note.
+Reports start without keywords or correspondence; metadata edits rebuild the
+title block in the next build, and updates leave this project-owned file alone.
+
+Supplementary figures, tables and sections are numbered independently as
+**Figure S1**, **Table S1**, **Section S1**, and so on, including their
+references and exports. The manuscript cites them with the same labels
+(`[@fig:name]` reads "Figure S1"), and the supplementary cites the
+manuscript's the same way. To change the prefix, set `number_prefix` in the
+document's `trazo.toml` entry; `title_prefix = "Supplementary"` gives
+"Supplementary Figure S1" in captions and references.
+
+## References
+
+References live in `bibliography/references.bib` (BibTeX). Add them in one
+of two ways:
+
+- Ask the agent: "add the reference for DOI 10.1000/xyz" (the
+  `add-reference` skill fetches it from the DOI, never from memory).
+- From Zotero, with the Better BibTeX plugin: export the collection as
+  Better BibTeX to `bibliography/references.bib`, with "Keep updated" on.
+
+Cite with the key of the entry (`@smith2024`). `scripts/trazo build
+--prepare=inputs && scripts/trazo citations` reports keys that are not in
+the bibliography (the prepare renders the tables, which may cite too).
+
+## Figures
+
+- **Plots** are made by Python scripts in `figures/scripts/` from the data
+  in `data/`, so they update when the data change. Each script needs a
+  `[[build.steps]]` entry in `trazo.toml`, which `scripts/trazo build`
+  and the preview's Word export run (the agent's `paper-figure-generation`
+  skill knows how); `scripts/trazo build --prepare=inputs` rebuilds them.
+- **Diagrams** (boxes and arrows) are edited in the preview at
+  <http://127.0.0.1:8765/diagrams>, or by the agent.
+- **Existing images**: put them in a folder such as `figures/images/`.
+
+Insert a figure where it should appear, with a caption and a label. The
+optional title is bold in the preview and plain in Word:
+
+```markdown
+![[Title of the figure.]{.caption-title} Legend.](figures/output/png/fig1_name.png){#fig:name width=100%}
+```
+
+and cite it as `[@fig:name]`. The preview's **Figures & Tables** view lists
+every figure and table, with the places that cite them.
+
+## Tables
+
+A script computes the table's numbers from the data
+(`tables/scripts/generate_tables.py`) and a spec
+(`tables/specs/<label>.json`) sets the columns, headers, decimals and bold
+cells. Insert the table with `!include tables/output/md/<label>.md` and
+cite it as `[@tbl:label]`. In the preview, **Edit table** changes headers,
+formats and layout with the mouse. Ask the agent to create a table (the
+`paper-table-generation` skill); details are in `tables/README.md`.
+
+## Numbers
+
+Numbers in the text (sample size, means, percentages) are written as
+`{{v:key}}` and computed by `scripts/build_values.py` into
+`data/values.json`. When the data change, the next build (or
+`scripts/trazo build --prepare=inputs`) updates every number in the text, so none are copied by hand. Ask the agent to add one
+(the `paper-values` skill).
+
+## Working with the agent
+
+Open this folder in Claude Code (run `claude` in Terminal from here, or
+choose the folder in the desktop app) or in Codex. The agent reads
+`AGENTS.md` (the project rules) and the skills in `.claude/skills/` and
+`.agents/skills/`. Ask in your own words; it picks the right skill. In
+Claude Code you can also call one directly, for example `/critique`.
+
+| Skill | Ask for example |
+|---|---|
+| `scientific-writing-style` | "Draft the Methods from these notes" |
+| `critique` | "Review the Discussion as a peer reviewer would" |
+| `comments` | "Answer my comments in the preview" |
+| `add-reference` | "Add the reference for DOI 10.1000/xyz" |
+| `citation-discipline` | "Check the citations" |
+| `paper-figure-generation` | "Plot the score by visit from data/scores.csv" |
+| `diagram-authoring` | "Draw a flow diagram of patient selection" |
+| `paper-table-generation` | "Make a table of patient characteristics" |
+| `paper-values` | "Compute the sample size from the data and use it in the text" |
+| `reviewer-response` | "Draft the response to the reviewers' comments" |
+| `audit-ai-writing` | "Check the Introduction for phrases that sound AI-written" |
+
+The review loop: leave comments in the preview, ask the agent to answer
+them, check its edits in the **Diff** tab, and save a version.
+**Figures & Tables** opens the table and diagram editors. Editor links
+return to the original document or gallery. **Export pending** on a diagram means its saved edits have not
+reached the manuscript image; exporting or building Word updates it.
+Diagrams marked as drafts keep the previous manuscript image.
+
+## Journal format
+
+The Word styles come from `templates/reference_universal.docx` and the
+citation style from `bibliography/csl/ieee.csl`. For a journal, download
+its style from the [Zotero Style Repository](https://www.zotero.org/styles)
+into `bibliography/csl/`, add its Word template (if it has one) to
+`templates/`, and set both in `trazo.toml`:
+
+```toml
+[paths]
+csl = "bibliography/csl/journal.csl"
+reference_doc = "templates/journal.docx"
+```
+
+`scripts/trazo build` and the preview read them there.
+
+## Commands
+
+```bash
+scripts/trazo build --prepare=inputs  # values, tables and figures: run it before the next three
+scripts/trazo preview serve           # live preview at http://127.0.0.1:8765 (Ctrl+C to stop)
+scripts/trazo citations               # citation keys against the bibliography
+scripts/trazo counts                  # main-text words, figures, tables, references
+scripts/trazo build                   # every Word file
+scripts/trazo build --doc manuscript  # output/manuscript.docx
+scripts/trazo verify                  # rebuild everything and run every check
+scripts/trazo doctor                  # check uv, Python, Pandoc and Chrome
+scripts/trazo --help                  # every command
+```
+
+## Updates
+
+Save your work first (`git add -A && git commit -m "..."`), then ask the
+agent to update the paper (the plugin's `paper_update`). It brings the
+template's changes (AGENTS.md, skills, scripts, the trazo version) of the
+plugin's release into this project. A file you changed that the template
+changed too gets a `<file>.new` beside it; ask the agent to merge it. Review
+the changes in the Diff tab or with `git diff`.
+
+## Problems
+
+| Message | Fix |
+|---|---|
+| `trazo is not set up on this computer` | Ask the agent to set up trazo (the plugin's setup) |
+| `Address already in use` (preview) | A preview is already running: use it, or stop it with Ctrl+C in its Terminal |
+| `Chrome not found` | Ask the agent to set up trazo: it downloads a headless Chrome (or install Google Chrome from https://www.google.com/chrome/). Diagrams, the diagram editor, preview PNG/PDF exports and `scripts/trazo verify` need one |
+| `values.json is stale` | `scripts/trazo build --prepare=inputs` |
+| `Missing from bibliography/references.bib` | Add the reference, or fix the key in the text |
+
+`scripts/trazo doctor` checks the installation. For anything else, paste the
+error into the agent.
+
+## Structure
+
+```text
+manuscript/main/          Sections, built in name order
+manuscript/supplementary/ Supplementary sections
+manuscript/metadata.yaml  Title, authors, keywords, Pandoc settings
+bibliography/             references.bib and citation styles (CSL)
+data/                     Data, and values.json ({{v:key}} numbers)
+figures/scripts/          Scripts that make the plots
+figures/diagrams/         Diagrams (JSON), exported to figures/external/
+figures/style/            Colours and fonts shared by diagrams and figures
+tables/scripts/           Table generator (numbers)
+tables/specs/             Table specs (columns, headers, formats, captions)
+templates/                Word reference documents (styles)
+scripts/                  build_values.py and the trazo launcher
+agent-workflows/skills/   Skills specific to this project
+notes/                    Decisions, ideas and reviewer responses
+trazo.toml             trazo version and settings
+output/                   The Word files (rebuilt; do not edit)
+```
+
+To try an unreleased trazo from a local checkout of trazo,
+export `TRAZO_DEV` before the `scripts/trazo` commands:
+
+```bash
+export TRAZO_DEV=../trazo/packages/trazo
+```
+
+## Abbreviations
+
+Articles start with `manuscript/main/00c_abbreviations.md`; edit or move it
+to the journal's required position, or remove it. Reports do not ship a list,
+but support the same feature in any document. Use a heading named
+Abbreviations / List of abbreviations, or give it the explicit abbreviation id
+(`abbreviations`). Write a term line followed by `:   Long form` (or `~`) for each
+entry; blank lines, several definitions and indented continuation paragraphs are
+supported. Cells accept ordinary Markdown, values, citations and cross-references.
+Unreadable lists stay as written and produce a check warning. Only new example
+projects get demo entries; an update that adds the file adds the heading and
+guidance only.
+Lists sort automatically and render as borderless, unnumbered two-column
+tables in Word and preview. They do not count toward table limits or appear
+in Figures & Tables or the table editor.
+
+Under `[abbreviations]` in `trazo.toml`, choose `style = "table"`, `"list"`
+or `"inline"`, set `sort = false` to retain source order, and use `ignore = []`
+for deliberate acronym exceptions. Run `scripts/trazo abbreviations check` for advisory
+unused/unlisted and first-use definition warnings. Define each term separately
+in the abstract and main text (`long form (TERM)` or the reverse); captions
+and tables are excluded from the first-use check. Preview text has long-form
+hover help, including conservative `s` and `'s` forms. Headings, links, code,
+math, values and the document head are not annotated. Article Submission includes
+the warnings and a copy-ready inline Abbreviations field. Updates leave an
+existing starter list untouched.

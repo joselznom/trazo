@@ -1,0 +1,14 @@
+#!/bin/sh
+# Runs the checks that are cheap enough for every commit: the file size limit, then any
+# executable a stack profile dropped in .githooks/pre-commit.d/ (ruff for Python, ...).
+# Runs once the repo sets `git config core.hooksPath .githooks` (agent-playbook's
+# `install.sh project` does that).
+set -e
+cd "$(git rev-parse --show-toplevel)"
+
+scripts/check-file-size.sh
+
+for hook in .githooks/pre-commit.d/*; do
+    [ -x "$hook" ] || continue
+    "$hook"
+done

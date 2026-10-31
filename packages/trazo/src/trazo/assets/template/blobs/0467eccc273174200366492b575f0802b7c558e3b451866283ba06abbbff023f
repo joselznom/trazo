@@ -1,0 +1,80 @@
+{
+  "schema_version": 1,
+  "data": "summary",
+  "title": "Example scores by site, group and visit.",
+  "legend": "Mean (SD) score and 95% CI (t interval) of the {n} example patients. The highest mean score at each site is in bold.",
+  "rows": {
+    "keys": [
+      "site",
+      "group",
+      "visit"
+    ],
+    "order": {
+      "site": [
+        "internal",
+        "external"
+      ],
+      "visit": [
+        "baseline",
+        "follow-up"
+      ]
+    },
+    "block": "site"
+  },
+  "columns": [
+    {
+      "id": "group",
+      "field": "group",
+      "header": "Group",
+      "merge": true
+    },
+    {
+      "id": "visit",
+      "field": "visit",
+      "header": "Visit"
+    },
+    {
+      "id": "patients",
+      "field": "patients",
+      "header": "*n*",
+      "align": "right"
+    },
+    {
+      "id": "score",
+      "header": "Score",
+      "columns": [
+        {
+          "id": "mean",
+          "field": "score",
+          "header": "Mean (SD)",
+          "format": "mean_sd",
+          "align": "right"
+        },
+        {
+          "id": "ci",
+          "field": "score",
+          "header": "95% CI",
+          "format": "ci",
+          "align": "right"
+        }
+      ]
+    }
+  ],
+  "maps": {
+    "site": {
+      "internal": "Internal site",
+      "external": "External site"
+    },
+    "visit": {
+      "baseline": "Baseline",
+      "follow-up": "Follow-up"
+    }
+  },
+  "highlight": [
+    {
+      "column": "score.mean",
+      "best": "max",
+      "within": "block"
+    }
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "name": "trazo",
+  "owner": {
+    "name": "Jose Lozano Montoya"
+  },
+  "description": "trazo: Markdown papers built into Word files, with a live preview.",
+  "plugins": [
+    {
+      "name": "trazo",
+      "source": "./",
+      "description": "Write scientific papers in Markdown: build the Word files, check a submission and review in a live preview."
+    }
+  ]
+}

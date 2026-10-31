@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "generator": "fixture",
+  "inputs": {
+    "data/table_source.csv": "e0909946a4e71e07978e724e2e8f7cab5040d0376079e89f3c1319dbe882f6ef"
+  },
+  "values": {
+    "n": 160
+  },
+  "records": [
+    {
+      "cohort": "train",
+      "patients": 120,
+      "age": {
+        "mean": 61.24,
+        "sd": 9.81
+      },
+      "female": {
+        "k": 54,
+        "n": 120
+      },
+      "note": "a*b_c|d"
+    },
+    {
+      "cohort": "test",
+      "patients": 40,
+      "age": {
+        "mean": 59.93,
+        "sd": 10.42
+      },
+      "female": {
+        "k": 19,
+        "n": 40
+      },
+      "note": null
+    }
+  ]
+}

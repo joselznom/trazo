@@ -1,0 +1,33 @@
+name: ci
+
+# Run by hand ("Run workflow"): pushes are tested locally by
+# .githooks/pre-push (`make hooks`). To test every push again, restore:
+#   push: {branches: [main], tags: ["v*"]}
+#   pull_request:
+on:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - name: Install Pandoc and pandoc-crossref
+        run: |
+          . scripts/ci-versions.sh
+          curl -fsSL -o pandoc.deb "https://github.com/jgm/pandoc/releases/download/${PANDOC_VERSION}/pandoc-${PANDOC_VERSION}-1-amd64.deb"
+          sudo dpkg -i pandoc.deb
+          curl -fsSL "https://github.com/lierdakil/pandoc-crossref/releases/download/${CROSSREF_VERSION}/pandoc-crossref-Linux-X64.tar.xz" | tar -xJ
+          sudo install pandoc-crossref /usr/local/bin/
+          pandoc --version | head -1
+          pandoc-crossref --version
+      - name: Chrome for diagrams
+        run: echo "TRAZO_CHROME=$(command -v google-chrome || command -v chromium)" >> "$GITHUB_ENV"
+      - name: Package tests
+        run: make test-package
+      - name: Render the template and verify it with this trazo
+        run: |
+          git config --global user.email ci@example.com
+          git config --global user.name ci
+          make test-template

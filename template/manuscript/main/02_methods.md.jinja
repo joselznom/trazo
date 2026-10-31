@@ -1,0 +1,23 @@
+{% if example %}{% raw %}# Methods
+
+The manuscript was written as Markdown sections under
+`manuscript/main/`. The sections were concatenated in filename order and
+expanded by trazo before Pandoc was called ([@fig:workflow]). Include
+directives inserted the generated tables, and `{{v:key}}` placeholders
+were replaced by numbers computed from the data by
+`scripts/build_values.py`, so no number in the prose was typed by hand.
+
+![[Build workflow of the example paper.]{.caption-title} Sections are expanded (includes and computed values), rendered by Pandoc with citations and cross-references, and written to Word.](figures/external/fig2_workflow.png){#fig:workflow width=100%}
+
+The example figure and table were generated with Python scripts that use
+only the standard library. The table numbers were computed by
+`tables/scripts/generate_tables.py` and formatted by trazo with the
+table spec in `tables/specs/`. Citation keys were checked
+against `bibliography/references.bib` before the Word document was
+accepted.
+
+Scores were summarised with their mean and standard deviation (SD).
+{% endraw %}{% else %}# Methods
+
+Describe the data, the methods and the statistical analysis.
+{% endif %}

@@ -1,0 +1,40 @@
+---
+title: {{ title | replace('\\', '\\\\') | to_json(ensure_ascii=False) }}
+short-title: {{ title | replace('\\', '\\\\') | to_json(ensure_ascii=False) }}
+
+author:
+  - name: "{{ 'First Author' if example else 'Your Name' }}"
+{% if kind != "report" %}    email: "{{ 'first.author@example.org' if example else 'your.name@institution.org' }}"
+{% if example %}    orcid: "0000-0002-1825-0097"
+{% endif %}    corresponding: true
+{% endif %}    affiliations: [{ref: organisation}]
+{% if kind != "report" %}  - name: "{{ 'Second Author' if example else 'Coauthor Name' }}"
+    affiliations: [{ref: organisation}]
+{% endif %}
+affiliations:
+  - id: organisation
+{% if kind == "report" %}    name: "{{ 'Example Organisation' if example else 'Your Organisation' }}"
+
+# date: YYYY-MM-DD
+{% else %}    department: "{{ 'Department of Example' if example else 'Your Department' }}"
+    name: "{{ 'Example University' if example else 'Your Institution' }}"
+    city: "{{ 'City' if example else 'Your City' }}"
+    country: "{{ 'Country' if example else 'Your Country' }}"
+
+keywords:
+  - "{{ 'academic writing' if example else 'Your keyword' }}"
+  - "{{ 'reproducible manuscripts' if example else 'Another keyword' }}"
+{% endif %}
+lang: en-US
+link-citations: true
+reference-section-title: "References"
+
+figureTitle: "Figure"
+tableTitle: "Table"
+figPrefix: "Figure"
+tblPrefix: "Table"
+secPrefix: "Section"
+figureTemplate: "**$$figureTitle$$ $$i$$.** $$t$$"
+tableTemplate: "**$$tableTitle$$ $$i$$.** $$t$$"
+numbersections: false
+---

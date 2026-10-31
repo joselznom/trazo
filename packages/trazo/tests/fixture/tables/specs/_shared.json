@@ -1,0 +1,13 @@
+{
+  "formats": {
+    "dec3": "{value:.3f}",
+    "ci": "{low:.2f}–{high:.2f}",
+    "mean_sd": "{mean:.1f} ({sd:.1f})"
+  },
+  "maps": {
+    "method": {
+      "logistic": "Logistic regression",
+      "forest": "Random forest"
+    }
+  }
+}

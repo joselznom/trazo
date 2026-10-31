@@ -1,0 +1,76 @@
+# Copier template for a Markdown + Pandoc paper that uses trazo. Only
+# `make template-variants` renders it, into the variants trazo stores:
+# papers are made and updated by trazo (`trazo new`, `trazo update`).
+_subdirectory: template
+_answers_file: .copier-answers.yml
+_templates_suffix: .jinja
+_min_copier_version: "9.19"
+# Project-owned content after creation; updates leave it alone and string authors still work.
+_skip_if_exists:
+  - manuscript/metadata.yaml
+  - manuscript/main/00c_abbreviations.md
+# Copier's default exclusions, plus the example paper's own files when the
+# project starts without it (example: false). `is defined`: `copier update`
+# applies these patterns to the old version too, which has no answer.
+_exclude:
+  - "{% if kind is defined and kind == 'report' %}manuscript/main/00c_abbreviations.md{% endif %}"
+  - "copier.yml"
+  - "~*"
+  - "*.py[co]"
+  - "__pycache__"
+  - ".git"
+  - ".DS_Store"
+  - "{% if kind is defined and kind == 'report' %}manuscript/declarations/**{% endif %}"
+  - "{% if kind is defined and kind == 'report' %}manuscript/cover-letter/**{% endif %}"
+  - "{% if kind is defined and kind == 'report' %}manuscript/declarations{% endif %}"
+  - "{% if kind is defined and kind == 'report' %}manuscript/cover-letter{% endif %}"
+  - "{% if example is defined and not example %}data/example.csv{% endif %}"
+  - "{% if example is defined and not example %}figures/scripts/fig1_trend.py{% endif %}"
+  - "{% if example is defined and not example %}figures/diagrams/fig2_workflow.json{% endif %}"
+  - "{% if example is defined and not example %}figures/external/fig2_workflow.*{% endif %}"
+  - "{% if example is defined and not example %}tables/specs/summary.json{% endif %}"
+  - "{% if example is defined and not example %}data/values.json{% endif %}"
+
+# Not asked or saved: true only while `copier copy` creates the project, so
+# example content in project-owned files (00c_abbreviations.md) is not added
+# to older projects by `copier update`. It must stay the first question: only
+# a previous answers file (or the data an update passes to its own renders)
+# answers `project_name` this early. Copier 9.19 passes `_copier_operation`
+# to `_exclude` and tasks, not to file contents or names.
+new_project:
+  type: bool
+  default: "{{ project_name is not defined }}"
+  when: false
+
+# Derive the internal name once; keep the saved answer during updates.
+# `ask: false` hides the question without discarding the saved answer.
+project_name:
+  type: str
+  default: "{{ _folder_name | lower | regex_replace('[^a-z0-9]+', '-') | trim('-') or 'my-paper' }}"
+  ask: false
+
+title:
+  type: str
+  help: Working title of the paper or report
+  default: Paper title
+
+kind:
+  type: str
+  help: "Kind of document: article (for a journal) or report"
+  choices: [article, report]
+  default: article
+
+example:
+  type: bool
+  help: >-
+    Start with the example paper (sections with sample text, a figure, a
+    diagram, a table and a citation)? Answer no for empty sections
+  default: true
+
+# Not asked: the trazo release that matches this template version.
+# `trazo update` moves a paper's trazo.toml to it with the rest of
+# the template.
+trazo_version:
+  type: str
+  default: v1.0.0
+  when: false

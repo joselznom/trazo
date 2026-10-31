@@ -1,0 +1,27 @@
+---
+title: "PKTITLEqz7Wx3Vb"
+short-title: "PKTITLEqz7Wx3Vb"
+
+author:
+  - name: "First Author"
+    affiliations: [{ref: organisation}]
+
+affiliations:
+  - id: organisation
+    name: "Example Organisation"
+
+# date: YYYY-MM-DD
+
+lang: en-US
+link-citations: true
+reference-section-title: "References"
+
+figureTitle: "Figure"
+tableTitle: "Table"
+figPrefix: "Figure"
+tblPrefix: "Table"
+secPrefix: "Section"
+figureTemplate: "**$$figureTitle$$ $$i$$.** $$t$$"
+tableTemplate: "**$$tableTitle$$ $$i$$.** $$t$$"
+numbersections: false
+---

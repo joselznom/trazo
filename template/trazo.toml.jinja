@@ -1,0 +1,55 @@
+# trazo: preview, diagrams, checks and shared agent skills, from
+# trazo. An update (the plugin's paper_update) moves `version` to the
+# plugin's release. Every key is documented in trazo's project.py; the
+# defaults match this layout.
+version = "{{ trazo_version }}"
+# Document kind: article or report.
+kind = "{{ kind }}"
+{% if kind != "report" %}
+# Use the journal-submission skill to read the journal's instructions and configure this.
+# [submission]
+# journal = ""               # Target journal.
+# guidelines = ""            # Instructions for authors URL.
+# title_page = "manuscript"  # Or "separate" for a separate title page.
+# declarations = "end"       # Or "separate" (Word file), "form" (no Word file).
+# output = "output"          # Separate Word files folder.
+{% endif %}
+# `scripts/trazo build` builds the Word files itself: values, tables,
+# diagrams, the steps below, then Pandoc. A command here replaces that
+# stage; empty or absent means built in.
+# [commands]
+# tables = []
+# docx = []
+# values = []
+# figures = []
+
+# Journal limits of the manuscript, shown by the preview and
+# `scripts/trazo counts` (0 = no limit). Sections such as the abstract
+# and declarations are not main text: [counts] exclude lists their
+# headings, and a heading with {.uncounted} is left out too.
+[limits]
+words = 0
+abstract = 0
+figures = 0
+tables = 0
+references = 0{% if kind != "report" %}
+keywords = 0  # maximum number of keywords in manuscript/metadata.yaml{% endif %}
+{% if example %}
+# Project rules, run by `scripts/trazo build` when their inputs change
+# (keys documented in trazo's project.py). Add one per figure script.
+[[build.steps]]
+name = "fig1_trend"
+run = ["figures/scripts/fig1_trend.py"]
+inputs = ["figures/scripts/_style.py"]
+outputs = ["figures/output/png/fig1_trend.png"]
+before = "diagrams"
+{% else %}
+# Project rules, run by `scripts/trazo build` when their inputs change
+# (keys documented in trazo's project.py). Add one per figure script:
+# [[build.steps]]
+# name = "fig1_name"
+# run = ["figures/scripts/fig1_name.py"]
+# inputs = ["figures/scripts/_style.py", "data/mydata.csv"]
+# outputs = ["figures/output/png/fig1_name.png"]
+# before = "diagrams"
+{% endif %}

@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>trazo preview</title>
+<style>
+  :root { color-scheme: light dark; }
+  html, body { margin: 0; background: Canvas; color: CanvasText; font: 14px/1.5 system-ui, sans-serif; }
+  body { display: flex; align-items: center; gap: 12px; padding: 0 16px; box-sizing: border-box; }
+  #trazo-view-note { margin: 0; }
+  #trazo-view-open { padding: 4px 12px; border-radius: 6px; border: 1px solid rgba(127, 127, 127, .5);
+    background: Canvas; color: CanvasText; font: inherit; cursor: pointer; }
+</style>
+</head>
+<body>
+<p id="trazo-view-note">Opening the paper's preview…</p>
+<button id="trazo-view-open" type="button" hidden>Open full screen</button>
+<!-- view.js -->
+</body>
+</html>

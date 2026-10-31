@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Diagram editor</title>
+<link rel="stylesheet" href="/__assets/diagram/editor.css">
+</head>
+<body class="is-landing">
+<header id="bar">
+  <div class="bar-left">
+    <a id="back" class="back" href="/" title="Back to the preview">← Preview</a>
+    <a id="home" href="#" title="All diagrams"><i data-icon="logo" data-size="20"></i><span>Diagrams</span></a>
+    <span class="crumb-sep" id="crumb-sep" hidden>/</span>
+    <span id="docname"></span>
+    <span id="draft-badge" class="pill-badge" title="Draft: linted, never exported" hidden>Draft</span>
+    <button id="status" class="status" type="button" hidden></button>
+    <span id="export-state" class="status" hidden></span>
+  </div>
+  <div class="bar-center" id="tools" role="toolbar" aria-label="Tools">
+    <button type="button" class="tool on" data-tool="select" title="Select and move (V)"><i data-icon="select"></i></button>
+    <span class="tool-sep"></span>
+    <button type="button" class="tool" data-tool="box" title="Box (B): click or drag on the canvas"><i data-icon="box"></i></button>
+    <button type="button" class="tool" data-tool="pill" title="Pill (P)"><i data-icon="pill"></i></button>
+    <button type="button" class="tool" data-tool="text" title="Text (T)"><i data-icon="text"></i></button>
+    <button type="button" class="tool" data-tool="panel" title="Panel (F)"><i data-icon="panel"></i></button>
+    <span class="tool-sep"></span>
+    <button type="button" class="tool" data-tool="comment" title="Comment (C): click an element or a point"><i data-icon="comment"></i></button>
+  </div>
+  <div class="bar-right">
+    <button type="button" class="icon-btn" data-action="undo" title="Undo (⌘Z)"><i data-icon="undo"></i></button>
+    <button type="button" class="icon-btn" data-action="redo" title="Redo (⌘⇧Z)"><i data-icon="redo"></i></button>
+    <span class="bar-sep"></span>
+    <button type="button" class="icon-btn toggle on" id="opt-layers" aria-pressed="true" title="Layers panel (L)"><i data-icon="layers"></i></button>
+    <button type="button" class="icon-btn toggle on" id="opt-grid" aria-pressed="true" title="Grid (⌘')"><i data-icon="grid"></i></button>
+    <button type="button" class="icon-btn toggle on" id="opt-guides" aria-pressed="true" title="Panel and print-width guides (⌘;)"><i data-icon="guides"></i></button>
+    <span class="bar-sep"></span>
+    <button type="button" class="icon-btn" data-action="help" title="Shortcuts and help (?)"><i data-icon="keyboard"></i></button>
+    <button type="button" class="btn primary" data-action="exportDiagram" title="Write SVG, PDF and PNG to figures/external/"><i data-icon="export" data-size="16"></i><span>Export</span></button>
+  </div>
+</header>
+<main id="main">
+  <aside id="left" aria-label="Layers">
+    <div class="pane-head"><i data-icon="layers" data-size="16"></i><span>Layers</span><span id="layer-count" class="count"></span></div>
+    <div id="layers" class="pane-body"></div>
+  </aside>
+  <div id="viewport" tabindex="-1">
+    <div id="stage">
+      <div id="paper"></div>
+      <div id="grid"></div>
+      <svg id="overlay" xmlns="http://www.w3.org/2000/svg"></svg>
+    </div>
+    <div id="hud-left" class="hud">
+      <span id="pos"></span><span id="selinfo"></span>
+    </div>
+    <div id="hud-zoom" class="hud" role="group" aria-label="Zoom">
+      <button type="button" data-action="zoomOut" title="Zoom out (⌘−)"><i data-icon="minus" data-size="16"></i></button>
+      <button type="button" id="zoomlabel" data-action="zoomPhysical" title="Physical size, 100 % (⌘0)">100 %</button>
+      <button type="button" data-action="zoomIn" title="Zoom in (⌘+)"><i data-icon="plus" data-size="16"></i></button>
+      <span class="hud-sep"></span>
+      <button type="button" data-action="zoomFit" title="Zoom to fit (⇧1)"><i data-icon="fit" data-size="16"></i></button>
+      <button type="button" data-action="zoomSelection" title="Zoom to selection (⇧2)"><i data-icon="target" data-size="16"></i></button>
+    </div>
+    <div id="tool-hint" class="hud" hidden></div>
+    <span id="timing" hidden></span>
+  </div>
+  <aside id="side" aria-label="Inspector">
+    <nav id="tabs" role="tablist">
+      <button type="button" data-tab="inspect" class="on" role="tab" aria-selected="true">Design</button>
+      <button type="button" data-tab="lint" role="tab" aria-selected="false">Issues<span class="badge" hidden></span></button>
+      <button type="button" data-tab="comments" role="tab" aria-selected="false">Comments<span class="badge" hidden></span></button>
+    </nav>
+    <div id="inspector" class="pane-body"></div>
+    <div id="lint" class="pane-body" hidden></div>
+    <div id="comments" class="pane-body" hidden></div>
+  </aside>
+</main>
+<div id="banner" role="alert" hidden></div>
+<div id="landing"><div class="boot"><span class="spinner"></span>Loading…</div></div>
+<div id="menu" role="menu" hidden></div>
+<div id="help" role="dialog" aria-modal="true" aria-label="Shortcuts and help" hidden></div>
+<div id="tip" hidden></div>
+<div id="toast" role="status" hidden></div>
+<script src="/__assets/diagram/icons.js"></script>
+<script src="/__assets/diagram/renderer.js"></script>
+<script src="/__assets/diagram/editor.js"></script>
+<script src="/__assets/diagram/comments.js"></script>
+</body>
+</html>

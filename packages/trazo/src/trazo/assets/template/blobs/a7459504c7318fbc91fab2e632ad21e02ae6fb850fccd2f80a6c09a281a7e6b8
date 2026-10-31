@@ -1,0 +1,47 @@
+#!/usr/bin/env python3
+"""Compute the table data in tables/output/data/ (run by `scripts/trazo build`).
+
+Numbers are computed here and written unformatted with _data.write_data;
+`scripts/trazo table render` then formats them with
+tables/specs/<label>.json into tables/output/md/<label>.md. The label is
+also the cross-reference: tables/specs/summary.json -> {#tbl:summary}.
+
+    uv run python tables/scripts/generate_tables.py
+"""
+
+from __future__ import annotations
+
+import csv
+from collections.abc import Callable
+from pathlib import Path
+
+from _data import write_data
+
+ROOT = Path(__file__).resolve().parents[2]
+def read_rows(path: str) -> list[dict[str, str]]:
+    with (ROOT / path).open(newline="", encoding="utf-8") as handle:
+        return list(csv.DictReader(handle))
+
+
+# One function per data file, written with write_data, for example:
+#
+#     def cohort() -> None:
+#         """Patients by site (Table cohort)."""
+#         rows = read_rows("data/cohort.csv")
+#         records = [{"site": site, "patients": sum(row["site"] == site for row in rows)}
+#                    for site in sorted({row["site"] for row in rows})]
+#         write_data("cohort", records, inputs=["data/cohort.csv"])
+#
+# then DATA = {"cohort": cohort} and tables/specs/cohort.json for its
+# presentation.
+DATA: dict[str, Callable[[], None]] = {}
+
+
+def main() -> None:
+    for name, build in DATA.items():
+        build()
+        print(f"Generated tables/output/data/{name}.json")
+
+
+if __name__ == "__main__":
+    main()

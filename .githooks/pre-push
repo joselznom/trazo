@@ -1,0 +1,79 @@
+#!/bin/sh
+# Test every pushed commit before it leaves this machine, in place of
+# GitHub Actions: make test-package, test-template and test-update run in a
+# clean checkout of the commit, so uncommitted changes do not count.
+# A commit that passed is remembered, so pushing it again (a tag, another
+# branch) is instant. `make hooks` turns this on; `git push --no-verify`
+# skips it for work in progress.
+set -eu
+zero=0000000000000000000000000000000000000000
+tested="$(git rev-parse --path-format=absolute --git-common-dir)/trazo-tested"
+mkdir -p "$tested"
+
+commits=""
+pushed=""   # every distinct tip, for the acceptance run
+tags=""     # "<tag>:<commit>" for each pushed vX.Y.Z tag
+while read -r local_ref local_sha remote_ref remote_sha; do
+    [ "$local_sha" = "$zero" ] && continue   # a deleted branch or tag
+    commit=$(git rev-parse "$local_sha^{commit}" 2>/dev/null) || continue
+    case " $pushed " in *" $commit "*) ;; *) pushed="$pushed $commit" ;; esac
+    case "$local_ref" in
+        refs/tags/v*)
+            tag=${local_ref#refs/tags/}
+            if printf '%s\n' "$tag" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$'; then tags="$tags $tag:$commit"; fi ;;
+    esac
+    [ -e "$tested/$commit" ] && continue
+    case " $commits " in *" $commit "*) ;; *) commits="$commits $commit" ;; esac
+done
+
+for commit in $commits; do
+    dir=$(mktemp -d "${TMPDIR:-/tmp}/trazo-pre-push.XXXXXX")
+    git worktree add --quiet --detach "$dir" "$commit"
+    echo "pre-push: testing $(git log -1 --format='%h %s' "$commit")"
+    # Git exports GIT_DIR and friends to hooks; the tests make repositories of their own.
+    if (unset $(git rev-parse --local-env-vars); cd "$dir" && make test-package test-template test-update) >"$dir.log" 2>&1; then
+        touch "$tested/$commit"
+        echo "pre-push: passed"
+        status=0
+    else
+        echo "pre-push: tests failed for $commit; push cancelled. Last lines of $dir.log:" >&2
+        tail -n 30 "$dir.log" >&2
+        status=1
+    fi
+    git worktree remove --force "$dir"
+    [ "$status" -eq 0 ] || exit 1
+    rm -f "$dir.log"
+done
+
+# Acceptance. The cache of passes and the data seed are shared with every worktree (see
+# scripts/acceptance/README.md), so a tip that already passed costs a second. A failure cancels the
+# push. A skipped scenario (no login, usage limit) is listed and the push goes on; a release tag
+# cancels on it, since its run needs n1 and n2 since the previous release to pass.
+acceptance() {  # <commit> <label> <make args...>
+    commit=$1; label=$2; shift 2
+    dir=$(mktemp -d "${TMPDIR:-/tmp}/trazo-pre-push.XXXXXX")
+    git worktree add --quiet --detach "$dir" "$commit"
+    echo "pre-push: acceptance ($label) for $(git log -1 --format='%h %s' "$commit")"
+    if (unset $(git rev-parse --local-env-vars); cd "$dir" && make acceptance-auto "$@") >"$dir.log" 2>&1; then
+        grep -E '^[0-9]+ passed|^Nothing to run|^No scenario' "$dir.log" | sed 's/^/pre-push: /'
+        sed -n '/^Not proven/,$p' "$dir.log" | sed 's/^/pre-push: /' >&2
+        status=0
+    else
+        saved=$(mktemp -d "${TMPDIR:-/tmp}/trazo-pre-push-report.XXXXXX")
+        cp -R "$dir/.build/acceptance/." "$saved/" 2>/dev/null || true   # the checkout is removed below
+        echo "pre-push: acceptance ($label) did not pass for $commit; push cancelled. Last lines of $dir.log," >&2
+        echo "pre-push: reports copied to $saved (look for report.md); run the same with: make acceptance-auto $*" >&2
+        tail -n 40 "$dir.log" >&2
+        status=1
+    fi
+    git worktree remove --force "$dir"
+    [ "$status" -eq 0 ] || exit 1
+    rm -f "$dir.log"
+}
+
+for commit in $pushed; do
+    acceptance "$commit" push AUTO=push
+done
+for entry in $tags; do
+    acceptance "${entry#*:}" "tag ${entry%%:*}" AUTO=tag ACCEPTANCE_ARGS="--tag ${entry%%:*}"
+done

@@ -1,0 +1,38 @@
+# Declarations
+
+## Ethics approval and consent to participate {#decl-ethics}
+
+Not applicable. The example uses synthetic data and involves no human participants or animals.
+
+## Consent for publication {#decl-consent-publication}
+
+Not applicable.
+
+## Availability of data and materials {#decl-data}
+
+The synthetic data are available in the project repository (data/example.csv).
+
+## Code availability {#decl-code}
+
+The scripts that generate the figures, tables and values are available in the project repository.
+
+## Competing interests {#decl-competing-interests}
+
+The authors declare no competing interests.
+
+## Funding {#decl-funding}
+
+This work received no specific funding.
+
+## Authors' contributions {#decl-contributions}
+
+First Author: conceptualization, methodology, software, writing – original draft. Second Author: validation, visualization, writing – review and editing. Both authors read and approved the final manuscript.
+
+## Use of generative AI {#decl-ai}
+
+An AI coding assistant was used to draft text and scripts. The authors reviewed and edited all output and take full responsibility for the content.
+
+## Acknowledgements {#decl-acknowledgements}
+
+We thank the developers of Pandoc.
+

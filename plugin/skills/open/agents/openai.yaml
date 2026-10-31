@@ -1,0 +1,4 @@
+interface:
+  display_name: "Open trazo"
+policy:
+  allow_implicit_invocation: false

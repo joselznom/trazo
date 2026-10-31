@@ -1,0 +1,82 @@
+/* Lightbox, tooltip, toast and the comment editor; then the narrow-screen and
+   reduced-motion overrides and the rules that must come last. */
+/* ---------- lightbox, tooltip, toast ---------- */
+.pv-lb { position: fixed; inset: 0; z-index: 80; background: var(--pv-scrim); display: grid; place-items: center; padding: 3vh 3vw; font: 14px/1.45 var(--pv-sans); }
+.pv-lb-card { width: min(980px, 100%); max-height: 100%; display: flex; flex-direction: column; background: var(--pv-page); color: var(--pv-page-ink); border-radius: 10px; box-shadow: var(--pv-shadow-pop); overflow: hidden; min-width: 0; }
+.pv-lb-head { flex: none; display: flex; align-items: center; gap: 8px; padding: 10px 12px 10px 16px; border-bottom: 1px solid var(--pv-page-line); }
+.pv-lb-head .ttl { font-weight: 600; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pv-lb-body { flex: 1; min-height: 0; overflow: auto; padding: 18px 22px; }
+.pv-lb-body img { display: block; max-width: 100%; height: auto; margin: 0 auto; background: #fff; }
+.pv-lb-body table { width: 100%; border-collapse: collapse; font: 15px/1.4 var(--pv-sans); font-variant-numeric: tabular-nums; }
+.pv-lb-body th, .pv-lb-body td { padding: 0.32em 0.7em; text-align: left; vertical-align: top; }
+.pv-lb-body thead { border-top: 1.5px solid currentColor; border-bottom: 1px solid currentColor; }
+.pv-lb-body tbody { border-bottom: 1.5px solid currentColor; }
+.pv-lb-body .tscroll { overflow-x: auto; }
+.pv-lb-cap { margin: 14px 0 0; font: 14px/1.55 var(--pv-sans); color: var(--pv-page-ink); text-align: justify; }
+.pv-lb-foot { flex: none; display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 10px 16px; border-top: 1px solid var(--pv-page-line); }
+.pv-lb-foot .pv-hint { color: var(--pv-page-muted); }
+.pv-lb .pv-btn { background: var(--pv-page); color: var(--pv-page-ink); border-color: var(--pv-page-line); }
+.pv-lb .pv-btn:hover:not(:disabled) { background: var(--pv-hover); }
+.pv-lb .pv-btn.primary { background: var(--pv-accent); border-color: var(--pv-accent); color: var(--pv-on-accent); }
+.pv-lb .pv-icon-btn { color: var(--pv-page-ink); }
+
+.pv-tip {
+  position: fixed; z-index: 90; max-width: min(340px, calc(100vw - 16px)); padding: 7px 10px; border-radius: 6px; pointer-events: none;
+  background: var(--pv-tip-bg); color: var(--pv-tip-ink); font: 12px/1.45 var(--pv-sans); box-shadow: var(--pv-shadow-pop); white-space: pre-line; overflow-wrap: anywhere;
+}
+.pv-tip code { font: 500 12px var(--pv-mono); }
+.pv-tip .sub { color: var(--pv-tip-sub); margin-top: 2px; }
+.pv-tip div + div { margin-top: 3px; }
+.pv-toast {
+  position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%); z-index: 95; max-width: calc(100vw - 24px); padding: 8px 14px; border-radius: 8px;
+  background: var(--pv-tip-bg); color: var(--pv-tip-ink); font: 13px/1.4 var(--pv-sans); box-shadow: var(--pv-shadow-pop); animation: pv-toast-in 0.16s ease-out;
+}
+.pv-toast button {
+  margin-left: 14px; padding: 0; border: 0; background: none; color: inherit; cursor: pointer;
+  font: 600 13px var(--pv-sans); text-decoration: underline; text-underline-offset: 2px;
+}
+@keyframes pv-toast-in { from { opacity: 0; transform: translate(-50%, 8px); } }
+
+/* ---------- comment button and editor ---------- */
+.pv-editor button[data-op] {
+  font: 12px var(--pv-sans); background: var(--pv-accent); color: var(--pv-on-accent); border: 0; border-radius: 6px;
+  padding: 0.35em 0.7em; cursor: pointer;
+}
+.pv-fab {
+  position: fixed; z-index: 60; display: flex; gap: 2px; max-width: calc(100vw - 16px); padding: 3px; border: 1px solid var(--pv-line); border-radius: 8px;
+  background: var(--pv-card); color: var(--pv-ink); box-shadow: var(--pv-shadow-pop); font: 12.5px var(--pv-sans);
+}
+.pv-fab button { display: inline-flex; align-items: center; gap: 5px; padding: 4px 9px; border-radius: 6px; }
+.pv-fab button:hover { background: var(--pv-hover); }
+.pv-fab svg { width: 15px; height: 15px; color: var(--pv-ink-2); }
+.pv-editor button[data-op="cancel"] { background: transparent; color: var(--pv-ink-2); }
+.pv-editor {
+  position: fixed; z-index: 61; width: 340px; max-width: calc(100vw - 16px); background: var(--pv-card); color: var(--pv-ink);
+  border: 1px solid var(--pv-line); border-radius: 8px; box-shadow: var(--pv-shadow-pop); padding: 0.7em; font: 13px/1.4 var(--pv-sans);
+  max-height: calc(100vh - 16px); overflow: auto;
+}
+.pv-editor-move { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; margin-bottom: 6px;
+  padding: 2px 0; cursor: grab; touch-action: none; user-select: none; color: var(--pv-muted); }
+.pv-editor.dragging .pv-editor-move { cursor: grabbing; }
+.pv-editor .pv-where { white-space: normal; color: var(--pv-muted); font-size: 11.5px; }
+.pv-editor blockquote { margin: 0 0 7px; padding: 1px 0 1px 9px; border-left: 2px solid var(--pv-line-strong); color: var(--pv-ink-2); font: italic 13px/1.45 var(--pv-serif); max-height: 4.4em; overflow: hidden; }
+.pv-editor textarea { width: 100%; min-height: 80px; resize: vertical; padding: 6px 8px; border: 1px solid var(--pv-line-strong); border-radius: 6px; background: var(--pv-field); color: var(--pv-ink); }
+.pv-editor .pv-actions { margin-top: 6px; }
+
+@media (max-width: 640px) {
+  .pv-topbar { flex-wrap: wrap; row-gap: 4px; padding-left: 8px; padding-right: 8px; }
+  .pv-brand, .pv-words, .pv-bs-label { display: none; }
+  .pv-tabs-top { order: 10; flex: 1 0 100%; overflow-x: auto; scrollbar-width: none; }
+  .pv-tabs-top::-webkit-scrollbar { display: none; }
+  .pv-lb-body { padding: 12px; }
+}
+@media (max-width: 1100px) { .pv-bs-label { display: none; } }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms; animation-iteration-count: 1; transition-duration: 0.01ms; scroll-behavior: auto; }
+}
+.pv-exports { display: inline-flex; gap: 5px; flex-wrap: wrap; align-items: center; font: 12px var(--pv-sans); margin: 6px; }
+.pk-abbreviations table, .pk-abbreviations th, .pk-abbreviations td {
+  border: none;
+}
+.pk-abbreviations th, .pk-abbreviations td { text-align: left; }
+abbr[title] { text-decoration: underline dotted; text-underline-offset: 3px; }

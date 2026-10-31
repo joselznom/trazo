@@ -1,0 +1,75 @@
+#!/usr/bin/env python3
+"""Build data/values.json: the numbers the prose quotes as {{v:key}}.
+
+Each value is computed here from the data files in INPUTS. Their sha256 is
+recorded, so `scripts/trazo expand` (and the preview) refuse a values
+file that is older than its data.
+
+    uv run python scripts/build_values.py [--check]
+"""
+
+from __future__ import annotations
+
+import argparse
+import csv
+import hashlib
+import json
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+OUTPUT = ROOT / "data" / "values.json"
+# The data files the values are computed from, e.g. ("data/cohort.csv",).
+INPUTS: tuple[str, ...] = ()
+
+
+def read_rows(path: str) -> list[dict[str, str]]:
+    with (ROOT / path).open(newline="", encoding="utf-8") as handle:
+        return list(csv.DictReader(handle))
+
+
+def compute() -> dict[str, dict[str, object]]:
+    """key -> {value, text, source}; text is what {{v:key}} shows.
+
+    {{v:key|name}} instead applies the format `name` from
+    tables/specs/_shared.json to the raw value, which may be a number or an
+    object of numbers (here {mean, sd} for `mean_sd`).
+    """
+    # For example, with "data/cohort.csv" in INPUTS:
+    #     rows = read_rows("data/cohort.csv")
+    #     n = len(rows)
+    #     return {"cohort.n": {"value": n, "text": str(n), "source": "data/cohort.csv"}}
+    return {}
+
+
+def payload() -> dict[str, object]:
+    inputs = {path: hashlib.sha256((ROOT / path).read_bytes()).hexdigest() for path in INPUTS}
+    return {"schema_version": 1, "generator": "scripts/build_values.py",
+            "inputs": inputs, "values": compute()}
+
+
+def render() -> str:
+    return json.dumps(payload(), indent=2, ensure_ascii=False) + "\n"
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser.add_argument("--check", action="store_true",
+                        help="fail if data/values.json is not current")
+    args = parser.parse_args()
+    text = render()
+    if args.check:
+        current = OUTPUT.read_text(encoding="utf-8") if OUTPUT.exists() else ""
+        if current != text:
+            print("data/values.json is stale; run `scripts/trazo build --prepare=inputs`", file=sys.stderr)
+            return 1
+        print("data/values.json is current")
+        return 0
+    OUTPUT.parent.mkdir(parents=True, exist_ok=True)
+    OUTPUT.write_text(text, encoding="utf-8")
+    print(f"Generated {OUTPUT.relative_to(ROOT)}")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

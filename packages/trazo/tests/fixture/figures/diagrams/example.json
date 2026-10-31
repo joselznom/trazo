@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "canvas": {
+    "width_mm": 89.0,
+    "height_mm": 30.0,
+    "grid": 1
+  },
+  "panels": [],
+  "nodes": [
+    {
+      "id": "a",
+      "kind": "box",
+      "x": 4,
+      "y": 8,
+      "w": 30,
+      "h": 14,
+      "text": "Input"
+    },
+    {
+      "id": "b",
+      "kind": "box",
+      "x": 55,
+      "y": 8,
+      "w": 30,
+      "h": 14,
+      "text": "Output {{v:cohort.n}}"
+    }
+  ],
+  "edges": [
+    {
+      "id": "ab",
+      "from": "a.right",
+      "to": "b.left"
+    }
+  ],
+  "raw": []
+}

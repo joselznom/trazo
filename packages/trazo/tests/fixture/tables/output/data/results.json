@@ -1,0 +1,142 @@
+{
+  "schema_version": 1,
+  "generator": "fixture",
+  "inputs": {},
+  "values": {
+    "models": 2
+  },
+  "records": [
+    {
+      "validation": "internal",
+      "cohort": "site1",
+      "method": "logistic",
+      "n": 300,
+      "metric": "auc",
+      "value": {
+        "est": 0.812,
+        "low": 0.771,
+        "high": 0.853
+      }
+    },
+    {
+      "validation": "internal",
+      "cohort": "site1",
+      "method": "logistic",
+      "n": 300,
+      "metric": "brier",
+      "value": {
+        "est": 0.142,
+        "low": 0.128,
+        "high": 0.156
+      }
+    },
+    {
+      "validation": "internal",
+      "cohort": "site1",
+      "method": "forest",
+      "n": 300,
+      "metric": "auc",
+      "value": {
+        "est": 0.845,
+        "low": 0.807,
+        "high": 0.883
+      }
+    },
+    {
+      "validation": "internal",
+      "cohort": "site1",
+      "method": "forest",
+      "n": 300,
+      "metric": "brier",
+      "value": {
+        "est": 0.131,
+        "low": 0.118,
+        "high": 0.144
+      }
+    },
+    {
+      "validation": "external",
+      "cohort": "site2",
+      "method": "logistic",
+      "n": 150,
+      "metric": "auc",
+      "value": {
+        "est": 0.774,
+        "low": 0.711,
+        "high": 0.837
+      }
+    },
+    {
+      "validation": "external",
+      "cohort": "site2",
+      "method": "logistic",
+      "n": 150,
+      "metric": "brier",
+      "value": {
+        "est": 0.158,
+        "low": 0.139,
+        "high": 0.177
+      }
+    },
+    {
+      "validation": "external",
+      "cohort": "site2",
+      "method": "forest",
+      "n": 150,
+      "metric": "auc",
+      "value": {
+        "est": 0.801,
+        "low": 0.742,
+        "high": 0.86
+      }
+    },
+    {
+      "validation": "external",
+      "cohort": "site2",
+      "method": "forest",
+      "n": 150,
+      "metric": "brier",
+      "value": {
+        "est": 0.149,
+        "low": 0.131,
+        "high": 0.167
+      }
+    },
+    {
+      "validation": "external",
+      "cohort": "site3",
+      "method": "logistic",
+      "n": 90,
+      "metric": "auc",
+      "value": {
+        "est": 0.792,
+        "low": 0.711,
+        "high": 0.873
+      }
+    },
+    {
+      "validation": "external",
+      "cohort": "site3",
+      "method": "logistic",
+      "n": 90,
+      "metric": "brier",
+      "value": {
+        "est": 0.151,
+        "low": 0.127,
+        "high": 0.175
+      }
+    },
+    {
+      "validation": "external",
+      "cohort": "site3",
+      "method": "forest",
+      "n": 90,
+      "metric": "auc",
+      "value": {
+        "est": 0.788,
+        "low": 0.705,
+        "high": 0.871
+      }
+    }
+  ]
+}

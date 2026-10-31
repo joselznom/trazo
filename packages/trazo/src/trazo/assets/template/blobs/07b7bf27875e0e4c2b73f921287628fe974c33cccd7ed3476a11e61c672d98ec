@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "formats": {
+    "mean_sd": "{mean:.2f} ({sd:.2f})",
+    "ci": "{low:.2f}–{high:.2f}"
+  },
+  "maps": {
+    "group": {
+      "A": "Group A",
+      "B": "Group B"
+    }
+  }
+}

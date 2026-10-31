@@ -1,0 +1,54 @@
+#!/bin/sh
+# Reject commit messages that break the two rules the changelog and the history depend on:
+# a Conventional Commits subject, and no credit to an AI agent.
+# Runs once the repo sets `git config core.hooksPath .githooks` (agent-playbook's
+# `install.sh project` does that).
+
+# Drop git's comment lines and the diff below the `git commit -v` scissors line. Both start
+# with core.commentChar or its alias core.commentString; git uses whichever is set last
+# (git before 2.45 ignores commentString). With "auto", git picks the character per
+# message; it is read back from the scissors line, and without one '#' is assumed, so
+# comment lines that git wrote with another character are checked like the body.
+cc=$(git config --get-regexp '^core\.comment(char|string)$' | sed -n '$s/^[^ ]* //p')
+cc=${cc:-#}
+if [ "$cc" = auto ]; then
+    cc=$(sed -n 's/^\(.\) -\{24\} >8 -\{24\}$/\1/p' "$1" | sed -n '1p')
+    cc=${cc:-#}
+fi
+message=$(CC="$cc" awk '
+    BEGIN { cc = ENVIRON["CC"]; cut = cc " ------------------------ >8 ------------------------" }
+    $0 == cut { exit }
+    index($0, cc) == 1 { next }
+    { print }' "$1")
+subject=$(printf '%s\n' "$message" | sed -n '1p')
+
+# Merge and revert subjects are written by git itself, and fixup!/squash!/amend! subjects by
+# `git commit --fixup` and friends from a commit that already exists (they vanish on
+# `git rebase --autosquash`). Their bodies are still checked below.
+types='build|chore|ci|data|docs|feat|fix|perf|refactor|revert|style|test'
+case "$subject" in
+    "Merge "*|"Merged in "*|"Revert "*|"fixup! "*|"squash! "*|"amend! "*) ;;
+    *) if ! printf '%s\n' "$subject" | grep -Eq "^($types)(\([^)]+\))?!?: [^ ].*$"; then
+    printf '%s\n' "commit-msg: the subject must follow Conventional Commits: <type>(<scope>)?: <summary>" \
+        "  types: $types" \
+        "  got:   $subject" >&2
+    exit 1
+fi ;;
+esac
+
+# A credit is a line that is only the attribution: "Generated with <agent>", optionally after
+# an emoji or bullet, with the agent as a Markdown link or a name of up to three known words
+# ("Claude Code", "GitHub Copilot", "GPT-5 Codex CLI"). Prose that mentions an agent passes.
+agents='claude|codex|anthropic|openai|chatgpt|gpt-[0-9]|copilot|cursor|gemini|devin|aider|ai agent'
+trailer="^[[:space:]]*(co-authored-by|signed-off-by|assisted-by|generated-by):.*($agents)"
+agent_word="(claude|codex|anthropic|openai|chatgpt|gpt-[0-9][-.0-9a-z]*|copilot|cursor|gemini|devin|aider)(\.ai|'s)?"
+name_word="(ai|code|cli|app|agent|opus|sonnet|haiku|fable|pro|flash|sol|codex|copilot|[0-9][-.0-9a-z]*)"
+agent_name="\[[^]]*($agents)[^]]*\](\([^)]*\))?|((github|google|microsoft) )?$agent_word( $name_word){0,2}|(an? )?ai agent"
+credit="^[^[:alnum:]]*(generated|written|authored|created|assisted|produced) (by|with|using) ($agent_name)[[:space:].!]*$"
+
+offending=$(printf '%s\n' "$message" | grep -Ei -e "$trailer" -e "$credit")
+if [ -n "$offending" ]; then
+    printf '%s\n' "commit-msg: commits carry no agent attribution. Remove these lines and commit again:" \
+        "$offending" >&2
+    exit 1
+fi

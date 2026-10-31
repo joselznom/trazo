@@ -1,0 +1,9 @@
+#!/bin/sh
+# Lint the staged Python files of packages/trazo with its ruff config, so the hook stays
+# fast. No `ruff format --check` yet: formatting would grow files already over the size limit.
+# NUL-delimited so paths with spaces or non-ASCII characters survive.
+set -e
+staged() { git diff --cached --name-only --diff-filter=ACMR -z -- 'packages/trazo/*.py'; }
+if staged | grep -qz .; then
+    staged | xargs -0 uv run --quiet --locked --project packages/trazo ruff check
+fi

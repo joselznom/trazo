@@ -1,0 +1,64 @@
+#!/bin/sh
+# Run trazo: the per-user install the plugin's setup made, outside this
+# project's pyproject.toml and uv.lock. When it is not the release
+# trazo.toml pins (version = "vX.Y.Z"), it runs anyway and says so: an
+# update of the paper (the plugin's paper_update) moves the pin to it, and
+# an update of the plugin (then its setup) the install.
+#   TRAZO_DEV=../trazo/packages/trazo  run a local checkout
+#   TRAZO_DATA_DIR=...  the per-user folder (default as trazo.machine.data_dir:
+#     ~/Library/Application Support/trazo on macOS, else
+#     ${XDG_DATA_HOME:-~/.local/share}/trazo; Windows comes in phase 4)
+# uv (TRAZO_DEV runs it): on PATH, else the one setup unpacked into
+# <data folder>/uv/, with its Python and cache kept in the data folder
+# (trazo.machine.uv_environment).
+set -e
+root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+if [ -n "${TRAZO_DATA_DIR:-}" ]; then
+    data=$TRAZO_DATA_DIR
+else
+    case $(uname -s) in
+        Darwin) data="$HOME/Library/Application Support/trazo" ;;
+        *) data="${XDG_DATA_HOME:-$HOME/.local/share}/trazo" ;;
+    esac
+fi
+uv=uv
+if ! command -v uv >/dev/null 2>&1 && [ -x "$data/uv/uv" ]; then
+    uv="$data/uv/uv"
+    export TRAZO_DATA_DIR="$data" UV_CACHE_DIR="$data/cache" UV_PYTHON_INSTALL_DIR="$data/python" \
+        UV_PYTHON_BIN_DIR="$data/bin" UV_TOOL_DIR="$data/tools" UV_TOOL_BIN_DIR="$data/bin" UV_MANAGED_PYTHON=1
+fi
+need_uv() {
+    if [ "$uv" = uv ] && ! command -v uv >/dev/null 2>&1; then
+        echo "scripts/trazo: uv not found: set up trazo (the plugin's setup skill) or install uv" >&2
+        exit 127
+    fi
+}
+if [ -n "${TRAZO_DEV:-}" ]; then
+    need_uv
+    exec "$uv" run --quiet --project "$TRAZO_DEV" trazo "$@"
+fi
+version=$(sed -n 's/^version *= *"\([^"]*\)".*/\1/p' "$root/trazo.toml" | head -n 1)
+if [ -z "$version" ]; then
+    echo "scripts/trazo: trazo.toml has no version" >&2
+    exit 2
+fi
+installed="$data/venv/bin/trazo"
+if [ ! -x "$installed" ]; then
+    echo "scripts/trazo: trazo is not set up on this computer: set it up (the plugin's setup skill)" >&2
+    exit 127
+fi
+# Its version is the name of its one trazo-VERSION.dist-info folder, as
+# plugin/session-start.sh reads it: asking it would stop at an error in
+# trazo.toml, which the command itself reports.
+have=
+for info in "$data"/venv/lib/python*/site-packages/trazo-*.dist-info; do
+    [ -d "$info" ] || continue
+    [ -z "$have" ] || { have=; break; }  # more than one: a broken install
+    have=${info##*/trazo-}
+    have=${have%.dist-info}
+done
+if [ "$have" != "${version#v}" ]; then
+    shown=${have:+trazo $have}
+    echo "scripts/trazo: this paper pins trazo $version, but ${shown:-another trazo} is set up here: update the older one (the paper with the plugin's paper_update, or the plugin and its setup)" >&2
+fi
+exec "$installed" "$@"

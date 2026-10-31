@@ -1,0 +1,99 @@
+{
+  "schema_version": 1,
+  "data": "results",
+  "title": "Discrimination and calibration of the {models} models.",
+  "legend": "AUC and Brier score with 95% CI.",
+  "rows": {
+    "keys": [
+      "validation",
+      "cohort",
+      "method"
+    ],
+    "order": {
+      "validation": [
+        "internal",
+        "external"
+      ],
+      "method": [
+        "logistic",
+        "forest"
+      ]
+    },
+    "block": "validation"
+  },
+  "columns": [
+    {
+      "id": "cohort",
+      "field": "cohort",
+      "header": "Cohort",
+      "merge": true
+    },
+    {
+      "id": "n",
+      "field": "n",
+      "header": "*n*",
+      "align": "right",
+      "merge": true
+    },
+    {
+      "id": "method",
+      "field": "method",
+      "header": "Model"
+    },
+    {
+      "id": "metric",
+      "pivot": "metric",
+      "values": [
+        "auc",
+        "brier"
+      ],
+      "columns": [
+        {
+          "id": "est",
+          "field": "value",
+          "header": "Est.",
+          "format": "est3",
+          "align": "right"
+        },
+        {
+          "id": "ci",
+          "field": "value",
+          "header": "95% CI",
+          "format": "ci",
+          "align": "right"
+        }
+      ]
+    }
+  ],
+  "maps": {
+    "validation": {
+      "internal": "Internal validation",
+      "external": "External validation"
+    },
+    "cohort": {
+      "site1": "Site 1",
+      "site2": "Site 2",
+      "site3": "Site 3"
+    },
+    "metric": {
+      "auc": "AUC",
+      "brier": "Brier score"
+    }
+  },
+  "formats": {
+    "est3": "{est:.3f}"
+  },
+  "highlight": [
+    {
+      "column": "metric.auc.est",
+      "best": "max",
+      "within": "block"
+    },
+    {
+      "column": "metric.brier.est",
+      "best": "min",
+      "within": "block"
+    }
+  ],
+  "missing": "–"
+}

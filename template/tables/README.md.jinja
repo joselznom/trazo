@@ -1,0 +1,40 @@
+{% raw %}# Tables
+
+Tables are rendered as Markdown files and included in the manuscript.
+
+```bash
+scripts/trazo build --prepare=inputs       # compute the data, then render every spec
+scripts/trazo table check --all --outputs  # spec errors, stale data, out-of-date tables
+```
+
+- Numbers: `tables/scripts/generate_tables.py` computes them and writes
+  unformatted data to `tables/output/data/<name>.json` (with
+  `_data.write_data`, which records the sha256 of each input).
+- Presentation: `tables/specs/<label>.json` picks the columns, headers,
+  grouped headers, formats, row order, block rows, merged cells and bold
+  cells. `tables/specs/_shared.json` holds formats and maps used by several
+  tables (and by `{{v:key|format}}` in prose).
+- `scripts/trazo table render` writes `tables/output/md/<label>.md`. The
+  label is the cross-reference: `summary.json` renders `{#tbl:summary}`.
+- In the live preview (`scripts/trazo preview serve`, after the build
+  above), **Edit table** on a table opens the table editor: change headers,
+  formats, row order, blocks, merges and bold cells, leave comments for the
+  agent, and undo with ⌘Z. It saves the spec and re-renders the table at once.
+- `scripts/trazo table describe LABEL` shows the data fields, the column
+  ids and the rendered table; `table patch LABEL OPS.json` edits a spec and
+  `table undo` reverts it. `scripts/trazo table --help` documents every
+  spec key.
+
+| Output | Spec | Data |
+|---|---|---|
+{% endraw %}{% if example %}| `tables/output/md/summary.md` | `tables/specs/summary.json` | `tables/output/data/summary.json` |
+{% else %}| `tables/output/md/label.md` | `tables/specs/label.json` | `tables/output/data/name.json` |
+{% endif %}{% raw %}
+The generator records the hash of each input it reads, so a build runs it
+again only when one of them or a
+script in `tables/scripts/` changed. Presentation-only edits rerender
+without running the generator. Missing outputs are rebuilt.
+
+Do not edit files in `tables/output/` by hand. Change the script or the
+spec and regenerate.
+{% endraw %}

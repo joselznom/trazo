@@ -1,0 +1,57 @@
+/* Shared application controls; domain panels keep their own layout. */
+html { background: var(--pv-bg); }
+/* The marker follows the page scripts. Also guard browsers that ignore
+   rel=expect; the body is visible by the time native transitions capture it. */
+html:not(:has(#pk-shell-ready)) body { visibility: hidden; }
+@view-transition { navigation: auto; }
+::view-transition-old(root), ::view-transition-new(root) {
+  animation-duration: 180ms;
+  animation-timing-function: ease-in-out;
+}
+@media (prefers-reduced-motion: reduce) {
+  @view-transition { navigation: none; }
+  ::view-transition-old(root), ::view-transition-new(root) { animation: none; }
+}
+
+.pk-button { border: 1px solid var(--pv-line-strong); border-radius: 6px; padding: 5px 8px; color: var(--pv-ink); background: var(--pv-card); cursor: pointer; font: 12px/1.4 var(--pv-sans); white-space: nowrap; }
+.pk-button:hover { background: var(--pv-hover); }
+.pv-theme-menu { position: fixed; z-index: 100; padding: 6px; border: 1px solid var(--pv-line); border-radius: 8px; background: var(--pv-card); color: var(--pv-ink); box-shadow: var(--pv-shadow-pop); font: 13px/1.4 var(--pv-sans); width: 220px; }
+.pv-theme-menu button { background: none; border: 0; font: inherit; cursor: pointer; }
+.pv-tm-head { padding: 6px 10px 4px; font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--pv-muted); }
+.pv-tm-head + .pv-tm-item ~ .pv-tm-head { margin-top: 4px; border-top: 1px solid var(--pv-line); padding-top: 10px; }
+.pv-tm-item { display: grid; grid-template-columns: 16px 1fr auto; gap: 8px; align-items: center; width: 100%; padding: 6px 10px; border-radius: 6px; text-align: left; color: var(--pv-ink); }
+.pv-tm-item:hover, .pv-tm-item:focus-visible { background: var(--pv-hover); outline: none; }
+.pv-tm-check { width: 8px; height: 8px; border-radius: 50%; justify-self: center; }
+.pv-tm-item[aria-checked="true"] .pv-tm-check { background: var(--pv-accent); }
+.pv-tm-item[aria-checked="true"] { font-weight: 500; }
+.pv-tm-swatch { width: 30px; height: 12px; border-radius: 3px; box-shadow: inset 0 0 0 1px rgba(127,127,127,.25); }
+[hidden] { display: none !important; }
+.pk-resource { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 12px; border: 1px solid var(--pv-line); border-radius: 8px; background: var(--pv-card); margin: 8px 0; }
+@media (max-width: 600px) { .pk-button { padding: 5px; font-size: 11px; } }
+
+.pv-btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  padding: 5px 11px; border: 1px solid var(--pv-line-strong); border-radius: 6px;
+  background: var(--pv-card); color: var(--pv-ink); font-size: 12.5px; font-weight: 500; line-height: 1.25;
+  white-space: nowrap; text-align: center; text-decoration: none;
+}
+.pv-btn:hover:not(:disabled) { background: var(--pv-hover); }
+.pv-btn:hover { text-decoration: none; }
+.pv-btn.primary { background: var(--pv-accent); border-color: var(--pv-accent); color: var(--pv-on-accent); }
+.pv-btn.primary:hover:not(:disabled) { filter: brightness(1.1); }
+.pv-btn.sm { padding: 3px 9px; font-size: 12px; }
+.pv-btn.ghost { border-color: transparent; background: transparent; color: var(--pv-ink-2); }
+.pv-btn.ghost:hover:not(:disabled) { background: var(--pv-hover); }
+.pv-icon-btn { flex: none; width: 30px; height: 30px; display: inline-grid; place-items: center; border-radius: 6px; color: var(--pv-ink-2); text-align: center; }
+.pv-icon-btn:hover:not(:disabled) { background: var(--pv-hover); color: var(--pv-ink); }
+.pv-icon-btn[aria-pressed="true"] { color: var(--pv-accent); background: var(--pv-accent-soft); }
+
+.pv-chip {
+  display: inline-flex; align-items: center; gap: 4px; padding: 0 8px; border-radius: 999px;
+  font: 600 11px/1.7 var(--pv-sans); letter-spacing: 0.01em; white-space: nowrap;
+  background: var(--pv-d0-bg); color: var(--pv-d0-ink);
+}
+.pv-chip.d1 { background: var(--pv-d1-bg); color: var(--pv-d1-ink); }
+.pv-chip.d2 { background: var(--pv-d2-bg); color: var(--pv-d2-ink); }
+.pv-chip.d3 { background: var(--pv-d3-bg); color: var(--pv-d3-ink); }
+.pv-chip.warn { background: var(--pv-warn-soft); color: var(--pv-warn); box-shadow: inset 0 0 0 1px var(--pv-warn-line); }

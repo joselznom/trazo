@@ -1,0 +1,155 @@
+# The acceptance scenarios. A scenario is a row here; its implementation is a
+# function registered with @scenario("<id>") in scripts/acceptance/<level>/.
+# Without one it is reported "not automated", never as passed.
+#
+#   id      <level>-<name>, unique
+#   level   n1 plugin driven like the app (MCP, hook, setup.sh)
+#           n2 the real claude and codex CLIs
+#   source  where the check comes from: "docs/plugin.md check N" (N counts the
+#           "Checks by hand" list from 1) or "new"
+#   areas   repo path globs (`*` stays in a folder, `**` crosses folders): a
+#           change to one selects the scenario with `run.py --changed-from`.
+#           They come on top of `checkout_areas`, shared by the scenarios that
+#           install and run the checkout's real plugin (a change anywhere in it
+#           can break them).
+#   checkout  false for a scenario that never touches the plugin (true by default)
+
+checkout_areas = [
+    "packages/trazo/src/trazo/**",
+    "packages/trazo/pyproject.toml",
+    "packages/trazo/uv.lock",
+    "copier.yml",
+    "plugin/**",
+    "hooks/**",
+    ".claude-plugin/**",
+    ".codex-plugin/**",
+    ".codex-mcp.json",
+]
+
+[[scenario]]
+id = "n1-sandbox"
+level = "n1"
+title = "The sandbox keeps a run away from the real home, data folder and CLI configuration"
+source = "new"
+checkout = false
+areas = ["scripts/acceptance/**"]
+
+[[scenario]]
+id = "n1-sandbox-chain"
+level = "n1"
+title = "Seed clone, offline install, hook and MCP server work together in a sandbox"
+source = "new"
+areas = ["scripts/acceptance/**"]
+
+[[scenario]]
+id = "n1-port-busy"
+level = "n1"
+title = "With port 8765 busy, preview_start returns another port and its URL"
+source = "docs/plugin.md check 2"
+
+[[scenario]]
+id = "n1-force-quit-build"
+level = "n1"
+title = "Force-quitting the app during a build with the preview running removes preview.json, stops the build and keeps the old DOCX"
+source = "docs/plugin.md check 4"
+
+[[scenario]]
+id = "n1-old-install-update"
+level = "n1"
+title = "An older install (the last release): the hook and setup_status say update, and setup.sh --offline reinstalls without downloading"
+source = "docs/plugin.md check 6"
+
+[[scenario]]
+id = "n1-setup-status-ok"
+level = "n1"
+title = "After setup, a new session's setup_status returns next ok"
+source = "docs/plugin.md check 7"
+
+[[scenario]]
+id = "n1-install-newer-than-plugin"
+level = "n1"
+title = "With a newer trazo installed than the plugin, the hook and setup_status ask for a plugin update"
+source = "docs/plugin.md check 8"
+
+[[scenario]]
+id = "n1-preview-update"
+level = "n1"
+title = "With the plugin newer than the install, the preview shows the version pill; Update reinstalls, updates the paper and reloads on the same port"
+source = "docs/plugin.md check 9"
+
+[[scenario]]
+id = "n1-two-sessions-share-preview"
+level = "n1"
+title = "Two sessions on one folder: the second preview_start reuses the first preview"
+source = "docs/plugin.md check 10"
+
+[[scenario]]
+id = "n2-slash-commands"
+level = "n2"
+title = "In Claude, typing /trazo: lists open, close and comments (with the template's own skills in a paper)"
+source = "docs/plugin.md check 1"
+areas = [
+    "template/.claude/**",
+    "template/.agents/**",
+]
+
+[[scenario]]
+id = "n2-mcp-connection-time"
+level = "n2"
+title = "The MCP server connects within the expected time (the 'Successfully connected in N ms' line)"
+source = "docs/plugin.md check 3"
+
+[[scenario]]
+id = "n2-resume-no-hook-note"
+level = "n2"
+title = "Resuming a session does not repeat the hook's note"
+source = "docs/plugin.md check 5"
+
+[[scenario]]
+id = "n2-no-venv-standin"
+level = "n2"
+title = "Without the install, /mcp shows trazo connected with one tool, setup_status says setup, and after setup a new chat has all the tools"
+source = "docs/plugin.md check 11"
+
+[[scenario]]
+id = "n2-install-claude"
+level = "n2"
+title = "Plugin install from a marketplace with the claude CLI"
+source = "README.md (terminal install)"
+
+[[scenario]]
+id = "n2-install-codex"
+level = "n2"
+title = "Plugin install from a marketplace with the codex CLI"
+source = "README.md (terminal install)"
+
+[[scenario]]
+id = "n2-update-claude"
+level = "n2"
+title = "Plugin update from the last release to HEAD with the claude CLI"
+source = "new"
+
+[[scenario]]
+id = "n2-update-codex"
+level = "n2"
+title = "Plugin update from the last release to HEAD with the codex CLI"
+source = "new"
+
+[[scenario]]
+id = "n2-codex-hook-retrust"
+level = "n2"
+title = "In Codex, after an update the modified hook is skipped in a real session, and after trusting it again the 'not set up' note arrives (needs a Codex login)"
+source = "new"
+
+# codex-host
+[[scenario]]
+id = "n2-codex-tools-by-state"
+level = "n2"
+title = "In Codex, with no install the trazo server lists one tool (setup_status); after the install it lists all eight"
+source = "docs/plugin.md check 11"
+
+[[scenario]]
+id = "n2-codex-hook-note"
+level = "n2"
+title = "In Codex, with no install and the hook trusted, a new session gets the 'not set up' note"
+source = "new"
