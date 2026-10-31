@@ -129,6 +129,9 @@ class PreviewBrowserTestCase(unittest.TestCase):
           }})();"""}, self.session)
 
     def select_second_paragraph(self):
+        # A scroll the test just made fires its event on the next frame, and that hides the
+        # selection button; let it fire first.
+        self.evaluate("new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))")
         self.evaluate('''(() => {
           const p = document.querySelector('[data-label="Introduction ¶2"]');
           const range = document.createRange(); range.selectNodeContents(p);
