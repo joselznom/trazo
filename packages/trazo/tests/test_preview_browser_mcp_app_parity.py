@@ -125,6 +125,7 @@ class ViewUpdateTests(McpAppViewTestCase):
         self.frame("w.notReloaded = true")
         self.frame(f"{pill}.click()")
         self.frame(f"[...{pop}.querySelectorAll('button')].find(b => b.textContent === 'Update').click()")
-        self.wait_frame(f"!w.notReloaded && {pop} && !{pop}.hidden")
+        # innerText stays empty until the notice's fade-in makes it visible.
+        self.wait_frame(f"!w.notReloaded && {pop} && !{pop}.hidden && {pop}.innerText")
         self.assertEqual(self.frame(f"{pop}.innerText"), "Updated to 99.0.0.\nNew tools load in a new chat.")
         self.assertEqual(self.frame("v.TRAZO_VIEW.path"), "/manuscript.html")
