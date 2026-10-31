@@ -1,230 +1,207 @@
-# trazo
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="brand/svg/trazo-wordmark-white.svg">
+    <img alt="trazo" src="brand/svg/trazo-wordmark.svg" width="280">
+  </picture>
+</p>
 
-Write a scientific paper or report in plain text (Markdown), with help
-from an AI agent, and get a Word document ready to share with coauthors
-or submit to a journal. trazo is for researchers who write in Word today
-and want references, figure and table numbers, and numbers computed from
-their data to stay correct without fixing them by hand.
+<p align="center">
+  <b>Write your paper in plain text with an AI agent.<br>
+  Get a Word file with formatted citations, numbered figures and tables,
+  and numbers that come from your data.</b>
+</p>
 
-You get:
+<p align="center">
+  For researchers on macOS · Works in the Claude and ChatGPT desktop apps · Free and open source
+</p>
 
-- a Word file with formatted citations, numbered figures and tables, and
-  cross-references that renumber themselves;
-- a live preview in the browser to read the paper, leave review comments
-  for the agent, edit the text and see what changed;
-- figures made by scripts, a diagram editor, tables computed from your
-  data, and numbers in the text that come from the data;
-- skills that teach the agent how to write, cite, make figures and tables,
-  and review the paper.
+<p align="center">
+  <a href="#install">Install</a> ·
+  <a href="#your-first-paper-in-5-minutes">Your first paper</a> ·
+  <a href="#questions">Questions</a> ·
+  <a href="#problems">Problems</a>
+</p>
 
-It runs on macOS, as a plugin for the Claude desktop app or the ChatGPT
-desktop app.
+<p align="center">
+  <img alt="The trazo preview: the paper in the middle, its sections on the left and a review comment for the agent on the right" src="docs/images/preview.png" width="900">
+</p>
 
-## Install (once per computer)
+## What you get
 
-Both apps need git to add the plugin. A Mac that has never had developer
-tools lacks it: open Terminal, run `xcode-select --install` and accept
-Apple's dialog to install the Command Line Tools. This is the one step that
-needs a terminal.
+trazo is for writing a scientific paper for a journal, or a report, with an
+AI agent at your side. You write the text in plain files and talk to the
+agent in the Claude or ChatGPT app; trazo does the bookkeeping. Add a
+figure, cite a new paper or update your data, and the numbers, references and cross-references in the Word
+file follow along, with nothing to fix by hand.
 
-**Claude app**
+Along the way you get:
 
-1. Install the [Claude desktop app](https://claude.com/download) and sign in.
-2. In the Code tab, in a local session, choose **+** next to the prompt
-   box > **Plugins** > **Browse plugins** > **Add plugin** > **Add
-   marketplace**, and enter `joselznom/trazo` (or the path of a local
-   clone).
-3. In the same browser, select `trazo` and add it. The app warns that the
-   plugin runs a local server on this computer.
-4. Start a new chat and ask the agent to "set up trazo". Setup downloads
-   uv, Python, trazo and Pandoc into `~/Library/Application Support/trazo`
-   and changes nothing else. Diagrams and the PNG/PDF exports need a
-   Chromium-based browser: setup uses the Google Chrome, Edge or Chromium
-   already on the Mac, and downloads a headless Chrome (about 110 MB) into
-   the same folder when there is none.
+- **A Word file you can send** to coauthors or a journal, with formatted
+  citations, numbered figures and tables, and cross-references that
+  renumber themselves.
+- **A live preview** where you read the paper as it will look, leave
+  comments for the agent on any sentence, edit the text and see what
+  changed since your last version.
+- **Figures and tables made from your data**, a diagram editor, and numbers
+  in the text that are computed from the data instead of typed.
+- **An agent that knows academic writing**: it drafts sections, adds and
+  checks references, makes figures and tables, reviews the paper as a peer
+  reviewer would and helps you answer the reviewers.
 
-**ChatGPT app** (it uses the same folder: after setup in one app, the
-other finds it)
+## Install
 
-1. **Plugins** > **Add** > **Add a marketplace**, source
-   `https://github.com/joselznom/trazo.git`, Git ref `main`.
-2. Install `trazo` from that marketplace.
-3. Start a new chat and ask the agent to "set up trazo". Allow the setup
-   command to use the network and write outside the folder when the app
-   asks. If it asks to trust trazo's hook, that hook only checks, offline,
-   whether setup is needed.
+You need a Mac and either the [Claude desktop app](https://claude.com/download)
+or the [ChatGPT desktop app](https://chatgpt.com/download). 
 
-**From a terminal** (a local clone)
+> [!IMPORTANT]
+> Both apps need git to add the plugin. On a Mac that has never had
+> developer tools, open the Terminal app, run `xcode-select --install` and accept
+> Apple's dialog.
+
+### Claude app
+
+1. Open the **Code** tab and start a local session.
+2. Choose **+** next to the prompt box, then **Plugins** › **Browse
+   plugins** › **Add plugin** › **Add marketplace**, and enter this repo
+   (`https://github.com/joselznom/trazo`).
+3. Select **trazo** and add it. The app warns you that the plugin runs a
+   local server on this computer; that is expected.
+4. Start a new chat and ask the agent to *"set up trazo"*.
+
+### ChatGPT app
+
+1. Go to **Plugins** › **Add** › **Add a marketplace**, and enter the source
+   `https://github.com/joselznom/trazo` with Git ref `main`.
+2. Install **trazo** from that marketplace.
+3. Start a new chat and ask the agent to *"set up trazo"*. When the app
+   asks, allow the setup command and trust trazo's hook.
+
+<details>
+<summary>Install from a terminal</summary>
 
 ```bash
-claude plugin marketplace add /path/to/trazo
+claude plugin marketplace add joselznom/trazo
 claude plugin install trazo@trazo
-codex plugin marketplace add /path/to/trazo
+
+codex plugin marketplace add joselznom/trazo
 codex plugin add trazo@trazo
 ```
 
-## Create a paper
+Then ask the agent to set up trazo, as above.
 
-Ask the agent, for example: "create a new paper called 'My study' in
-Documents, as an article with the example". It asks three things:
+</details>
 
-| Question | Answer |
-|---|---|
-| Kind | Article (for a journal: submission files and checklist) or report. |
-| Example paper | Yes for sample text, data, a figure, a diagram, a table and a citation; no for empty sections. |
-| Title | The paper's title. It can be provisional; change it later in `manuscript/metadata.yaml`. |
+## Your first paper in 5 minutes
 
-Open the new folder in a session and ask the agent to build the Word files
-or open the preview (`/trazo:open` in Claude). Then read `README.md` in the
-new folder: it is the user guide (writing, references, figures, tables,
-the preview, working with the agent, a journal's format).
+The best way to work is one paper per project: a folder you open in the
+app, with your experiment's data inside or next to it. That way the agent can read
+your data when it makes figures, tables and the numbers in the text.
 
-To keep versions, ask the agent to make the folder a git repository; the
-preview's Diff tab compares with the last saved version.
+1. **Create the paper.** Ask the agent something like *"create a new paper
+   called 'My study' in Documents"*. It asks you three things:
 
-## Read and review the paper
+   | Question | Answer |
+   |---|---|
+   | Kind | Article (for a journal: submission files and checklist) or report |
+   | Example paper | Yes for sample text, data, a figure, a diagram, a table and a citation; no for empty sections |
+   | Title | The paper's title; you can change it later |
 
-Ask the agent to open the preview, or type `/trazo:open` in Claude. In the
-Claude app it opens in the Browser pane; the toolbar's **Browser** button
-shows the pane if it is hidden. The "trazo preview (plugin)" launch entry
-in `.claude/launch.json` uses port 8765. If that port is busy, `/trazo:open`
-opens the other address returned by the preview instead.
+2. **Open it as a project.** Open the new folder in the app.
+3. **Open the preview.** Ask the agent to open the preview (`/trazo:open`).
+4. **Review and edit.** Select a sentence, choose **Comment** and write
+   what should change, then ask the agent to answer your comments
+   (or `/trazo:comments`). For small changes, such as a word or a
+   number, edit the Markdown yourself, in the preview's **Source** tab or
+   in any text editor.
+5. **Get the Word file.** In the preview, click **Export** and choose the
+   full document (**Full manuscript** in an article, or press ⌘B), or ask
+   the agent to build the Word files.
+   They are saved in the paper's `output/` folder.
 
-In the ChatGPT app, the preview opens in the built-in browser. Leave
-comments with **Annotate**, then send a message asking the agent to address
-the browser comments. When MCP Apps are available for your account, the
-preview also opens full screen from the tool call and in a **Paper
-preview** tab beside the conversation. The browser works without MCP Apps.
+To keep versions you can go back to, ask the agent to make the folder a
+git repository. The preview's **Diff** tab then shows what changed since
+the last saved version.
 
-Use `/trazo:comments` to ask the agent to address review comments, and
-`/trazo:close` (`$trazo:close` in ChatGPT) to stop the preview. A second
-session on the same folder reuses it; either session can close it. When
-the session ends, the preview and any running build stop, but the last
-good Word files in `output/` stay.
+### What is in a paper's folder
+
+Each paper is an ordinary folder on your Mac. You will mostly work in
+three places: `data/` for your files, `manuscript/` for the text, and
+`output/` to pick up the Word file. The agent keeps the rest up to date.
+
+| Folder | What it holds | Who works there |
+|---|---|---|
+| `manuscript/` | The text: one Markdown file per section in `main/` (introduction, methods, results...), and the title, authors and keywords in `metadata.yaml` | You and the agent |
+| `data/` | Your experiment's data files, and the numbers computed from them for the text | You add the data; the agent computes |
+| `bibliography/` | Your references (`references.bib`, which Zotero can export) and the citation style | Mostly the agent |
+| `figures/` | The scripts that draw your plots, and your diagrams | Mostly the agent; diagrams also in the diagram editor |
+| `tables/` | How each table is computed from the data and formatted | Mostly the agent |
+| `notes/` | Decisions, ideas and answers to reviewers | You and the agent |
+| `output/` | The Word files, ready to send | Nobody: they are rebuilt every time, so do not edit them |
+
+The paper's own `README.md` is the full guide: writing, references,
+figures, tables and a journal's format.
+
+## Questions
+
+- **Is it free?** Yes, trazo is free and open source. The agent runs on
+  your Claude or ChatGPT account, within that plan's limits.
+- **Do I need to know Markdown?** It helps. The agent writes most of the
+  text, but knowing the basics (headings with `#`, *italics* with `*`,
+  **bold** with `**`, lists with `-`) lets you make small changes
+  yourself. The paper's `README.md` shows how citations, figures and
+  tables are written.
+- **My coauthors only use Word. Is that a problem?** No, send them the
+  Word file. trazo does not read their edits back from Word yet, so give
+  their changes to the agent and ask it to apply them.
+- **Can I use my journal's citation style and Word template?** Yes, ask
+  the agent, for example *"use the citation style and Word template of
+  &lt;journal&gt;"*. The steps are in "Journal format" in the paper's
+  `README.md`: the style comes from the
+  [Zotero Style Repository](https://www.zotero.org/styles), and the
+  journal's Word template, if it has one, goes in `templates/`.
+- **Where do my files live?** In the paper's folder on your Mac (see
+  [What is in a paper's folder](#what-is-in-a-papers-folder)). The preview
+  is a page served by your own computer.
+- **Does it work on Windows or Linux?** Not yet: trazo supports macOS
+  only.
+- **How do I uninstall it?** Remove the plugin from the app; your papers
+  stay as they are.
+  - Claude app: **+** next to the prompt box › **Plugins**, select
+    **trazo** and uninstall it.
+  - ChatGPT app: **Plugins**, select **trazo** and uninstall it.
+  - From a terminal: `claude plugin uninstall trazo@trazo` or
+    `codex plugin remove trazo@trazo`.
 
 ## Update
 
-Update the plugin in the app's plugin browser. The next time the preview
-is open, a pill with the new version appears in its top bar: click it,
-then **Update**. That reinstalls trazo from the plugin's files (no
-download) and brings the template's changes into the paper. A file you
-changed that the template also changed gets a `<file>.new` beside it; ask
-the agent to merge it. You can also ask the agent to "update the paper".
-
-If the update needs a download (a new uv or Pandoc), the pill says to ask
-the agent to set up trazo. If it says "Plugin", the other app installed a
-newer trazo: update the plugin in this app too.
+Update the plugin in the app's plugin browser. The next time the preview is
+open, a pill with the new version appears in its top bar: click it, then
+**Update**. If you changed a file that the update also changes, you get a
+`<file>.new` beside it; ask the agent to merge it.
 
 ## Problems
 
-| Message | Fix |
+When something goes wrong, first ask the agent to *"check trazo"*: it runs trazo's doctor and
+says what is missing and how to fix it.
+
+| What you see | What to do |
 |---|---|
 | The agent has no trazo tools | Ask it to set up trazo, then start a new chat |
-| `trazo is not set up on this computer` | Ask the agent to set up trazo |
-| `this paper pins trazo vX, but trazo vY is set up here` | Ask the agent to update the paper, or update the plugin and ask it to set up trazo |
-| `Chrome not found` | Ask the agent to set up trazo: it downloads a headless Chrome (or install [Google Chrome](https://www.google.com/chrome/)) |
-| `macOS sandbox blocks Chrome's access to LaunchServices` | Run the command from a terminal, or allow the agent to launch GUI processes |
+| "trazo is not set up on this computer" | Ask the agent to set up trazo |
+| "this paper pins trazo vX, but trazo vY is set up here" | Ask the agent to update the paper |
+| The preview does not appear in Claude | Click **Browser** in the toolbar to show the pane |
+| The update pill says to set up trazo | The new version needs a download: ask the agent to set up trazo |
+| The update pill says "Plugin" | The other app installed a newer trazo: update the plugin in this app too |
+| "Chrome not found" | Ask the agent to set up trazo; it downloads a headless Chrome |
 
-In a terminal, `scripts/trazo doctor` inside a paper folder checks the
-tools.
+Still stuck? [Open an issue](https://github.com/joselznom/trazo/issues)
+with the message and what you asked the agent.
 
-## For maintainers
+## Contributing and licence
 
-The repository has two parts, versioned together with tags `vX.Y.Z`:
+How the repository works, how to test a change and how to make a release
+are in [CONTRIBUTING.md](CONTRIBUTING.md).
 
-- `packages/trazo/`: the tools (preview, diagram and table editors,
-  values, checks, agent skills), a Python package with no dependencies.
-  See [its README](packages/trazo/README.md).
-- `template/`: the project scaffold, rendered by
-  [Copier](https://copier.readthedocs.io) (`copier.yml`) into the variants
-  that `trazo new` and `trazo update` use.
-
-The repository root is also the plugin (`.claude-plugin/`,
-`.codex-plugin/`); [docs/plugin.md](docs/plugin.md) explains its technical
-parts and the acceptance scenarios. Projects never vendor trazo: each
-pins a release in `trazo.toml` and runs the per-user install through
-`scripts/trazo`. Contributor rules are in [AGENTS.md](AGENTS.md).
-
-You need [uv](https://docs.astral.sh/uv/), Make and Pandoc. `make
-test-linux` also needs Docker.
-
-```bash
-git clone https://github.com/joselznom/trazo.git
-cd trazo
-make hooks           # once per clone: check each commit, test it before it is pushed
-make lint            # ruff on trazo and on the acceptance harness
-make test-package    # trazo unit tests
-make test-template   # make each template variant with trazo new, verify
-make test-update     # update between trazo template versions, verify
-make test-linux      # the same CI steps in a Debian container (Docker)
-make test-acceptance # unit tests of the acceptance harness
-make acceptance      # plugin acceptance, offline n1 and the real CLIs n2
-make acceptance-auto # what pre-push runs: chosen by changed files, cached
-```
-
-The acceptance harness (`scripts/acceptance/`) proves that the plugin
-installs, updates and works without the desktop apps. With `make hooks`,
-`git push` runs the scenarios that the changed files call for
-(`make acceptance-auto`).
-A scenario that passed is not run again until a file it depends on changes,
-so a repeat costs seconds; the first run needs the data seed, which the
-push downloads. Level n1 drives the plugin offline; n2 drives the real
-`claude` and `codex` CLIs with cheap models. A skipped scenario (no login, a
-usage limit) is listed and blocks only a release tag. By hand:
-`make acceptance` (n1, n2), `--no-cache` to force a run; it prints a
-`report.md` under `.build/acceptance/`. Level n2 uses your Claude and Codex
-logins, read-only. The desktop apps and what an agent does with the plugin
-are checked by the owner before a release. Agents do not run manual app
-checks. See [the harness README](scripts/acceptance/README.md).
-
-GitHub Actions runs only by hand. With `make hooks`, `git push` runs
-`test-package`, `test-template` and `test-update` on a clean checkout of
-the tip of each pushed branch or tag (a few minutes), then the acceptance
-scenarios for what the branch changed since main, and cancels the push if
-one fails. Pushing a `vX.Y.Z` tag also needs n1 and n2 to pass for what
-changed since the previous release, skips included. `git push --no-verify`
-skips it.
-
-To try unreleased changes inside a real project, point its launcher at
-your checkout:
-
-```bash
-export TRAZO_DEV=../trazo/packages/trazo
-scripts/trazo doctor
-```
-
-To measure trazo on a thesis-sized paper (the stress paper), time its
-build, preview start and checks:
-
-```bash
-uv run --project packages/trazo python packages/trazo/tests/stress_fixture.py bench /tmp/stress
-```
-
-### Release
-
-1. Bump the version in `packages/trazo/pyproject.toml`,
-   `packages/trazo/src/trazo/__init__.py`, `.claude-plugin/plugin.json`,
-   `.codex-plugin/plugin.json` and `trazo_version` in `copier.yml`.
-2. Run `make template-agents` if skills changed and `make
-   template-diagrams` if the renderer changed, then `make
-   template-variants` (trazo's copy of the rendered template; `make
-   test-template` fails while it is stale).
-3. Add a CHANGELOG entry, run `make test-linux` and commit as
-   `chore(release): trazo and template vX.Y.Z`. Do not push yet.
-4. The owner runs the manual desktop-app checks on that commit. Agents
-   do not run them.
-5. Push to `main`. The pre-push hook tests the commit and runs the n1 and
-   n2 acceptance scenarios for it (`make acceptance-auto AUTO=push`).
-6. Tag `vX.Y.Z` and push the tag. The hook runs n1 and n2 for what changed
-   since the previous release; a skip blocks it (`AUTO=tag`).
-7. Publish the GitHub release with the changelog section as its notes:
-   `gh release create vX.Y.Z --title vX.Y.Z --notes-file <section>`.
-
-## Licence
-
-trazo is free and open source under the [MIT licence](LICENSE). The project
-template in `template/` is under [MIT No Attribution](LICENSE-template), so
-papers made from it need no licence notice, except the bundled IEEE citation
-style (`bibliography/csl/ieee.csl`), which is CC BY-SA 3.0 and keeps its
-licence and authors in the file. Bundled fonts keep their SIL Open Font
-License texts.
+trazo is under the [MIT licence](LICENSE). The project template in
+`template/` is under [MIT No Attribution](LICENSE-template), so papers made
+from it need no licence notice.
