@@ -163,7 +163,7 @@ figures, tables and a journal's format.
   [What is in a paper's folder](#what-is-in-a-papers-folder)). The preview
   is a page served by your own computer.
 - **Does it work on Windows or Linux?** Not yet: trazo supports macOS
-  only.
+  only, on Apple silicon and Intel Macs.
 - **How do I uninstall it?** Remove the plugin from the app; your papers
   stay as they are.
   - Claude app: **+** next to the prompt box › **Plugins**, select

@@ -18,6 +18,11 @@ Internal changes (tests, CI, refactoring) stay out.
 
 ## Unreleased
 
+### New
+
+- trazo is now tested on Intel Macs as well as Apple silicon: setup, the
+  Word build, diagram export and the preview (#4).
+
 ### Fixed
 
 - The preview starts at once on a Mac whose network is slow to answer name
