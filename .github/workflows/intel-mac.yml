@@ -11,8 +11,10 @@ on:
     paths:
       - .github/workflows/intel-mac.yml
       - copier.yml
-      - packages/trazo/**
-      - plugin/**
+      - packages/trazo/pyproject.toml
+      - packages/trazo/src/**
+      - packages/trazo/uv.lock
+      - plugin/scripts/**
       - template/**
   push:
     tags: ["v*"]
@@ -20,6 +22,10 @@ on:
 
 permissions:
   contents: read
+
+concurrency:
+  group: intel-mac-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   setup-and-build:
@@ -38,7 +44,6 @@ jobs:
         # instead of downloading one; remove them so the x64 downloads run.
         # The next step fails if one is left.
         run: |
-          uname -m
           sudo rm -rf "/Applications/Google Chrome.app" "/Applications/Chromium.app" "/Applications/Microsoft Edge.app"
           for tool in pandoc google-chrome chromium chrome; do
             if path=$(command -v "$tool"); then sudo rm -f "$path"; fi
@@ -46,34 +51,28 @@ jobs:
       - name: Set up trazo like a user (setup.sh)
         # The default data folder, as for users: its path has a space.
         run: |
-          echo "DATA=$HOME/Library/Application Support/trazo" >> "$GITHUB_ENV"
-          test ! -e "$HOME/Library/Application Support/trazo"
+          data="$HOME/Library/Application Support/trazo"
+          test ! -e "$data"
+          echo "DATA=$data" >> "$GITHUB_ENV"
           sh plugin/scripts/setup.sh
       - name: The tools are x64 and came from the data folder
         run: |
           python3 - "$DATA/machine.json" <<'EOF'
-          import json, sys
+          import json, os, subprocess, sys
           tools = json.load(open(sys.argv[1]))["tools"]
-          for name in ("uv", "python", "pandoc", "chrome"):
-              print(name, tools[name])
-              assert tools[name]["path"], f"{name} not found"
-          for name in ("pandoc", "chrome"):
-              assert tools[name]["found"] == "data folder", f"{name} was not downloaded"
+          for name, entry in tools.items():
+              kind = subprocess.run(["file", "-bL", entry["path"]], capture_output=True, text=True).stdout.strip()
+              print(name, entry, kind)
+              assert entry["found"] == "data folder" and "x86_64" in kind, name
+          with open(os.environ["GITHUB_ENV"], "a") as env:
+              print(f"PANDOC_DIR={os.path.dirname(tools['pandoc']['path'])}", file=env)
           EOF
-          for binary in "$DATA/uv/uv" "$DATA/venv/bin/python" "$DATA"/pandoc/*/*/bin/pandoc \
-              "$DATA"/chrome/*/*/chrome-headless-shell; do
-            file -L "$binary"
-            file -L "$binary" | grep -q x86_64
-          done
-          echo "$(dirname "$DATA"/pandoc/*/*/bin/pandoc)" >> "$GITHUB_PATH"
-          echo "TRAZO_CHROME=$(ls "$DATA"/chrome/*/*/chrome-headless-shell)" >> "$GITHUB_ENV"
       - name: pandoc-crossref for the tests' oracle
         run: |
           . scripts/ci-versions.sh
           mkdir -p "$RUNNER_TEMP/crossref"
           curl -fsSL "https://github.com/lierdakil/pandoc-crossref/releases/download/${CROSSREF_VERSION}/pandoc-crossref-macOS-X64.tar.xz" \
             | tar -xJ -C "$RUNNER_TEMP/crossref"
-          echo "$RUNNER_TEMP/crossref" >> "$GITHUB_PATH"
       - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
           python-version: "3.12" # the Python setup.sh gives users
@@ -81,8 +80,9 @@ jobs:
         run: |
           git config --global user.email ci@example.com
           git config --global user.name ci
+      # Pandoc on PATH for the tests only: the paper below finds it the way a user's does.
       - name: Package tests
-        run: make test-package
+        run: PATH="$PANDOC_DIR:$RUNNER_TEMP/crossref:$PATH" make test-package
       - name: The example paper builds and verifies with the installed trazo
         if: ${{ !cancelled() }}
         run: |
@@ -90,7 +90,7 @@ jobs:
           "$DATA/venv/bin/trazo" new "$paper"
           cd "$paper"
           git init -q && git add -A && git commit -qm init
-          scripts/trazo diagram export --all
+          scripts/trazo diagram export --all  # verify exports only stale diagrams
           scripts/trazo verify
           scripts/trazo doctor
       - name: The preview serves the built paper
