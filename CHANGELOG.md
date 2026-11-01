@@ -16,6 +16,13 @@ its line under "Unreleased"; a release renames that heading to
 Internal changes (tests, CI, refactoring) stay out.
 -->
 
+## Unreleased
+
+### Fixed
+
+- In the ChatGPT app, opening the preview shows it once, in the app's
+  browser. Before, some accounts also got a full-screen copy of it.
+
 ## v1.1.0 (2026-11-01)
 
 trazo now runs on Linux, Windows and Intel Macs, and the preview is more reliable.

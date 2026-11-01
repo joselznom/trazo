@@ -138,8 +138,8 @@ class LauncherTests(unittest.TestCase):
         self.assertEqual(self.started(data), f"{old} mcp\n")
 
     @unittest.skipIf(WINDOWS, "fakes trazo with a shell script; CI checks mcp.cmd --no-views")
-    def test_claude_turns_the_view_off(self):
-        # Claude's manifest passes --no-views; Codex's passes nothing.
+    def test_no_views_turns_the_view_off(self):
+        # Both manifests pass --no-views; without it the client's declaration decides.
         checkout = self.root / "packages" / "trazo" / ".venv" / "bin" / "trazo"
         checkout.parent.mkdir(parents=True)
         checkout.write_text('#!/bin/sh\necho "views=${TRAZO_MCP_VIEWS-unset}"\n')

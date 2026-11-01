@@ -33,9 +33,7 @@ pages: use them to show the URL, never to start or stop the preview.
    - ChatGPT app: the app's `open_in_codex` tool with
      `target: {"type": "browser", "url": <url>}`, which opens it in the
      built-in browser. Without that tool, give the URL as a link: a
-     click opens it there. The app may also show the preview full
-     screen from `preview_start` (an MCP App, only for some accounts):
-     open the browser all the same, it is the main path.
+     click opens it there.
 5. Reply in the user's language with the URL; in the Claude app add
    that, if the paper is not visible, the Browser button shows it. End
    with how to close it: `/trazo:close` in the Claude app,

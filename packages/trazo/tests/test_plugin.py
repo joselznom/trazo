@@ -217,8 +217,8 @@ class PluginTests(unittest.TestCase):
         servers = json.loads((REPO / codex["mcpServers"]).read_text())["mcpServers"]
         self.assertEqual(list(servers), list(claude["mcpServers"]))
         for server in servers.values():
-            # Only Claude's server turns the MCP Apps view off (trazo.mcp_app.VIEWS_ENV).
-            self.assertEqual((server["command"], server["args"], server["cwd"]), ("./plugin/mcp", [], "."))
+            # As in Claude, the preview opens in the browser only (trazo.mcp_app.VIEWS_ENV).
+            self.assertEqual((server["command"], server["args"], server["cwd"]), ("./plugin/mcp", ["--no-views"], "."))
         # Codex shows these in its plugin list and composer; paths are from the plugin root.
         for key in ("composerIcon", "logo", "logoDark"):
             path = codex["interface"][key]

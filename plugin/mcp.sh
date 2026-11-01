@@ -20,9 +20,10 @@ fi
 data=${TRAZO_DATA_DIR:-$default}
 # setup_status compares the installed trazo with this plugin's version.
 export TRAZO_PLUGIN_ROOT="$root"
-# Claude's manifest passes --no-views: the Claude app draws MCP Apps views
-# but refuses the tool calls they make ("IPC not available for MCP tool
-# call"), so there the preview opens in the Browser pane only.
+# Both manifests pass --no-views, so the preview opens in the app's browser
+# only: the Claude app draws MCP Apps views but refuses the tool calls they
+# make ("IPC not available for MCP tool call"), and the ChatGPT app draws
+# them for some accounts only, as a second window beside the browser.
 if [ "${1-}" = --no-views ]; then
     export TRAZO_MCP_VIEWS=0
 fi
