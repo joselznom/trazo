@@ -57,13 +57,13 @@ class ShellTests(PreviewBrowserTestCase):
                 # Without rel=expect, layout and rendering still run in the
                 # real browser while the page script is held by the server.
                 script = self.chrome.call("Page.addScriptToEvaluateOnNewDocument", {"source": """
-                  window.nativeTransitionReady = window.nativeTransitionSkipped = false;
+                  window.reveal = null;
                   window.addEventListener('pagereveal', e => {
-                    window.shellAtReveal = !!document.getElementById('pk-shell-ready');
-                    if (e.viewTransition) e.viewTransition.ready.then(() => {
-                      window.nativeTransitionReady = getComputedStyle(document.body).visibility === 'visible'
-                        && !!document.querySelector('.pv-app-root');
-                    }, () => { window.nativeTransitionSkipped = true; });
+                    const seen = window.reveal = {shell: !!document.getElementById('pk-shell-ready'),
+                                                  transition: !!e.viewTransition};
+                    if (e.viewTransition) e.viewTransition.ready.then(() => Object.assign(seen, {
+                      outcome: 'ran', visible: getComputedStyle(document.body).visibility === 'visible',
+                      built: !!document.querySelector('.pv-app-root')}), () => { seen.outcome = 'skipped'; });
                   });
                 """}, self.session)["identifier"]
                 try:
@@ -85,10 +85,11 @@ class ShellTests(PreviewBrowserTestCase):
                         if native:
                             # The fade runs into the built shell. A loaded machine can reveal the
                             # page before the shell marker is parsed; app.js then skips the fade.
-                            self.wait_for("window.nativeTransitionReady || window.nativeTransitionSkipped")
-                            shell = self.evaluate("window.shellAtReveal")
-                            self.assertEqual(self.evaluate("[window.nativeTransitionReady, window.nativeTransitionSkipped]"),
-                                             [shell, not shell])
+                            self.wait_for("window.reveal && (window.reveal.outcome || !window.reveal.transition)")
+                            seen = self.evaluate("window.reveal")
+                            self.assertEqual(seen, {"shell": True, "transition": True, "outcome": "ran",
+                                                    "visible": True, "built": True} if seen["shell"] else
+                                             {"shell": False, "transition": True, "outcome": "skipped"})
                 finally:
                     self.chrome.call("Page.removeScriptToEvaluateOnNewDocument", {"identifier": script}, self.session)
 
