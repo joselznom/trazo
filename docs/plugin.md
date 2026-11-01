@@ -37,10 +37,11 @@ whose only tool, `setup_status`, tells the agent to run the setup skill.
 The app connects to it, so a new chat after setup gets the real server.
 
 For a client that declares MCP Apps views, the server also offers the
-preview as a full-screen view (`trazo.mcp_app`). Claude's manifest turns
-it off (`plugin/mcp --no-views`): the Claude app draws the view but
-refuses the tool calls it makes, so there the preview opens in the
-Browser pane only.
+preview as a full-screen view (`trazo.mcp_app`). Both manifests turn it
+off (`plugin/mcp --no-views`), so the preview opens in the app's browser
+only: the Claude app draws the view but refuses the tool calls it makes,
+and the ChatGPT app draws it for some accounts only, as a second window
+beside the browser.
 
 ## Checks by hand
 

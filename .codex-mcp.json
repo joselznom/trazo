@@ -2,7 +2,7 @@
   "mcpServers": {
     "trazo": {
       "command": "./plugin/mcp",
-      "args": [],
+      "args": ["--no-views"],
       "cwd": "."
     }
   }

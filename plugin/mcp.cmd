@@ -12,9 +12,8 @@ rem Both apps share this per-user folder (trazo.machine.data_dir).
 if defined TRAZO_DATA_DIR (set "data=%TRAZO_DATA_DIR%") else set "data=%LOCALAPPDATA%\trazo"
 rem setup_status compares the installed trazo with this plugin's version.
 set "TRAZO_PLUGIN_ROOT=%root%"
-rem Claude's manifest passes --no-views: the Claude app draws MCP Apps views
-rem but refuses the tool calls they make, so there the preview opens in the
-rem Browser pane only (as plugin/mcp.sh does).
+rem Both manifests pass --no-views, so the preview opens in the app's browser
+rem only (see plugin/mcp.sh for why).
 if "%~1"=="--no-views" set "TRAZO_MCP_VIEWS=0"
 rem trazo reads and writes UTF-8 everywhere, as on macOS (Python's UTF-8 mode).
 set "PYTHONUTF8=1"

@@ -15,9 +15,10 @@ the same paper answers `superseded`, so only the newest view in the
 conversation keeps polling. Panel tokens are never superseded, and tokens
 this process did not issue (a view from before a restart) are served.
 
-TRAZO_MCP_VIEWS=0 (plugin/mcp.sh sets it for Claude's manifest) turns the
-view off whatever the client declares: the Claude app draws views but
-refuses the tool calls they make, so the view could show nothing.
+TRAZO_MCP_VIEWS=0 (plugin/mcp.sh sets it for both apps' manifests) turns
+the view off whatever the client declares: the Claude app draws views but
+refuses the tool calls they make, and the ChatGPT app draws them for some
+accounts only, beside the browser the open skill opens.
 """
 
 from __future__ import annotations

@@ -101,7 +101,7 @@ class WithoutViewsTests(unittest.TestCase):
     def test_a_client_without_the_extension_sees_no_view(self):
         tmp = Path(tempfile.mkdtemp(prefix="trazo-mcp-app-")).resolve()
         self.addCleanup(shutil.rmtree, tmp, True)
-        # TRAZO_MCP_VIEWS=0, set for the Claude app, which declares views but refuses their tool calls.
+        # TRAZO_MCP_VIEWS=0, set by both apps' manifests (plugin/mcp.sh).
         for extensions, env in ((None, None), ({"io.modelcontextprotocol/ui": {"mimeTypes": ["text/x-other"]}}, None),
                                 (UI, {mcp_app.VIEWS_ENV: "0"})):
             with self.subTest(extensions=extensions, env=env):
