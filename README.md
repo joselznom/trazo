@@ -12,7 +12,7 @@
 </p>
 
 <p align="center">
-  For researchers on macOS, Windows and Linux · Works in the Claude and ChatGPT desktop apps, Claude Code and Codex · Free and open source
+  For researchers · Works in the Claude and ChatGPT desktop · Free and open source
 </p>
 
 <p align="center">
@@ -28,7 +28,7 @@
 
 ## What you get
 
-trazo is for writing a scientific paper for a journal, or a report, with an
+trazo is for writing a scientific paper or a report, with an
 AI agent at your side. You write the text in plain files and talk to the
 agent in the Claude or ChatGPT app; trazo does the bookkeeping. Add a
 figure, cite a new paper or update your data, and the numbers, references and cross-references in the Word
@@ -50,17 +50,16 @@ Along the way you get:
 
 ## Install
 
-You need a Mac or a Windows 10 or 11 PC (x64; Windows on Arm is not
-supported) and either the [Claude desktop app](https://claude.com/download)
-or the [ChatGPT desktop app](https://chatgpt.com/download). On Linux, which
-has neither app, use [Claude Code](https://code.claude.com/docs/en/overview) or
-[Codex](https://learn.chatgpt.com/docs/codex/cli) in a terminal and follow
+You need a Mac or a Windows PC and either the [Claude desktop app](https://claude.com/download)
+or the [ChatGPT desktop app](https://chatgpt.com/download). On Linux, use Claude Code or
+Codex in a terminal and follow
 "Install from a terminal" below.
 
 > [!IMPORTANT]
 > Both apps need git to add the plugin. On a Mac that has never had
 > developer tools, open the Terminal app, run `xcode-select --install` and accept
-> Apple's dialog. On Windows, install [Git for Windows](https://git-scm.com/downloads/win).
+> Apple's dialog. 
+> On Windows, install [Git for Windows](https://git-scm.com/downloads/win).
 
 ### Claude app
 
@@ -152,26 +151,19 @@ figures, tables and a journal's format.
 - **Do I need to know Markdown?** It helps. The agent writes most of the
   text, but knowing the basics (headings with `#`, *italics* with `*`,
   **bold** with `**`, lists with `-`) lets you make small changes
-  yourself. The paper's `README.md` shows how citations, figures and
-  tables are written.
+  yourself.
 - **My coauthors only use Word. Is that a problem?** No, send them the
   Word file. trazo does not read their edits back from Word yet, so give
   their changes to the agent and ask it to apply them.
 - **Can I use my journal's citation style and Word template?** Yes, ask
   the agent, for example *"use the citation style and Word template of
-  &lt;journal&gt;"*. The steps are in "Journal format" in the paper's
-  `README.md`: the style comes from the
-  [Zotero Style Repository](https://www.zotero.org/styles), and the
-  journal's Word template, if it has one, goes in `templates/`.
+  &lt;journal&gt;"*. 
 - **Where do my files live?** In the paper's folder on your computer (see
   [What is in a paper's folder](#what-is-in-a-papers-folder)). The preview
   is a page served by your own computer.
 - **Does it work on Windows or Linux?** Yes. On Windows 10 and 11 (x64;
   not Windows on Arm), in the Claude and ChatGPT desktop apps. On Linux, in
-  Claude Code or Codex in a terminal, on x64 or ARM. On ARM Linux, setup
-  downloads no Chrome: install Chromium with your system's package manager
-  for diagrams and PNG and PDF exports. On macOS it runs on Apple silicon
-  and Intel Macs.
+  Claude Code or Codex in a terminal, on x64 or ARM.
 - **How do I uninstall it?** Remove the plugin from the app; your papers
   stay as they are.
   - Claude app: **+** next to the prompt box › **Plugins**, select
