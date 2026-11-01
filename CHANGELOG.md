@@ -22,6 +22,8 @@ Internal changes (tests, CI, refactoring) stay out.
 
 - The preview starts at once on a Mac whose network is slow to answer name
   lookups; before, it could give up after 20 seconds with an empty message.
+- On a busy computer, moving between pages of the preview no longer fades
+  into a blank page before the paper appears.
 
 ## v1.0.0 (2026-10-31)
 

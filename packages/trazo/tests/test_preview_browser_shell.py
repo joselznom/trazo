@@ -1,7 +1,6 @@
 """Viewer regressions in Chrome: the page shell (first paint, theme, views, live reload, layout)."""
 
 import json
-import os
 import threading
 import unittest
 from unittest.mock import patch
@@ -44,11 +43,6 @@ class ShellTests(PreviewBrowserTestCase):
         get = preview.Handler.do_GET
         for native in (False, True):
             with self.subTest(native_render_blocking=native):
-                if native and os.environ.get("GITHUB_ACTIONS"):
-                    # On GitHub's shared runners (Linux and macOS) Chrome sometimes takes the
-                    # transition's snapshot before the shell marker is parsed, body still hidden.
-                    # pre-push still runs it on the owner's Mac; Kanvas has the task to find out why.
-                    self.skipTest("on a loaded runner Chrome may end rel=expect render blocking early")
                 release = threading.Event()
 
                 def delayed_get(handler):
@@ -63,12 +57,13 @@ class ShellTests(PreviewBrowserTestCase):
                 # Without rel=expect, layout and rendering still run in the
                 # real browser while the page script is held by the server.
                 script = self.chrome.call("Page.addScriptToEvaluateOnNewDocument", {"source": """
-                  window.nativeTransitionReady = false;
+                  window.nativeTransitionReady = window.nativeTransitionSkipped = false;
                   window.addEventListener('pagereveal', e => {
+                    window.shellAtReveal = !!document.getElementById('pk-shell-ready');
                     if (e.viewTransition) e.viewTransition.ready.then(() => {
                       window.nativeTransitionReady = getComputedStyle(document.body).visibility === 'visible'
                         && !!document.querySelector('.pv-app-root');
-                    }, () => {});
+                    }, () => { window.nativeTransitionSkipped = true; });
                   });
                 """}, self.session)["identifier"]
                 try:
@@ -88,7 +83,12 @@ class ShellTests(PreviewBrowserTestCase):
                             animations: document.body.getAnimations().length})"""),
                             {"visibility": "visible", "opacity": "1", "animations": 0})
                         if native:
-                            self.wait_for("window.nativeTransitionReady")
+                            # The fade runs into the built shell. A loaded machine can reveal the
+                            # page before the shell marker is parsed; app.js then skips the fade.
+                            self.wait_for("window.nativeTransitionReady || window.nativeTransitionSkipped")
+                            shell = self.evaluate("window.shellAtReveal")
+                            self.assertEqual(self.evaluate("[window.nativeTransitionReady, window.nativeTransitionSkipped]"),
+                                             [shell, not shell])
                 finally:
                     self.chrome.call("Page.removeScriptToEvaluateOnNewDocument", {"identifier": script}, self.session)
 
