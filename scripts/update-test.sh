@@ -6,17 +6,17 @@
 set -eu
 repo=$1
 dir=$2
-py="uv run --quiet --project $repo/packages/trazo python"
+py() { uv run --quiet --project "$repo/packages/trazo" python "$@"; }
 
 snapshot=$(mktemp -d /tmp/trazo-update.XXXXXX)
 trap 'rm -rf "$snapshot"' EXIT HUP INT TERM
 # This checkout with its uncommitted changes, committed, as v99.0.2.
 python3 "$repo/scripts/template_snapshot.py" "$snapshot/template"
 git -C "$snapshot/template" tag v99.0.2
-$py "$repo/scripts/template-variants.py" --from "$snapshot/template" v99.0.2 "$snapshot/store-v99.0.2"
+py "$repo/scripts/template-variants.py" --from "$snapshot/template" v99.0.2 "$snapshot/store-v99.0.2"
 
 rm -rf "$dir"
-$py - "$dir" "$snapshot/store-v99.0.2" <<'PY'
+py - "$dir" "$snapshot/store-v99.0.2" <<'PY'
 import sys
 from pathlib import Path
 from trazo import new, variants
@@ -36,8 +36,8 @@ git -C "$snapshot/template" tag v99.0.3
 # v99.0.2 to one rendered at v99.0.3: an untouched project gets the new
 # AGENTS.md and file; an edited AGENTS.md gets AGENTS.md.new; the author's
 # own files, the abbreviation list among them, stay as they are.
-$py "$repo/scripts/template-variants.py" --from "$snapshot/template" v99.0.3 "$snapshot/store-v99.0.3"
-$py - "$dir" "$snapshot/store-v99.0.3" <<'PY'
+py "$repo/scripts/template-variants.py" --from "$snapshot/template" v99.0.3 "$snapshot/store-v99.0.3"
+py - "$dir" "$snapshot/store-v99.0.3" <<'PY'
 import sys
 from pathlib import Path
 from trazo import manifest, update, variants
@@ -51,7 +51,7 @@ PY
 (cd "$dir" && TRAZO_DEV="$repo/packages/trazo" scripts/trazo verify)
 echo "test-update passed: current trazo new paper -> newer template with trazo update, then verify"
 
-$py - "$snapshot" <<'PY'
+py - "$snapshot" <<'PY'
 import sys
 from pathlib import Path
 from trazo import new, update, variants
