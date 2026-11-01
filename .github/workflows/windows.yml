@@ -18,7 +18,6 @@ on:
       - plugin/**
       - template/**
   push:
-    branches: [feat/windows-support]  # TEMPORARY: until the pull request runs it
     tags: ["v*"]
   workflow_dispatch:
 
