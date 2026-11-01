@@ -1,12 +1,14 @@
 # Set trazo up for this Windows user: uv, Python 3.12, trazo and Pandoc.
 # The Windows twin of setup.sh (x64 only), with the same steps and exit codes:
 #
-#   powershell -NoProfile -ExecutionPolicy Bypass -File plugin\scripts\setup.ps1 [--offline] [PLUGIN_ROOT]
+#   powershell -NoProfile -ExecutionPolicy Bypass -File plugin\scripts\setup.ps1 [--offline] [--paper FOLDER] [PLUGIN_ROOT]
 #
 # PLUGIN_ROOT (the folder with packages\trazo) defaults to the one this
 # script is in. --offline (the preview's update, trazo.preview_updates)
 # downloads nothing: it exits 3 when uv, Python or Pandoc must be
-# downloaded, which only setup in the chat does.
+# downloaded, which only setup in the chat does. --paper (the chat's paper
+# folder) goes to `trazo setup`, which says when that paper's template is
+# older than the trazo just installed.
 # Everything goes into the per-user data folder ($env:TRAZO_DATA_DIR, else
 # %LOCALAPPDATA%\trazo); no PATH, profile, registry or admin change.
 # This script only bootstraps uv (pinned below, sha256 from the release's
@@ -28,6 +30,12 @@ function Fail([string]$message, [int]$code = 1) {
 $offline = $false
 $rest = @($args)
 if ($rest.Count -gt 0 -and $rest[0] -eq "--offline") { $offline = $true; $rest = @($rest | Select-Object -Skip 1) }
+$paper = $null
+if ($rest.Count -gt 0 -and $rest[0] -eq "--paper") {
+    if ($rest.Count -lt 2) { Fail "--paper needs a folder" }
+    $paper = $rest[1]
+    $rest = @($rest | Select-Object -Skip 2)
+}
 $root = if ($rest.Count -gt 0) { $rest[0] } else { [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot "..\..")) }
 $data = if ($env:TRAZO_DATA_DIR) { $env:TRAZO_DATA_DIR } else { Join-Path $env:LOCALAPPDATA "trazo" }
 # A 32-bit PowerShell on 64-bit Windows says x86 here and AMD64 in the other variable.
@@ -106,5 +114,6 @@ if (-not (Test-Path -LiteralPath (Join-Path $venv "Scripts\python.exe") -PathTyp
 Run-Uv pip install --quiet --python (Join-Path $venv "Scripts\python.exe") --reinstall-package trazo (Join-Path $root "packages\trazo")
 $setup = @("setup")
 if ($offline) { $setup += "--offline" }
+if ($paper) { $setup += @("--paper", $paper) }
 & (Join-Path $venv "Scripts\trazo.exe") @setup
 exit $LASTEXITCODE

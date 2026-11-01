@@ -208,3 +208,14 @@ jobs:
           cd "$PAPER"
           scripts/trazo version
           scripts/trazo build
+      - name: setup.ps1 --paper says when the paper's template is older
+        shell: pwsh
+        run: |
+          $manifest = Join-Path $env:PAPER ".trazo\manifest.json"
+          $saved = Get-Content -LiteralPath $manifest -Raw -Encoding utf8 | ConvertFrom-Json
+          $saved.template = "v0.0.1"
+          [System.IO.File]::WriteAllText($manifest, ($saved | ConvertTo-Json -Depth 10))
+          $out = & "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -ExecutionPolicy Bypass -File plugin\scripts\setup.ps1 --offline --paper $env:PAPER
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $out
+          if (-not (@($out)[-1] -like "paper: older template (v0.0.1;*")) { throw "no paper line last" }
