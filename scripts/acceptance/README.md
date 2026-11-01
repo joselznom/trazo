@@ -19,7 +19,7 @@ RUN="uv run --quiet --project packages/trazo python scripts/acceptance/run.py"
 $RUN --list                          # the catalog; "not automated" has no implementation yet
 $RUN --level n1 --level n2           # --level repeats; without --online, scenarios that need a missing seed are skipped, with the reason
 $RUN --online --scenario 'n1-*'      # first time: makes the data seed (real setup.sh, downloads)
-$RUN --changed-from main             # scenarios whose `areas` match files changed since main
+$RUN --changed-from develop          # scenarios whose `areas` match files changed since develop
 $RUN --no-cache --level n1           # passes are cached by content; this runs them again
 $RUN --scenario n1-sandbox --keep    # keep the sandbox (its path is in the report)
 ```
@@ -27,8 +27,9 @@ $RUN --scenario n1-sandbox --keep    # keep the sandbox (its path is in the repo
 ## Automatic runs
 
 `run.py --auto push|tag` (`make acceptance-auto AUTO=push|tag`) chooses by itself, from the
-files changed since the merge base with `origin/main` (else `main`), plus uncommitted and untracked
-ones, and judges as a gate. Nothing selected ends in a second, with no seed, Chrome or model.
+files changed since the merge base with `origin/develop` (else `develop`, then `main` for a fork
+that copied only `main`), plus uncommitted and untracked ones, and judges as a gate. Nothing
+selected ends in a second, with no seed, Chrome or model.
 
 | Mode | Run by | Does |
 | --- | --- | --- |

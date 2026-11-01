@@ -3,7 +3,7 @@
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import _support  # noqa: F401  (sets TRAZO_ROOT before trazo loads)
 
@@ -31,14 +31,13 @@ class PreviewTableTests(unittest.TestCase):
                     if polls == 1:
                         spec.write_text('{"title": "Edited."}')
                     elif polls > 2:
-                        raise KeyboardInterrupt
+                        return True  # stop the watcher
 
                 with patch.object(preview, "ROOT", Path(folder)), \
-                     patch.object(preview.time, "sleep", side_effect=tick), \
                      patch.object(preview, "regenerate_tables", side_effect=AssertionError("ran the generator")), \
                      patch.object(preview, "render_spec_tables") as render, patch.object(preview, "build"):
-                    with self.assertRaises(KeyboardInterrupt):
-                        preview.watch()
+                    # Through stop_event, not a patched time.sleep: another thread\'s sleep would count as a pass.
+                    preview.watch(stop_event=Mock(**{"wait.side_effect": tick}))
                 render.assert_called_once()
 
     def test_edit_during_table_regeneration_is_rebuilt_on_next_poll(self):
@@ -58,7 +57,7 @@ class PreviewTableTests(unittest.TestCase):
                 if polls == 1:
                     source.write_text("first edit")
                 if polls > 3:
-                    raise KeyboardInterrupt
+                    return True  # stop the watcher
 
             def regenerate():
                 text = source.read_text()
@@ -69,11 +68,10 @@ class PreviewTableTests(unittest.TestCase):
                 return True
 
             with patch.object(preview, "ROOT", root), \
-                 patch.object(preview.time, "sleep", side_effect=tick), \
                  patch.object(preview, "regenerate_tables", side_effect=regenerate), \
                  patch.object(preview, "build"):
-                with self.assertRaises(KeyboardInterrupt):
-                    preview.watch()
+                # Through stop_event, not a patched time.sleep: another thread\'s sleep would count as a pass.
+                preview.watch(stop_event=Mock(**{"wait.side_effect": tick}))
             self.assertEqual(generated, ["first edit", "second edit"])
             self.assertEqual(output.read_text(), "second edit")
 
@@ -96,14 +94,13 @@ class PreviewTableTests(unittest.TestCase):
                 elif polls == 2:
                     manuscript.write_text("revised manuscript")
                 else:
-                    raise KeyboardInterrupt
+                    return True  # stop the watcher
 
             with patch.object(preview, "ROOT", root), \
-                 patch.object(preview.time, "sleep", side_effect=tick), \
                  patch.object(preview, "regenerate_tables", return_value=False), \
                  patch.object(preview, "build") as build:
-                with self.assertRaises(KeyboardInterrupt):
-                    preview.watch()
+                # Through stop_event, not a patched time.sleep: another thread\'s sleep would count as a pass.
+                preview.watch(stop_event=Mock(**{"wait.side_effect": tick}))
                 build.assert_not_called()
 
     def test_tables_command_comes_from_the_project(self):

@@ -1,33 +1,88 @@
 name: ci
 
-# Run by hand ("Run workflow"): pushes are tested locally by
-# .githooks/pre-push (`make hooks`). To test every push again, restore:
-#   push: {branches: [main], tags: ["v*"]}
-#   pull_request:
+# Every pull request and every push to develop, main or a release tag. The
+# token can only read, and pull requests from forks get no secrets: this
+# workflow must never use pull_request_target. The acceptance harness stays in
+# .githooks/pre-push, since its n2 level needs the owner's CLI logins.
 on:
+  pull_request:
+  push:
+    branches: [develop, main]
+    tags: ["v*"]
   workflow_dispatch:
 
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
-  test:
+  lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v6
-      - name: Install Pandoc and pandoc-crossref
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0 # the file-size check compares with the merge base
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+      - run: make lint
+      # The pre-commit hook runs this too, but a contributor may not have the hooks.
+      - name: File size
+        if: github.event_name == 'pull_request'
+        run: scripts/check-file-size.sh --base "origin/$GITHUB_BASE_REF"
+
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        # Users run trazo on macOS; Linux is quicker to set up and catches the rest.
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          # The Python plugin/scripts/setup.sh installs for users; the runners' own
+          # Python (3.14 on Linux, 3.15 on macOS) is newer than what trazo ships with.
+          python-version: "3.12"
+      - name: Install Pandoc and pandoc-crossref (Linux)
+        if: runner.os == 'Linux'
         run: |
           . scripts/ci-versions.sh
           curl -fsSL -o pandoc.deb "https://github.com/jgm/pandoc/releases/download/${PANDOC_VERSION}/pandoc-${PANDOC_VERSION}-1-amd64.deb"
           sudo dpkg -i pandoc.deb
           curl -fsSL "https://github.com/lierdakil/pandoc-crossref/releases/download/${CROSSREF_VERSION}/pandoc-crossref-Linux-X64.tar.xz" | tar -xJ
           sudo install pandoc-crossref /usr/local/bin/
+          echo "TRAZO_CHROME=$(command -v google-chrome || command -v chromium)" >> "$GITHUB_ENV"
+      - name: Install Pandoc and pandoc-crossref (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          . scripts/ci-versions.sh
+          tools="$RUNNER_TEMP/tools"
+          mkdir -p "$tools/bin"
+          curl -fsSL -o pandoc.zip "https://github.com/jgm/pandoc/releases/download/${PANDOC_VERSION}/pandoc-${PANDOC_VERSION}-arm64-macOS.zip"
+          unzip -q pandoc.zip -d "$tools"
+          cp "$tools/pandoc-${PANDOC_VERSION}-arm64/bin/pandoc" "$tools/bin/"
+          curl -fsSL "https://github.com/lierdakil/pandoc-crossref/releases/download/${CROSSREF_VERSION}/pandoc-crossref-macOS-ARM64.tar.xz" | tar -xJ -C "$tools/bin"
+          echo "$tools/bin" >> "$GITHUB_PATH"
+      - name: Tool versions
+        run: |
           pandoc --version | head -1
           pandoc-crossref --version
-      - name: Chrome for diagrams
-        run: echo "TRAZO_CHROME=$(command -v google-chrome || command -v chromium)" >> "$GITHUB_ENV"
-      - name: Package tests
-        run: make test-package
-      - name: Render the template and verify it with this trazo
+      - name: Git identity for the test papers
         run: |
           git config --global user.email ci@example.com
           git config --global user.name ci
-          make test-template
+      # Each test target runs even when an earlier one failed, so one run shows every failure.
+      - name: Package tests
+        run: make test-package
+      - name: Template variants, built and verified with this trazo
+        if: ${{ !cancelled() }}
+        run: make test-template
+      - name: Update between template versions
+        if: ${{ !cancelled() }}
+        run: make test-update

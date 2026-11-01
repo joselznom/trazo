@@ -2,6 +2,13 @@
 (function () {
   "use strict";
   if (window.Trazo) return;
+  // A page change fades into the new page's first frame. On a loaded machine Chrome can show that
+  // frame while app.css still hides the body (before the shell marker of server.decorate_page
+  // counts, even once it is parsed); skip that fade rather than fade into a blank page.
+  addEventListener("pagereveal", (e) => {
+    const shown = document.body && getComputedStyle(document.body).visibility === "visible";
+    if (e.viewTransition && !shown) e.viewTransition.skipTransition();
+  });
   const KEY = "trazo-preview";
   const modes = ["auto", "light", "dark"];
   const palettes = [

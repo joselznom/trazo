@@ -57,12 +57,14 @@ class ShellTests(PreviewBrowserTestCase):
                 # Without rel=expect, layout and rendering still run in the
                 # real browser while the page script is held by the server.
                 script = self.chrome.call("Page.addScriptToEvaluateOnNewDocument", {"source": """
-                  window.nativeTransitionReady = false;
+                  window.reveal = null;
                   window.addEventListener('pagereveal', e => {
-                    if (e.viewTransition) e.viewTransition.ready.then(() => {
-                      window.nativeTransitionReady = getComputedStyle(document.body).visibility === 'visible'
-                        && !!document.querySelector('.pv-app-root');
-                    }, () => {});
+                    const seen = window.reveal = {
+                      shown: !!document.body && getComputedStyle(document.body).visibility === 'visible',
+                      transition: !!e.viewTransition};
+                    if (e.viewTransition) e.viewTransition.ready.then(() => Object.assign(seen, {
+                      outcome: 'ran', visible: getComputedStyle(document.body).visibility === 'visible',
+                      built: !!document.querySelector('.pv-app-root')}), () => { seen.outcome = 'skipped'; });
                   });
                 """}, self.session)["identifier"]
                 try:
@@ -82,7 +84,13 @@ class ShellTests(PreviewBrowserTestCase):
                             animations: document.body.getAnimations().length})"""),
                             {"visibility": "visible", "opacity": "1", "animations": 0})
                         if native:
-                            self.wait_for("window.nativeTransitionReady")
+                            # The fade runs into the built, visible shell. A loaded machine can reveal
+                            # the page while the body is still hidden; app.js then skips the fade.
+                            self.wait_for("window.reveal && (window.reveal.outcome || !window.reveal.transition)")
+                            seen = self.evaluate("window.reveal")
+                            self.assertEqual(seen, {"shown": True, "transition": True, "outcome": "ran",
+                                                    "visible": True, "built": True} if seen["shown"] else
+                                             {"shown": False, "transition": True, "outcome": "skipped"})
                 finally:
                     self.chrome.call("Page.removeScriptToEvaluateOnNewDocument", {"identifier": script}, self.session)
 

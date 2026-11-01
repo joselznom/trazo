@@ -12,7 +12,7 @@ from unittest import mock
 
 import _support
 
-from trazo import build_graph, docx_freshness, expand, labels, preview, preview_export, preview_watch
+from trazo import build_graph, docx_freshness, expand, labels, preview, preview_export
 from trazo.project import PROJECT
 
 NBSP = "\u00a0"
@@ -140,7 +140,7 @@ class BetweenDocuments(unittest.TestCase):
         built, polls, build, expand_files = [], 0, preview.build, expand.expand_files
         self.indexed = []
 
-        def tick(_):
+        def tick(_):  # the watcher's wait between passes; True stops it after two passes
             nonlocal polls
             polls += 1
             if polls == 1:
@@ -148,18 +148,16 @@ class BetweenDocuments(unittest.TestCase):
                 if refresh:
                     labels.index(PROJECT)
                 self.indexed.clear()
-            elif polls > 2:
-                raise KeyboardInterrupt
+            return polls > 2
 
         def indexing(*args, **kwargs):  # the pages expand theirs through preview_render's own name
             self.indexed.append(kwargs["document"])
             return expand_files(*args, **kwargs)
 
-        with mock.patch.object(preview_watch.time, "sleep", side_effect=tick), \
-             mock.patch.object(expand, "expand_files", side_effect=indexing), \
+        # Through stop_event, not a patched time.sleep: another thread's sleep would count as a pass.
+        with mock.patch.object(expand, "expand_files", side_effect=indexing), \
              mock.patch.object(preview, "build", side_effect=lambda name: built.append(name) or build(name)):
-            with self.assertRaises(KeyboardInterrupt):
-                preview.watch()
+            preview.watch(stop_event=mock.Mock(**{"wait.side_effect": tick}))
         return built
 
     def test_the_watcher_rebuilds_pages_that_cite_new_numbers(self):
@@ -194,13 +192,12 @@ class BetweenDocuments(unittest.TestCase):
         polls, build = 0, preview.build
         figure = "![New.](figures/external/cross.svg){{#fig:cross-new{}}}\n\n"
 
-        def tick(_):
+        def tick(_):  # the watcher's wait between passes; True stops it after three passes
             nonlocal polls
             polls += 1
             if polls == 1:
                 self.supplementary(figure.format(1))
-            elif polls > 3:
-                raise KeyboardInterrupt
+            return polls > 3
 
         def building(name):
             done = build(name)
@@ -211,10 +208,8 @@ class BetweenDocuments(unittest.TestCase):
                 check.join()
             return done
 
-        with mock.patch.object(preview_watch.time, "sleep", side_effect=tick), \
-             mock.patch.object(preview, "build", side_effect=building):
-            with self.assertRaises(KeyboardInterrupt):
-                preview.watch()
+        with mock.patch.object(preview, "build", side_effect=building):
+            preview.watch(stop_event=mock.Mock(**{"wait.side_effect": tick}))
         self.assertIn('href="supplementary.html#fig:cross-extra">S3</a>',
                       (preview.OUT_DIR / "manuscript.html").read_text())
 
@@ -249,10 +244,8 @@ class BetweenDocuments(unittest.TestCase):
             return expand_files(*args, **kwargs)
 
         self.edited = False
-        with mock.patch.object(expand, "expand_files", side_effect=indexing), \
-             mock.patch.object(preview_watch.time, "sleep", side_effect=[None, KeyboardInterrupt]):
-            with self.assertRaises(KeyboardInterrupt):
-                preview.watch(previous=before)
+        with mock.patch.object(expand, "expand_files", side_effect=indexing):  # one watcher pass
+            preview.watch(previous=before, stop_event=mock.Mock(**{"wait.side_effect": [False, True]}))
         self.assertIn('href="supplementary.html#fig:cross-extra">S2</a>',
                       (preview.OUT_DIR / "manuscript.html").read_text())
 
