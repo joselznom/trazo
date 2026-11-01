@@ -45,22 +45,28 @@ class CommandTests(unittest.TestCase):
             for reason in ("timeout", "cancelled"):
                 with self.subTest(grace=grace, reason=reason), tempfile.TemporaryDirectory() as folder:
                     marker = Path(folder) / "orphan"
+                    # The timeout leaves both interpreters time to start on a slow
+                    # machine, and the child writes only after it, so only a
+                    # descendant that survived the cleanup can write.
+                    timeout = 1.0 if reason == "timeout" else 3
+                    delay = timeout + 0.5 if reason == "timeout" else 0.5
                     # The child ignores SIGTERM and holds stdout open after its parent exits.
                     child = ("import signal,time; from pathlib import Path; "
                              "signal.signal(signal.SIGTERM, signal.SIG_IGN); "
-                             f"print('child ready', flush=True); time.sleep(.5); Path({str(marker)!r}).touch()")
+                             f"print('child ready', flush=True); time.sleep({delay}); Path({str(marker)!r}).touch()")
                     source = (f"import subprocess,sys,time; subprocess.Popen([sys.executable, '-c', {child!r}]); "
                               "time.sleep(10)")
                     job = CommandJob("export", "messages", 3, grace=grace)
-                    self.start(job, source, timeout=0.2 if reason == "timeout" else 3)
-                    self.wait_for(lambda: "child ready" in job.status()["messages"])
+                    self.start(job, source, timeout=timeout)
                     self.assertFalse(job.start([sys.executable, "-c", "pass"], Path.cwd(), 3))
+                    self.wait_for(lambda: "child ready" in job.status()["messages"])
+                    ready = time.monotonic()
                     if reason == "cancelled":
                         self.assertTrue(job.stop(reason))
                     state = self.finished(job)
                     self.assertEqual(state["state"], "error")
                     self.assertIn("timed out" if reason == "timeout" else "cancelled", state["messages"][-1])
-                    time.sleep(0.55)
+                    time.sleep(max(0, ready + delay + 0.05 - time.monotonic()))
                     self.assertFalse(marker.exists(), "a descendant survived process-group cleanup")
                     self.assertFalse(job.stop("cancelled"))
 
