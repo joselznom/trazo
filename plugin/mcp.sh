@@ -20,6 +20,12 @@ fi
 data=${TRAZO_DATA_DIR:-$default}
 # setup_status compares the installed trazo with this plugin's version.
 export TRAZO_PLUGIN_ROOT="$root"
+# Claude's manifest passes --no-views: the Claude app draws MCP Apps views
+# but refuses the tool calls they make ("IPC not available for MCP tool
+# call"), so there the preview opens in the Browser pane only.
+if [ "${1-}" = --no-views ]; then
+    export TRAZO_MCP_VIEWS=0
+fi
 # An install without trazo/mcp.py (0.5.0 and older) has no `mcp` command.
 if [ -x "$data/venv/bin/trazo" ]; then
     for server in "$data"/venv/lib/python*/site-packages/trazo/mcp.py; do

@@ -216,8 +216,10 @@ class PluginTests(unittest.TestCase):
         self.assertEqual(list(servers), list(claude["mcpServers"]))
         for server in servers.values():
             self.assertEqual((server["command"], server["cwd"]), ("/bin/sh", "."))
+            # Only Claude's server turns the MCP Apps view off (trazo.mcp_app.VIEWS_ENV).
+            self.assertEqual(claude["mcpServers"]["trazo"]["args"][-1], "--no-views")
             self.assertEqual(server["args"], [arg.replace("${CLAUDE_PLUGIN_ROOT}/", "./")
-                                              for arg in claude["mcpServers"]["trazo"]["args"]])
+                                              for arg in claude["mcpServers"]["trazo"]["args"][:-1]])
         # Codex shows these in its plugin list and composer; paths are from the plugin root.
         for key in ("composerIcon", "logo", "logoDark"):
             path = codex["interface"][key]
