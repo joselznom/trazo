@@ -22,7 +22,7 @@ from typing import Any
 
 from . import preview_inputs
 from .mcp_calls import ToolError, load, project_env, trazo_argv
-from .portable import address_in_use, pid_alive
+from .portable import address_in_use, kill_group, pid_alive
 from .preview_inputs import preview_status
 from .project import Project
 from .review_storage import write_json
@@ -84,7 +84,7 @@ class Previews:
             deadline = time.monotonic() + START_TIMEOUT
             while True:
                 info = self.running(project)
-                if info and info["pid"] == child.pid:
+                if info and started_by(child, info):
                     return {**info, "reused": False}
                 if info:  # another session's preview of this project started first
                     self.stop_child(project.root)
@@ -141,9 +141,9 @@ class Previews:
             try:
                 child.wait(10)
             except subprocess.TimeoutExpired:
-                child.kill()
+                kill_tree(child)
                 child.wait()
-        if (read_info(path) or {}).get("pid") == child.pid:  # the child could not remove it
+        if started_by(child, read_info(path) or {}):  # the child could not remove it
             path.unlink(missing_ok=True)
         return child.pid
 
@@ -151,6 +151,19 @@ class Previews:
         with self.lock:
             for root in list(self.children):
                 self.stop_child(root)
+
+
+def started_by(child: subprocess.Popen, info: dict[str, Any]) -> bool:
+    """Whether preview.json's preview is `child` (or, on Windows, its launcher's child)."""
+    return child.pid in (info.get("pid"), info.get("ppid"))
+
+
+def kill_tree(child: subprocess.Popen) -> None:
+    """Kill the preview; on Windows also the interpreter its launcher started."""
+    if os.name == "nt":
+        kill_group(child.pid)
+    else:
+        child.kill()
 
 
 def restart(port: int) -> None:
@@ -174,7 +187,9 @@ def serve_child(port: int) -> None:
     path = info_path(PROJECT)
 
     def record(bound: int) -> None:
-        write_json(path, {"url": f"http://127.0.0.1:{bound}", "port": bound, "pid": os.getpid(),
+        # ppid: on Windows the venv's python.exe is a launcher that runs the
+        # interpreter as its own child, so the pid Popen saw is the parent's.
+        write_json(path, {"url": f"http://127.0.0.1:{bound}", "port": bound, "pid": os.getpid(), "ppid": os.getppid(),
                           "project": str(PROJECT.root)}, indent=2)
         preview_updates.RESTART = functools.partial(restart, bound)
 

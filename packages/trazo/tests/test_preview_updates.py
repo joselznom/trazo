@@ -185,7 +185,7 @@ class RestartTests(unittest.TestCase):
         bound = f"[trazo] http://127.0.0.1:{info['port']}/"
         self.assertTrue(wait_until(lambda: log.read_text().count(bound) == 2, 30), log.read_text())
         self.assertTrue(wait_until(lambda: json.loads((project / ".build" / "preview.json").read_text()) == {
-            "url": info["url"], "port": info["port"], "pid": info["pid"], "project": str(project)}))
+            "url": info["url"], "port": info["port"], "pid": info["pid"], "ppid": info["ppid"], "project": str(project)}))
         again = session.tool("preview_start", project=str(project))["structuredContent"]
         self.assertEqual((again["pid"], again["reused"]), (info["pid"], True))
         stop = session.tool("preview_stop", project=str(project))["structuredContent"]

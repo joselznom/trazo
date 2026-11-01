@@ -3,6 +3,7 @@
 import http.client
 import io
 import json
+import re
 import shutil
 import subprocess
 import tempfile
@@ -175,5 +176,5 @@ class FrontmatterTests(unittest.TestCase):
         self.metadata.write_text('author: [{name: After edit}]')
         self.assertIn("After edit", expand.expand_files([self.source]))
         self.metadata.write_text('author: [\n')
-        with self.assertRaisesRegex(frontmatter.MetadataError, str(self.metadata)):
+        with self.assertRaisesRegex(frontmatter.MetadataError, re.escape(str(self.metadata))):
             expand.expand_files([self.source])

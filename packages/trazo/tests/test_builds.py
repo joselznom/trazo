@@ -23,7 +23,7 @@ PAPER = (b"# Full paper\n\nOriginal manuscript text.\n\n## Detail\n\nMore text.\
 
 
 def docx(markdown):
-    return subprocess.run(["pandoc", "--to=docx"], input=markdown, capture_output=True, check=True).stdout
+    return subprocess.run(["pandoc", "--to=docx", "-o", "-"], input=markdown, capture_output=True, check=True).stdout
 
 
 def index_titles(path):

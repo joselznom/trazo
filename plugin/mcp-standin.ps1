@@ -138,7 +138,7 @@ function Send($message) {
     $Out.WriteLine((Encode $reply))
 }
 
-function Send-Error($id, $code, $text) {
+function Send-Error($id, [int]$code, $text) {
     Send ([ordered]@{id = $id; error = [ordered]@{code = $code; message = $text}})
 }
 

@@ -141,7 +141,7 @@ def copy_skill(source: Path, target: Path, marker: str) -> None:
     if target.exists():
         shutil.rmtree(target)
     shutil.copytree(source, target, ignore=shutil.ignore_patterns("__pycache__", ".DS_Store"))
-    marker_path(target).write_text(marker, encoding="utf-8")
+    marker_path(target).write_bytes(marker.encode("utf-8"))  # as check compares it, LF on Windows too
 
 
 def check(skills: dict[str, Path], project: Project) -> list[str]:

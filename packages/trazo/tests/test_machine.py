@@ -42,9 +42,12 @@ class DataFolderTests(unittest.TestCase):
             self.assertEqual(machine.machine_path(), Path("/tmp/elsewhere/machine.json"))
 
     def test_windows_chrome_and_edge_locations(self):
-        # Windows variable names ignore case: drop the real ones first.
-        env = {key: value for key, value in os.environ.items() if not key.upper().startswith("PROGRAMFILES")}
-        env.update({"ProgramFiles": "/pf", "ProgramFiles(x86)": "/pf86"})
+        if os.name == "nt":  # the real folders: a child's environment cannot replace them reliably there
+            folders = [os.environ[name] for name in ("ProgramFiles", "ProgramFiles(x86)")]
+            self.assertEqual(list(machine.CHROME_PATHS[3:]), [str(Path(folder) / app) for app in (
+                r"Google\Chrome\Application\chrome.exe", r"Microsoft\Edge\Application\msedge.exe") for folder in folders])
+            return
+        env = {**os.environ, "ProgramFiles": "/pf", "ProgramFiles(x86)": "/pf86"}
         out = subprocess.run([sys.executable, "-c", "from trazo.project import CHROME_PATHS; print('\\n'.join(CHROME_PATHS))"],
                              env=env, capture_output=True, text=True, check=True).stdout.splitlines()
         self.assertEqual(out[3:], [str(Path("/pf") / r"Google\Chrome\Application\chrome.exe"),

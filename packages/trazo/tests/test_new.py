@@ -80,6 +80,7 @@ class NewTest(unittest.TestCase):
             new.paper_create(self.root / "outer" / "notes" / "inner", kind="article", example=False, title="T")
         self.assertFalse((self.root / "outer" / "notes" / "inner").exists())
 
+    @unittest.skipIf(os.name == "nt", "Windows has no executable bits")
     def test_executables_get_all_three_x_bits(self):
         path = self.root / "tool"
         path.write_text("#!/bin/sh\n")

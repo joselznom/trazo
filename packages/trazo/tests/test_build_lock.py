@@ -6,7 +6,6 @@ import io
 import json
 import os
 import shutil
-import signal
 import subprocess
 import sys
 import tempfile
@@ -19,7 +18,7 @@ from unittest.mock import patch
 
 import _support  # noqa: F401  (sets TRAZO_ROOT before trazo loads)
 
-from trazo import build_lock, preview, project
+from trazo import build_lock, portable, preview, project
 from trazo.project import PACKAGE_DIR
 
 WAITING = "[build] waiting for another build of this project"
@@ -136,10 +135,10 @@ tables = [{json.dumps(sys.executable)}, "-c", "open('tables.txt', 'w').write('re
                 self.assertEqual((self.root / "inner.txt").read_text(), "inner")
 
     def test_killing_the_holder_frees_the_lock(self):
-        holder = self.hold(start_new_session=True)
+        holder = self.hold(**portable.group_options())
         waiter = self.start("fast")
         self.assert_waits(waiter)
-        os.killpg(holder.pid, signal.SIGKILL)  # the holder and its step, as MCP cancellation does
+        portable.kill_group(holder.pid)  # the holder and its step, as MCP cancellation does
         self.assertEqual(waiter.wait(60), 0)
         self.assertEqual((self.root / "fast.txt").read_text(), "fast")
 
