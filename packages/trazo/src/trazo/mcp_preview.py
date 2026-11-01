@@ -197,7 +197,7 @@ def restart(port: int) -> None:
     free to bind again. Windows has no exec: there this preview stops serving
     first, then serve_child runs the new one, with the same stdin and
     $TRAZO_PREVIEW_ID, and waits for it."""
-    sys.stdout.flush()
+    print("[preview] restarting as the installed trazo", flush=True)
     sys.stderr.flush()
     if os.name == "nt":
         RESTART_PORT.append(port)
@@ -245,6 +245,7 @@ def serve_child(port: int) -> None:
         if (read_info(path) or {}).get("pid") == os.getpid():
             path.unlink(missing_ok=True)
     if RESTART_PORT:  # Windows: restart() stopped serving to free the port
+        print("[preview] stopped; starting the installed trazo", flush=True)
         # Named, so they are inherited: without them Windows gives the new
         # preview no stdin (it would stop at once) and no log.
         sys.exit(subprocess.call(trazo_argv("mcp", "--serve", str(RESTART_PORT[0])),
