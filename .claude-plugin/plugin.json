@@ -10,8 +10,8 @@
   "skills": ["./packages/trazo/src/trazo/skills/", "./plugin/skills/"],
   "mcpServers": {
     "trazo": {
-      "command": "/bin/sh",
-      "args": ["${CLAUDE_PLUGIN_ROOT}/plugin/mcp.sh"]
+      "command": "${CLAUDE_PLUGIN_ROOT}/plugin/mcp",
+      "args": ["--no-views"]
     }
   }
 }

@@ -1,13 +1,14 @@
 """One background command, its bounded log, and process-group cancellation."""
 
 import os
-import signal
 import subprocess
 import threading
 import time
 from collections import deque
 from pathlib import Path
 from typing import Any
+
+from .portable import group_options, kill_group
 
 
 class CommandJob:
@@ -24,13 +25,6 @@ class CommandJob:
         with self.lock:
             return {**self.state, self.log_key: list(self.state[self.log_key])}
 
-    @staticmethod
-    def signal_group(proc: subprocess.Popen, sig: int) -> None:
-        try:
-            os.killpg(proc.pid, sig)
-        except (ProcessLookupError, PermissionError):
-            pass
-
     def stop(self, reason: str, expected: subprocess.Popen | None = None) -> bool:
         with self.lock:
             if self.state["state"] != "running" or (expected is not None and self.proc is not expected):
@@ -43,10 +37,10 @@ class CommandJob:
             return True
 
     def terminate(self, proc: subprocess.Popen) -> None:
-        self.signal_group(proc, signal.SIGTERM if self.grace else signal.SIGKILL)
-        if self.grace:
+        kill_group(proc.pid, bool(self.grace))
+        if self.grace and os.name != "nt":  # Windows ended the whole tree at once
             # Descendants can hold the pipe open after the leader exits.
-            killer = threading.Timer(self.grace, self.signal_group, [proc, signal.SIGKILL])
+            killer = threading.Timer(self.grace, kill_group, [proc.pid])
             killer.daemon = False
             killer.start()
 
@@ -67,7 +61,7 @@ class CommandJob:
         try:
             proc = subprocess.Popen(command, cwd=cwd, stdout=subprocess.PIPE,
                                     stderr=subprocess.STDOUT, text=True, errors="replace",
-                                    start_new_session=True)
+                                    **group_options())
             with self.lock:
                 self.proc = proc
                 if self.reason is not None:  # cancellation during process startup

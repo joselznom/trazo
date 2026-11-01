@@ -6,13 +6,13 @@ server exits."""
 from __future__ import annotations
 
 import os
-import signal
 import subprocess
 import sys
 import threading
 from pathlib import Path
 from typing import Any
 
+from . import portable
 from .project import CONFIG_NAME, ConfigError, Project
 
 
@@ -50,13 +50,6 @@ def project_env(project: Project) -> dict[str, str]:
     return {**os.environ, "TRAZO_ROOT": str(project.root)}
 
 
-def kill_group(process: subprocess.Popen) -> None:
-    try:
-        os.killpg(process.pid, signal.SIGKILL)
-    except (ProcessLookupError, PermissionError):
-        pass
-
-
 class Calls:
     """Tool calls in progress, by request id, and the subprocess each one
     runs, in its own process group."""
@@ -83,7 +76,7 @@ class Calls:
             self.cancelled[key] = True
             process = self.processes.get(key)
         if process:
-            kill_group(process)
+            portable.kill_group(process.pid)
 
     def run(self, key, where: Project | Path, *argv: str, env=None) -> subprocess.CompletedProcess:
         """`trazo ARGV` for the call `key`, with `env` added, in the project
@@ -94,7 +87,7 @@ class Calls:
                 raise ToolError("cancelled")
             process = subprocess.Popen(trazo_argv(*argv), cwd=cwd, env={**base, **(env or {})},
                                        stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                                       encoding="utf-8", errors="replace", start_new_session=True)
+                                       encoding="utf-8", errors="replace", **portable.group_options())
             self.processes[key] = process
         try:
             stdout, stderr = process.communicate()
@@ -108,4 +101,4 @@ class Calls:
             self.closed = True
             processes = list(self.processes.values())
         for process in processes:
-            kill_group(process)
+            portable.kill_group(process.pid)

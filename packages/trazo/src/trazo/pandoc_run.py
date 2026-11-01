@@ -166,9 +166,14 @@ def run(args: list[str], *, input: bytes | str | None = None, text: bool = False
             messages += result.stderr
         if log is not None and first_log.exists():
             merge_logs(first_log, Path(cwd) / log)
-    stdout = result.stdout.decode("utf-8", errors="replace") if text else result.stdout
-    return subprocess.CompletedProcess([*command, *args], result.returncode, stdout,
-                                       messages.decode("utf-8", errors="replace") if text else messages)
+    if not text:
+        return subprocess.CompletedProcess([*command, *args], result.returncode, result.stdout, messages)
+    return subprocess.CompletedProcess([*command, *args], result.returncode, decode(result.stdout), decode(messages))
+
+
+def decode(data: bytes) -> str:
+    """Text as subprocess.run(text=True) gives it: universal newlines (Windows programs write CRLF)."""
+    return data.decode("utf-8", errors="replace").replace("\r\n", "\n").replace("\r", "\n")
 
 
 def merge_logs(first: Path, final: Path) -> None:

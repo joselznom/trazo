@@ -10,6 +10,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
+from .portable import lock, replace, unlock
 from .project import PROJECT
 
 ROOT = PROJECT.root
@@ -27,18 +28,15 @@ class StoreError(Exception):
 def review_lock() -> Iterator[None]:
     """Exclusive lock for read-modify-write, across threads and processes.
 
-    Not reentrant: never take it twice in the same thread. POSIX only:
-    fcntl is imported here, so the rest of this module (and trazo.machine,
-    which writes JSON through it) imports on Windows.
+    Not reentrant: never take it twice in the same thread.
     """
-    import fcntl
     REVIEW_DIR.mkdir(parents=True, exist_ok=True)
     with _THREAD_LOCK, open(LOCK_PATH, "a+") as handle:
-        fcntl.flock(handle, fcntl.LOCK_EX)
+        lock(handle)
         try:
             yield
         finally:
-            fcntl.flock(handle, fcntl.LOCK_UN)
+            unlock(handle)
 
 
 def write_atomic(path: Path, data: bytes, default_mode: int = 0o644) -> None:
@@ -50,7 +48,7 @@ def write_atomic(path: Path, data: bytes, default_mode: int = 0o644) -> None:
         with os.fdopen(fd, "wb") as handle:
             handle.write(data)
         os.chmod(tmp, mode)  # mkstemp creates 0600
-        os.replace(tmp, path)
+        replace(tmp, path)
     except BaseException:
         Path(tmp).unlink(missing_ok=True)
         raise

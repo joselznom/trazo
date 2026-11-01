@@ -22,6 +22,7 @@ from pathlib import Path
 import _support
 
 import trazo
+from trazo import portable
 
 
 def free_port():
@@ -39,11 +40,7 @@ def answers(port):
 
 
 def gone(pid):
-    try:
-        os.kill(pid, 0)
-    except ProcessLookupError:
-        return True
-    return False
+    return not portable.pid_alive(pid)  # os.kill(pid, 0) would end it on Windows
 
 
 def wait_until(condition, timeout=15):
@@ -168,7 +165,7 @@ class McpServerTests(unittest.TestCase):
         self.assertEqual((info["project"], info["port"], info["reused"]), (str(self.project), self.port, False))
         self.assertEqual(info["url"], f"http://127.0.0.1:{self.port}")
         recorded = json.loads((self.project / ".build" / "preview.json").read_text())
-        self.assertEqual(recorded, {k: info[k] for k in ("url", "port", "pid", "project")})
+        self.assertEqual(recorded, {k: info[k] for k in ("url", "port", "pid", "id", "project")})
         connection = http.client.HTTPConnection("127.0.0.1", self.port, timeout=10)
         connection.request("GET", "/__status")
         reply = connection.getresponse()

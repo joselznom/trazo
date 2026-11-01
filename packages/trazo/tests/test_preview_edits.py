@@ -30,7 +30,7 @@ class SourceEdits(unittest.TestCase):
         original = ("# Caption edit\n\n<!-- ![Commented](x.png){#fig:edit} -->\n"
             "`![Code](x.png){#fig:edit}`\n\n````markdown\n```\n![Example](x.png){#fig:edit}\n````\n\n"
             "![Original **title** and [link](https://example.org).](figures/external/a.png \"Image title\"){#fig:edit width=80%}\n")
-        self.path.write_text(original)
+        self.path.write_text(original, newline="\n")
         state = preview.get_figure_text("manuscript", "fig:edit")
         changed = preview.change_figure_text({"doc": "manuscript", "id": "fig:edit",
             "caption": "Short **title**. Legend with $x^2$.", "base_sha256": state["sha256"]})
@@ -48,7 +48,7 @@ class SourceEdits(unittest.TestCase):
             "```markdown\nTable: Example {#tbl:edit.v1}\n```\n\n"
             "| A | B |\n|---|---|\n| 1 | 2 |\n\n"
             ": **Original title**. Legend with `code`\n  and {{v:cohort.n}}. {#tbl:edit.v1 .wide}\n")
-        self.path.write_text(original)
+        self.path.write_text(original, newline="\n")
         state = preview.get_table_caption("manuscript", "tbl:edit.v1")
         self.assertEqual(state["kind"], "markdown")
         caption = "**Updated title**. Legend with [a link](https://example.org) and $x^2$."
@@ -68,7 +68,7 @@ class SourceEdits(unittest.TestCase):
                 ("caption first", "# Tables\n\nTable: Title. {#tbl:note}\n\n| A |\n|---|\n| 1 |\n\nAfter.\n"),
                 ("caption after", "# Tables\n\n+---+\n| A |\n+===+\n| 1 |\n+---+\n\n: Title. {#tbl:note}\n\nAfter.\n")):
             with self.subTest(layout=layout):
-                self.path.write_text(original)
+                self.path.write_text(original, newline="\n")
                 change = lambda note: preview.change_table_caption({"doc": "manuscript", "id": "tbl:note",
                     "base_sha256": preview.get_table_caption("manuscript", "tbl:note")["sha256"], "changes": {"note": note}})
                 note = lambda state: next(f for f in state["fields"] if f["key"] == "note")["segments"][0]["text"]

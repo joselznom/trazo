@@ -1,0 +1,5 @@
+#!/bin/sh
+# The MCP server command both manifests name (plugin/mcp, no extension):
+# here it runs mcp.sh; on Windows the apps find plugin\mcp.cmd instead,
+# through PATHEXT, since a file without an extension does not run there.
+exec /bin/sh "$(dirname -- "$0")/mcp.sh" "$@"

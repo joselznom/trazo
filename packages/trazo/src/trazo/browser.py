@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-import fcntl
 import json
 import os
-import select
+import queue
 import shutil
 import signal
 import subprocess
@@ -18,7 +17,14 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
+from .portable import no_window
 from .project import PROJECT, chrome_flags
+
+if os.name == "nt":
+    import msvcrt
+else:
+    import fcntl
+    import select
 
 CHROME = PROJECT.chrome()
 CHROME_TIMEOUT = 60.0
@@ -68,7 +74,10 @@ def _check_macos_sandbox() -> None:
 
 
 class Chrome:
-    """Headless Chrome driven over the DevTools pipe (--remote-debugging-pipe, fds 3/4)."""
+    """Headless Chrome driven over the DevTools pipe (--remote-debugging-pipe):
+    fds 3/4 on POSIX; on Windows, inherited pipe handles that
+    --remote-debugging-io-pipes names, read by a thread since select()
+    takes only sockets there."""
 
     def __init__(self, timeout: float = CHROME_TIMEOUT) -> None:
         if not CHROME or not Path(CHROME).exists():
@@ -81,10 +90,12 @@ class Chrome:
         self.writer = None
         self.reader = None
         self.buffer = b""
+        self.chunks: queue.Queue[bytes] = queue.Queue()
         self.next_id = 0
         self._stderr = b""
         self._stderr_stop = threading.Event()
         self._stderr_thread = None
+        self._reader_thread = None
         self._closed = False
         try:
             self.profile = tempfile.mkdtemp(prefix="trazo-chrome-")
@@ -94,28 +105,35 @@ class Chrome:
                 fds.update((cmd_read, cmd_write))
                 res_read, res_write = os.pipe()
                 fds.update((res_read, res_write))
-                child_in = fcntl.fcntl(cmd_read, fcntl.F_DUPFD_CLOEXEC, 10)
-                fds.add(child_in)
-                child_out = fcntl.fcntl(res_write, fcntl.F_DUPFD_CLOEXEC, 10)
-                fds.add(child_out)
                 self.writer = os.fdopen(cmd_write, "wb")
                 fds.remove(cmd_write)
                 self.reader = res_read
                 fds.remove(res_read)
-                self.proc = subprocess.Popen(
-                    [sys.executable, "-I", "-c", _BIND_PIPES, str(child_in), str(child_out),
-                     CHROME, *chrome_flags(), "--headless=new", "--remote-debugging-pipe", "--disable-gpu",
-                     "--hide-scrollbars", "--allow-file-access-from-files", "--no-first-run",
-                     "--no-default-browser-check", "--disable-extensions", "--mute-audio",
-                     f"--user-data-dir={self.profile}", "about:blank"],
-                    pass_fds=(child_in, child_out), stdin=subprocess.DEVNULL,
-                    stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+                command = [CHROME, *chrome_flags(), "--headless=new", "--remote-debugging-pipe", "--disable-gpu",
+                           "--hide-scrollbars", "--allow-file-access-from-files", "--no-first-run",
+                           "--no-default-browser-check", "--disable-extensions", "--mute-audio",
+                           f"--user-data-dir={self.profile}", "about:blank"]
+                if os.name == "nt":
+                    self.proc = self._start_windows(command, cmd_read, res_write)
+                else:
+                    child_in = fcntl.fcntl(cmd_read, fcntl.F_DUPFD_CLOEXEC, 10)
+                    fds.add(child_in)
+                    child_out = fcntl.fcntl(res_write, fcntl.F_DUPFD_CLOEXEC, 10)
+                    fds.add(child_out)
+                    self.proc = subprocess.Popen(
+                        [sys.executable, "-I", "-c", _BIND_PIPES, str(child_in), str(child_out), *command],
+                        pass_fds=(child_in, child_out), stdin=subprocess.DEVNULL,
+                        stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
             finally:
                 for fd in fds:
                     os.close(fd)
             self._stderr_thread = threading.Thread(target=self._read_stderr, daemon=True,
                                                     name="trazo-chrome-stderr")
             self._stderr_thread.start()
+            if os.name == "nt":
+                self._reader_thread = threading.Thread(target=self._read_pipe, daemon=True,
+                                                       name="trazo-chrome-pipe")
+                self._reader_thread.start()
             self.call("Browser.getVersion")  # Validate startup while we own partial resources.
         except OSError as exc:
             self.close()
@@ -124,10 +142,48 @@ class Chrome:
             self.close()
             raise
 
+    @staticmethod
+    def _start_windows(command: list[str], read_fd: int, write_fd: int) -> subprocess.Popen:
+        """Start Chrome with only these two pipe ends inherited, and no console window."""
+        handles = [msvcrt.get_osfhandle(read_fd), msvcrt.get_osfhandle(write_fd)]
+        for handle in handles:
+            os.set_handle_inheritable(handle, True)
+        return subprocess.Popen(
+            [*command, f"--remote-debugging-io-pipes={handles[0]},{handles[1]}"],
+            startupinfo=subprocess.STARTUPINFO(lpAttributeList={"handle_list": handles}),
+            stdin=subprocess.DEVNULL, **no_window(),
+            stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+
+    def _read_pipe(self) -> None:
+        """Windows: queue Chrome's replies; an empty chunk is the end of the pipe."""
+        while True:
+            try:
+                chunk = os.read(self.reader, 1 << 20)
+            except OSError:
+                chunk = b""
+            self.chunks.put(chunk)
+            if not chunk:
+                return
+
+    def _read(self, timeout: float) -> bytes | None:
+        """The next chunk of replies; b"" once Chrome closed the pipe, None after `timeout`."""
+        if os.name == "nt":
+            try:
+                chunk = self.chunks.get(timeout=timeout)
+            except queue.Empty:
+                return None
+            if not chunk:
+                self.chunks.put(chunk)  # every later read sees the end too
+            return chunk
+        if not select.select([self.reader], [], [], timeout)[0]:
+            return None
+        return os.read(self.reader, 1 << 20)
+
     def _read_stderr(self) -> None:
         fd = self.proc.stderr.fileno()
         while not self._stderr_stop.is_set():
-            if not select.select([fd], [], [], 0.1)[0]:
+            # Windows: a blocking read, which ends when Chrome exits.
+            if os.name != "nt" and not select.select([fd], [], [], 0.1)[0]:
                 continue
             chunk = os.read(fd, 4096)
             if not chunk:
@@ -169,9 +225,9 @@ class Chrome:
         while True:
             while b"\0" not in self.buffer:
                 left = deadline - time.monotonic()
-                if left <= 0 or not select.select([self.reader], [], [], left)[0]:
+                chunk = self._read(left) if left > 0 else None
+                if chunk is None:
                     raise self._failure("timed out", method)
-                chunk = os.read(self.reader, 1 << 20)
                 if not chunk:
                     raise self._failure("exited unexpectedly", method, exited=True)
                 self.buffer += chunk
@@ -227,6 +283,8 @@ class Chrome:
                     self.writer.close()
                 except OSError:
                     pass
+            if self._reader_thread is not None and self._reader_thread.ident is not None:
+                self._reader_thread.join(timeout=0.5)
             if self.reader is not None:
                 os.close(self.reader)
                 self.reader = None

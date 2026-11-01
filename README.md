@@ -12,7 +12,7 @@
 </p>
 
 <p align="center">
-  For researchers on macOS and Linux · Works in the Claude and ChatGPT desktop apps, Claude Code and Codex · Free and open source
+  For researchers on macOS, Windows and Linux · Works in the Claude and ChatGPT desktop apps, Claude Code and Codex · Free and open source
 </p>
 
 <p align="center">
@@ -50,7 +50,8 @@ Along the way you get:
 
 ## Install
 
-You need a Mac and either the [Claude desktop app](https://claude.com/download)
+You need a Mac or a Windows 10 or 11 PC (x64; Windows on Arm is not
+supported) and either the [Claude desktop app](https://claude.com/download)
 or the [ChatGPT desktop app](https://chatgpt.com/download). On Linux, which
 has neither app, use [Claude Code](https://code.claude.com/docs/en/overview) or
 [Codex](https://learn.chatgpt.com/docs/codex/cli) in a terminal and follow
@@ -59,7 +60,7 @@ has neither app, use [Claude Code](https://code.claude.com/docs/en/overview) or
 > [!IMPORTANT]
 > Both apps need git to add the plugin. On a Mac that has never had
 > developer tools, open the Terminal app, run `xcode-select --install` and accept
-> Apple's dialog.
+> Apple's dialog. On Windows, install [Git for Windows](https://git-scm.com/downloads/win).
 
 ### Claude app
 
@@ -127,7 +128,7 @@ the last saved version.
 
 ### What is in a paper's folder
 
-Each paper is an ordinary folder on your Mac. You will mostly work in
+Each paper is an ordinary folder on your computer. You will mostly work in
 three places: `data/` for your files, `manuscript/` for the text, and
 `output/` to pick up the Word file. The agent keeps the rest up to date.
 
@@ -165,11 +166,12 @@ figures, tables and a journal's format.
 - **Where do my files live?** In the paper's folder on your computer (see
   [What is in a paper's folder](#what-is-in-a-papers-folder)). The preview
   is a page served by your own computer.
-- **Does it work on Windows or Linux?** Linux, yes: in Claude Code or
-  Codex in a terminal, on x64 or ARM. On ARM Linux, setup downloads no
-  Chrome: install Chromium with your system's package manager for
-  diagrams and PNG and PDF exports. Windows, not yet. On macOS it runs
-  on Apple silicon and Intel Macs.
+- **Does it work on Windows or Linux?** Yes. On Windows 10 and 11 (x64;
+  not Windows on Arm), in the Claude and ChatGPT desktop apps. On Linux, in
+  Claude Code or Codex in a terminal, on x64 or ARM. On ARM Linux, setup
+  downloads no Chrome: install Chromium with your system's package manager
+  for diagrams and PNG and PDF exports. On macOS it runs on Apple silicon
+  and Intel Macs.
 - **How do I uninstall it?** Remove the plugin from the app; your papers
   stay as they are.
   - Claude app: **+** next to the prompt box › **Plugins**, select

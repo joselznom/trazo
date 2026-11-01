@@ -25,6 +25,13 @@ Internal changes (tests, CI, refactoring) stay out.
   (`$XDG_DATA_HOME/trazo` when that is set), and a headless Chrome on x64
   when no Chrome, Edge or Chromium is installed. The session hook and the
   MCP server's launcher now find a Linux install too (#5).
+- trazo runs on Windows 10 and 11 (x64; not Windows on Arm) in the Claude
+  and ChatGPT desktop apps. Setup installs into `%LOCALAPPDATA%\trazo`,
+  with no admin rights, and uses the preinstalled Edge for diagrams and
+  PNG and PDF exports. Papers get `scripts/trazo.cmd`, so their commands
+  run from PowerShell and cmd too, and a `.gitattributes` that keeps LF line
+  endings in a clone on Windows; update a paper with the plugin's
+  `paper_update` to get them.
 - trazo is now tested on Intel Macs as well as Apple silicon: setup, the
   Word build, diagram export and the preview (#4).
 - When setup finishes in a paper's folder and that paper was made with an
@@ -32,6 +39,9 @@ Internal changes (tests, CI, refactoring) stay out.
 
 ### Fixed
 
+- In the Claude app, `/trazo:open` shows the preview only in the Browser
+  pane. Before, it also showed an "Open full screen" card that could not load
+  the paper ("IPC not available for MCP tool call").
 - The preview starts at once on a Mac whose network is slow to answer name
   lookups; before, it could give up after 20 seconds with an empty message.
 - On a busy computer, moving between pages of the preview no longer fades

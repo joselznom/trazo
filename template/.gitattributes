@@ -1,0 +1,6 @@
+# LF line endings on every system, also in a clone on Windows (git's
+# core.autocrlf): scripts/trazo is a shell script, and the preview edits the
+# Markdown sources line by line.
+* text=auto eol=lf
+# cmd.exe misreads batch files with LF line endings.
+*.cmd text eol=crlf

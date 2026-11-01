@@ -44,7 +44,7 @@ class SubmissionTests(unittest.TestCase):
     def write(self, name, text):
         path = self.root / name
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(text)
+        path.write_text(text, newline="\n")  # LF on Windows too: edits keep a file's bytes
         return path
 
     def project(self, extra=None):

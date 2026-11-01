@@ -4,7 +4,7 @@ trazo and the paper in one step.
 
 Nothing goes over the network. The versions are the plugin's (its
 .claude-plugin/plugin.json, found through $TRAZO_PLUGIN_ROOT, which
-plugin/mcp.sh sets), the data folder's install (machine.installed_version)
+plugin/mcp.sh and mcp.cmd set), the data folder's install (machine.installed_version)
 and the paper's template (.trazo/manifest.json) against the one each
 trazo ships (assets/template/index.json). The app updates the
 plugin itself: when the plugin is older than the install (the other app's
@@ -13,7 +13,7 @@ preview only says so.
 
 An update, one at a time:
 1. When the preview runs the data folder's trazo and the plugin is
-   newer, `setup.sh --offline` reinstalls trazo from the plugin's
+   newer, `setup.sh --offline` (Windows: setup.ps1) reinstalls trazo from the plugin's
    files. Exit 3 means uv, Python or Pandoc must be downloaded, which
    only the setup skill does, in the chat.
 2. A paper made by `trazo new` is updated by `trazo update`, run
@@ -41,6 +41,7 @@ from .local_server import Conflict
 from .project import PROJECT, Project
 
 SETUP_SCRIPT = Path("plugin") / "scripts" / "setup.sh"
+SETUP_SCRIPT_WINDOWS = Path("plugin") / "scripts" / "setup.ps1"
 PLUGIN_PACKAGE = Path("packages") / "trazo" / "src" / "trazo"
 PACKAGE = Path(__file__).resolve().parent
 TEMPLATE_INDEX = Path("assets") / "template" / "index.json"
@@ -106,6 +107,15 @@ def plan(project: Project = PROJECT) -> dict[str, Any]:
                          "paper": ".".join(map(str, paper[:3])) if paper else None}}
 
 
+def setup_command(root: str) -> list[str]:
+    """The plugin's setup script, run by its full path (no PATH needed)."""
+    if os.name != "nt":
+        return ["/bin/sh", str(Path(root) / SETUP_SCRIPT)]
+    powershell = Path(os.environ.get("SystemRoot", r"C:\Windows")) / "System32/WindowsPowerShell/v1.0/powershell.exe"
+    return [str(powershell), "-NoLogo", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
+            "-File", str(Path(root) / SETUP_SCRIPT_WINDOWS)]
+
+
 def last_line(result: subprocess.CompletedProcess[str]) -> str:
     lines = (result.stderr or result.stdout or "").strip().splitlines()
     return lines[-1] if lines else f"exit code {result.returncode}"
@@ -122,8 +132,8 @@ def apply(project: Project = PROJECT) -> dict[str, Any]:
                            else "the plugin is older than trazo: update the plugin in the app")
         if step["install"]:
             root, _ = machine.plugin_version()
-            result = subprocess.run(["/bin/sh", str(Path(root) / SETUP_SCRIPT), "--offline", root],
-                                    capture_output=True, text=True, timeout=SETUP_TIMEOUT)
+            result = subprocess.run([*setup_command(root), "--offline", root], capture_output=True, text=True,
+                                    timeout=SETUP_TIMEOUT, **machine.no_window())
             if result.returncode:
                 return {"ok": False, "download": result.returncode == OFFLINE_EXIT, "error": last_line(result)}
         restart = RESTART if step["restart"] else None

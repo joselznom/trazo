@@ -15,6 +15,9 @@ from pathlib import Path
 import _support  # noqa: F401  (sets TRAZO_ROOT before trazo is imported)
 from test_mcp import Session, answers, free_port, gone, make_project, wait_until
 
+# Windows has no SIGKILL: os.kill ends a process with any other signal.
+KILL = getattr(signal, "SIGKILL", signal.SIGTERM)
+
 
 class McpLifetimeTests(unittest.TestCase):
     """Each test runs its own server."""
@@ -68,7 +71,7 @@ class McpLifetimeTests(unittest.TestCase):
         project = make_project(self.tmp)
         session = self.session()
         info = self.start(session, project)
-        os.kill(info["pid"], signal.SIGKILL)
+        os.kill(info["pid"], KILL)
         self.assertTrue(wait_until(lambda: gone(info["pid"]) or not answers(info["port"])))
         stop = session.tool("preview_stop", project=str(project))["structuredContent"]
         self.assertEqual((stop["stopped"], stop["pid"]), (False, info["pid"]))
@@ -84,7 +87,7 @@ class McpLifetimeTests(unittest.TestCase):
                 if end == "eof":
                     session.process.stdin.close()
                 else:
-                    session.process.send_signal(signal.SIGTERM if end == "sigterm" else signal.SIGKILL)
+                    session.process.send_signal(signal.SIGTERM if end == "sigterm" else KILL)
                 session.process.wait(30)
                 self.assertTrue(wait_until(lambda: gone(info["pid"])), "preview still running")
                 self.assertFalse(answers(info["port"]))

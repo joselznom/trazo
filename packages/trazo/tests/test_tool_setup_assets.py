@@ -31,15 +31,17 @@ class AssetTests(unittest.TestCase):
         self.assertEqual(tool_setup.chrome_url(intel), f"{base}/mac-x64/chrome-headless-shell-mac-x64.zip")
         linux = tool_setup.chrome_asset("Linux", "x86_64")
         self.assertEqual(tool_setup.chrome_url(linux), f"{base}/linux64/chrome-headless-shell-linux64.zip")
+        win = tool_setup.chrome_asset("Windows", "x86_64")
+        self.assertEqual(tool_setup.chrome_url(win), f"{base}/win64/chrome-headless-shell-win64.zip")
         # Chrome for Testing has no Linux arm64 build.
-        for system, name in (("Linux", "aarch64"), ("Windows", "AMD64"), ("Darwin", "ppc")):
+        for system, name in (("Linux", "aarch64"), ("Windows", "ARM64"), ("Darwin", "ppc")):
             self.assertIsNone(tool_setup.chrome_asset(system, name))
 
     def test_chrome_pins_are_consistent(self):
         for asset in tool_setup.CHROME_ASSETS.values():
             stem = asset.name.removesuffix(".zip")
             self.assertRegex(asset.sha256, "^[0-9a-f]{64}$")
-            self.assertEqual(asset.binary, f"{stem}/chrome-headless-shell")
+            self.assertEqual(asset.binary.removesuffix(".exe"), f"{stem}/chrome-headless-shell")
             self.assertGreater(asset.unpacked, asset.size)
 
 

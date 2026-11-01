@@ -6,7 +6,6 @@ import http.client
 import os
 import queue
 import shutil
-import signal
 import subprocess
 import tempfile
 import threading
@@ -16,6 +15,7 @@ from unittest.mock import patch
 
 from test_mcp import Session, answers, free_port, gone, make_project, wait_until
 
+from trazo import portable
 from trazo.build_lock import build_lock, lock_path
 from trazo.project import DEFAULTS, Project
 
@@ -55,19 +55,13 @@ def paper(root):
 
 def lock_taken(root):
     """Whether a process holds the build lock of the project at `root`."""
-    import fcntl  # POSIX only: imported here so the tests' discovery works on Windows
     path = lock_path(paper(root))
     if not path.exists():
         return False
     with open(path) as handle:
-        try:
-            fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except BlockingIOError:
-            return True
-    return False
+        return not portable.try_lock(handle)  # closing the file releases it
 
 
-@unittest.skipIf(os.name == "nt", "the build lock needs fcntl (POSIX)")
 class PreviewInputsTests(unittest.TestCase):
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp(prefix="trazo-mcp-inputs-")).resolve()
@@ -151,7 +145,8 @@ class PreviewInputsTests(unittest.TestCase):
         (self.project / "data" / "n.txt").write_text("5757\n")
         result = session.tool("preview_start", project=str(self.project))["structuredContent"]
         self.assertTrue(result["reused"])
-        self.assertIn("manuscript: IsADirectoryError", result["note"])
+        # Windows refuses to open a folder with PermissionError.
+        self.assertIn(f"manuscript: {'PermissionError' if os.name == 'nt' else 'IsADirectoryError'}", result["note"])
         self.assertIn("4242", page(info["port"]))
 
     def test_a_failing_figure_script_is_a_tool_error_and_starts_no_preview(self):
@@ -188,8 +183,9 @@ class PreviewInputsTests(unittest.TestCase):
         session = self.session()
         session.request("tools/call", {"name": "preview_start", "arguments": {"project": str(self.project)}})
         self.assertTrue(wait_until(lambda: marker.is_file() and marker.read_text()), "the figure script did not start")
-        group = os.getpgid(int(marker.read_text()))
-        self.addCleanup(lambda: gone(int(marker.read_text())) or os.killpg(group, signal.SIGKILL))
+        pid = int(marker.read_text())
+        group = os.getpgid(pid) if hasattr(os, "getpgid") else pid  # Windows: its process tree
+        self.addCleanup(lambda: gone(pid) or portable.kill_group(group))
         session.process.kill()  # SIGKILL: the server cannot kill its calls
         session.process.wait(10)
         self.assertFalse(gone(int(marker.read_text())))

@@ -334,7 +334,8 @@ def export(doc, kind, identifier, fmt, exclude=(), references=True, indexes=()):
     if kind == "figure" and fmt in ("png", "pdf", "svg"):
         data = rendered_figure(ast, fmt)
     else:
-        flags = ["--from=json", "--to=" + ("markdown" if fmt == "md" else fmt), "--resource-path=."]
+        # -o -: Pandoc on Windows takes its stdout pipe for a terminal and refuses to write docx there.
+        flags = ["--from=json", "--to=" + ("markdown" if fmt == "md" else fmt), "--resource-path=.", "-o", "-"]
         if fmt == "docx" and PROJECT.path("reference_doc").is_file():
             flags.append(f"--reference-doc={PROJECT.path('reference_doc')}")
         data = pandoc(json.dumps(ast).encode(), *flags)

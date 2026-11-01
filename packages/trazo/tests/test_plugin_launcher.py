@@ -1,6 +1,6 @@
 """plugin/mcp.sh, run with `env` only as the desktop apps do: which server
 it starts, and the stand-in server (plugin/mcp-standin.pl) it starts when
-trazo cannot serve."""
+trazo cannot serve. On Windows, plugin/mcp.cmd and plugin/mcp-standin.ps1."""
 
 import json
 import os
@@ -17,7 +17,10 @@ import trazo
 from trazo import machine, mcp
 
 REPO = Path(__file__).resolve().parents[3]
-PLUGIN_FILES = ("plugin/mcp.sh", "plugin/mcp-standin.pl", ".claude-plugin/plugin.json")
+PLUGIN_FILES = ("plugin/mcp.sh", "plugin/mcp-standin.pl", "plugin/mcp.cmd", "plugin/mcp-standin.ps1",
+                ".claude-plugin/plugin.json")
+WINDOWS = os.name == "nt"
+POWERSHELL = Path(os.environ.get("SystemRoot", r"C:\Windows")) / "System32/WindowsPowerShell/v1.0/powershell.exe"
 NOT_SET_UP = "trazo is not set up; ask the agent to set it up\n"
 TOO_OLD = "trazo is too old to run the MCP server; ask the agent to update it\n"
 
@@ -38,13 +41,17 @@ def fake_trazo(path):
 def install(data, version, server=True, machine_file=True):
     """A per-user install of `version`; `server`: it has trazo/mcp.py (0.6.0 on);
     `machine_file`: machine.json, which `trazo setup` writes last."""
-    site = data / "venv" / "lib" / "python3.12" / "site-packages"
+    site = data / "venv" / ("Lib" if WINDOWS else "lib/python3.12") / "site-packages"
     (site / f"trazo-{version}.dist-info").mkdir(parents=True)
     if server:
         (site / "trazo").mkdir()
         (site / "trazo" / "mcp.py").write_text("")
     if machine_file:
         (data / "machine.json").write_text('{"written": "2026-10-25"}')
+    if WINDOWS:  # only checked for, never run: the stand-in tests use no server
+        (data / "venv" / "Scripts").mkdir(parents=True, exist_ok=True)
+        (data / "venv" / "Scripts" / "trazo.exe").write_bytes(b"")
+        return data / "venv" / "Scripts" / "trazo.exe"
     fake_trazo(data / "venv" / "bin" / "trazo")
     return data / "venv" / "bin" / "trazo"
 
@@ -52,10 +59,15 @@ def install(data, version, server=True, machine_file=True):
 class Launcher:
     """plugin/mcp.sh in `root` over pipes, with `env` only."""
 
-    def __init__(self, root, env):
-        self.process = subprocess.Popen(["/bin/sh", str(root / "plugin" / "mcp.sh")], env={"PATH": "/usr/bin:/bin", **env},
-                                        stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                                        encoding="utf-8")
+    def __init__(self, root, env, args=()):
+        if WINDOWS:  # the apps pass their whole environment there; PATH and trazo's own come from `env`
+            base = {key: value for key, value in os.environ.items()
+                    if key.upper() != "PATH" and not key.upper().startswith("TRAZO_")}
+            command = [str(root / "plugin" / "mcp.cmd"), *args]
+        else:
+            base, command = {"PATH": "/usr/bin:/bin"}, ["/bin/sh", str(root / "plugin" / "mcp.sh"), *args]
+        self.process = subprocess.Popen(command, env={**base, **env}, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                                        stderr=subprocess.PIPE, encoding="utf-8")
 
     def send(self, message):
         self.process.stdin.write((message if isinstance(message, str) else json.dumps(message)) + "\n")
@@ -80,7 +92,8 @@ class Launcher:
         return self.process.returncode, stdout, stderr
 
 
-@unittest.skipUnless(os.name != "nt" and Path("/usr/bin/perl").is_file(), "needs /bin/sh and /usr/bin/perl")
+@unittest.skipUnless(POWERSHELL.is_file() if WINDOWS else Path("/usr/bin/perl").is_file(),
+                     "needs Windows PowerShell, or /bin/sh and /usr/bin/perl")
 class LauncherTests(unittest.TestCase):
     def setUp(self):
         tmp = tempfile.TemporaryDirectory()
@@ -90,19 +103,20 @@ class LauncherTests(unittest.TestCase):
         self.home.mkdir()
         copy_plugin(self.root)
 
-    def launch(self, env):
-        launcher = Launcher(self.root, {"HOME": str(self.home), **env})
+    def launch(self, env, args=()):
+        launcher = Launcher(self.root, {"HOME": str(self.home), **env}, args)
         self.addCleanup(lambda: launcher.process.poll() is None and launcher.process.kill())
         return launcher
 
-    def started(self, env=None):
+    def started(self, env=None, args=()):
         """What mcp.sh started: the fake trazo's command line, or the stand-in's stderr."""
         before = sorted(self.tmp.rglob("*"))
-        code, stdout, stderr = self.launch(env or {}).close()
+        code, stdout, stderr = self.launch(env or {}, args).close()
         self.assertEqual(sorted(self.tmp.rglob("*")), before, "the launcher wrote files")
         self.assertEqual(code, 0)
         return stdout or stderr
 
+    @unittest.skipIf(WINDOWS, "fakes trazo with a shell script; CI starts the real install through mcp.cmd")
     def test_which_server(self):
         data = {"TRAZO_DATA_DIR": str(self.data)}
         self.assertEqual(self.started(), NOT_SET_UP)
@@ -122,6 +136,17 @@ class LauncherTests(unittest.TestCase):
         (old.parents[1] / "lib" / "python3.12" / "site-packages" / "trazo").mkdir()
         (old.parents[1] / "lib" / "python3.12" / "site-packages" / "trazo" / "mcp.py").write_text("")
         self.assertEqual(self.started(data), f"{old} mcp\n")
+
+    @unittest.skipIf(WINDOWS, "fakes trazo with a shell script; CI checks mcp.cmd --no-views")
+    def test_claude_turns_the_view_off(self):
+        # Claude's manifest passes --no-views; Codex's passes nothing.
+        checkout = self.root / "packages" / "trazo" / ".venv" / "bin" / "trazo"
+        checkout.parent.mkdir(parents=True)
+        checkout.write_text('#!/bin/sh\necho "views=${TRAZO_MCP_VIEWS-unset}"\n')
+        checkout.chmod(0o755)
+        self.assertEqual(self.started(args=["--no-views"]), "views=0\n")
+        self.assertEqual(self.started(), "views=unset\n")
+        self.assertEqual(self.started({"TRAZO_MCP_VIEWS": "1"}), "views=1\n")
 
     def test_stand_in_speaks_mcp(self):
         server = self.launch({"TRAZO_DATA_DIR": str(self.data)})
@@ -172,6 +197,7 @@ class LauncherTests(unittest.TestCase):
         self.assertIn("a new chat loads all the trazo tools", status["message"])
         self.assertEqual(server.close(), (0, "", NOT_SET_UP))
 
+    @unittest.skipIf(WINDOWS, "a POSIX PATH")
     def test_stand_in_reports_an_existing_pandoc(self):
         # The setup skill announces a Pandoc download only when this says none was found.
         known = next((path for path in machine.PANDOC_LOCATIONS if Path(path).is_file()), None)
@@ -192,7 +218,7 @@ class LauncherTests(unittest.TestCase):
     def test_stand_in_setup_status_follows_the_install(self):
         # Only the dist-info folder's name is the version, not a data folder named like one.
         data = self.tmp / "trazo-dev-probe"
-        site = data / "venv" / "lib" / "python3.12" / "site-packages"
+        site = data / "venv" / ("Lib" if WINDOWS else "lib/python3.12") / "site-packages"
         install(data, "0.5.0", server=False, machine_file=False)
         server = self.launch({"TRAZO_DATA_DIR": str(data)})
         # The hook's rule: without machine.json trazo is not set up.
@@ -227,6 +253,20 @@ class LauncherTests(unittest.TestCase):
         self.assertEqual((status["install"]["installed"], status["next"]), (False, "setup"))
         self.assertIn("not set up on this computer", status["message"])
         self.assertEqual(server.close(), (0, "", NOT_SET_UP))
+
+    @unittest.skipUnless(WINDOWS, "Windows PATH")
+    def test_stand_in_reports_a_pandoc_on_the_windows_path(self):
+        folder = self.tmp / "pandoc dir"
+        folder.mkdir()
+        server = self.launch({"PATH": str(self.tmp)})
+        self.assertEqual(server.setup_status()["pandoc"], {"found": False, "path": None, "where": None})
+        self.assertEqual(server.close(), (0, "", NOT_SET_UP))
+        (folder / "pandoc.exe").write_bytes(b"")
+        server = self.launch({"PATH": f"{self.tmp};{folder}"})
+        self.assertEqual(server.setup_status()["pandoc"], {"found": True, "path": str(folder / "pandoc.exe"),
+                                                           "where": "PATH"})
+        self.assertEqual(server.close(), (0, "", NOT_SET_UP))
+
 
 if __name__ == "__main__":
     unittest.main()

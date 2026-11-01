@@ -7,6 +7,7 @@ import tempfile
 from functools import lru_cache
 from pathlib import Path
 
+from .portable import no_window
 from .project import PROJECT
 
 
@@ -20,10 +21,11 @@ def _read(path, mtime_ns, size, command):
         template = Path(folder) / "metadata.template"
         template.write_text("$meta-json$", encoding="utf-8")
         try:
+            # An empty document on stdin: Windows has no /dev/null.
             result = subprocess.run(
-                [*command, "/dev/null", "-f", "markdown", f"--metadata-file={path}",
+                [*command, "-f", "markdown", f"--metadata-file={path}",
                  "-t", "markdown", f"--template={template}"],
-                capture_output=True, text=True, check=True)
+                input="", capture_output=True, encoding="utf-8", check=True, **no_window())
             return json.loads(result.stdout)
         except (OSError, subprocess.CalledProcessError, ValueError) as exc:
             detail = exc.stderr if isinstance(exc, subprocess.CalledProcessError) else str(exc)
