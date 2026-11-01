@@ -59,8 +59,9 @@ class ShellTests(PreviewBrowserTestCase):
                 script = self.chrome.call("Page.addScriptToEvaluateOnNewDocument", {"source": """
                   window.reveal = null;
                   window.addEventListener('pagereveal', e => {
-                    const seen = window.reveal = {shell: !!document.getElementById('pk-shell-ready'),
-                                                  transition: !!e.viewTransition};
+                    const seen = window.reveal = {
+                      shown: !!document.body && getComputedStyle(document.body).visibility === 'visible',
+                      transition: !!e.viewTransition};
                     if (e.viewTransition) e.viewTransition.ready.then(() => Object.assign(seen, {
                       outcome: 'ran', visible: getComputedStyle(document.body).visibility === 'visible',
                       built: !!document.querySelector('.pv-app-root')}), () => { seen.outcome = 'skipped'; });
@@ -83,13 +84,13 @@ class ShellTests(PreviewBrowserTestCase):
                             animations: document.body.getAnimations().length})"""),
                             {"visibility": "visible", "opacity": "1", "animations": 0})
                         if native:
-                            # The fade runs into the built shell. A loaded machine can reveal the
-                            # page before the shell marker is parsed; app.js then skips the fade.
+                            # The fade runs into the built, visible shell. A loaded machine can reveal
+                            # the page while the body is still hidden; app.js then skips the fade.
                             self.wait_for("window.reveal && (window.reveal.outcome || !window.reveal.transition)")
                             seen = self.evaluate("window.reveal")
-                            self.assertEqual(seen, {"shell": True, "transition": True, "outcome": "ran",
-                                                    "visible": True, "built": True} if seen["shell"] else
-                                             {"shell": False, "transition": True, "outcome": "skipped"})
+                            self.assertEqual(seen, {"shown": True, "transition": True, "outcome": "ran",
+                                                    "visible": True, "built": True} if seen["shown"] else
+                                             {"shown": False, "transition": True, "outcome": "skipped"})
                 finally:
                     self.chrome.call("Page.removeScriptToEvaluateOnNewDocument", {"identifier": script}, self.session)
 

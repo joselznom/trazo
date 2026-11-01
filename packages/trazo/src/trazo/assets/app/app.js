@@ -3,10 +3,11 @@
   "use strict";
   if (window.Trazo) return;
   // A page change fades into the new page's first frame. On a loaded machine Chrome can show that
-  // frame before the shell marker (server.decorate_page) is parsed, while app.css still hides the
-  // body; skip that fade rather than fade into a blank page.
+  // frame while app.css still hides the body (before the shell marker of server.decorate_page
+  // counts, even once it is parsed); skip that fade rather than fade into a blank page.
   addEventListener("pagereveal", (e) => {
-    if (e.viewTransition && !document.getElementById("pk-shell-ready")) e.viewTransition.skipTransition();
+    const shown = document.body && getComputedStyle(document.body).visibility === "visible";
+    if (e.viewTransition && !shown) e.viewTransition.skipTransition();
   });
   const KEY = "trazo-preview";
   const modes = ["auto", "light", "dark"];
