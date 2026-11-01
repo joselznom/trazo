@@ -3,6 +3,7 @@ DevTools-pipe client (against a fake Chrome that answers from a script)."""
 
 import json
 import os
+import shlex
 import stat
 import sys
 import tempfile
@@ -17,8 +18,7 @@ from acceptance.sandbox import Sandbox
 # Speaks the pipe protocol on descriptors 3 (requests) and 4 (replies). What it answers to a method
 # is the first entry of that method's list in replies.json (the last one repeats); "event" entries
 # are sent first, the way Chrome interleaves them.
-FAKE_CHROME = """#!{python}
-import json, os, sys
+FAKE_CHROME = """import json, os, sys
 script = json.load(open({replies!r}))
 buffer = b""
 while True:
@@ -34,6 +34,17 @@ while True:
         os.write(4, json.dumps({{"method": "Page.loadEventFired", "params": {{}}}}).encode() + b"\\0")
         os.write(4, json.dumps({{"id": request["id"], **reply}}).encode() + b"\\0")
 """
+
+
+def python_executable(path: Path, code: str) -> str:
+    """Write code to path.py and make path run it with this Python. A shebang cannot quote its
+    interpreter, so a Python under a path with a space (a clone on "/Volumes/SSD Externo") needs
+    a shell to run it."""
+    script = path.with_suffix(".py")
+    script.write_text(code)
+    path.write_text(f"#!/bin/sh\nexec {shlex.quote(sys.executable)} {shlex.quote(str(script))} \"$@\"\n")
+    path.chmod(path.stat().st_mode | stat.S_IXUSR)
+    return str(path)
 
 
 class FingerprintTests(unittest.TestCase):
@@ -71,10 +82,7 @@ class BrowserTests(unittest.TestCase):
     def fake(self, replies: dict) -> str:
         script = self.sandbox.root / "replies.json"
         script.write_text(json.dumps(replies))
-        executable = self.sandbox.root / "fake-chrome"
-        executable.write_text(FAKE_CHROME.format(python=sys.executable, replies=str(script)))
-        executable.chmod(executable.stat().st_mode | stat.S_IXUSR)
-        return str(executable)
+        return python_executable(self.sandbox.root / "fake-chrome", FAKE_CHROME.format(replies=str(script)))
 
     def test_a_call_returns_its_own_result_and_skips_events(self):
         browser = chrome.Browser(self.sandbox, self.fake({"Target.createTarget": [{"result": {"targetId": "t1"}}]}))
@@ -95,11 +103,9 @@ class BrowserTests(unittest.TestCase):
         chrome.Page(browser, "s").wait_for("ready", timeout=5)
 
     def test_a_chrome_that_never_answers_times_out(self):
-        script = self.sandbox.root / "silent"
-        script.write_text(f"#!{sys.executable}\nimport os\nwhile os.read(3, 1):\n    pass\n")
-        script.chmod(0o755)
+        script = python_executable(self.sandbox.root / "silent", "import os\nwhile os.read(3, 1):\n    pass\n")
         with self.assertRaisesRegex(chrome.ChromeError, "did not answer Browser.getVersion"):
-            chrome.Browser(self.sandbox, str(script), startup_timeout=0.5)
+            chrome.Browser(self.sandbox, script, startup_timeout=0.5)
 
 
 class MachineFileTests(unittest.TestCase):
