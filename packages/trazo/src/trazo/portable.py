@@ -13,6 +13,7 @@ TerminateProcess.
 from __future__ import annotations
 
 import errno
+import functools
 import os
 import signal
 import subprocess
@@ -65,8 +66,7 @@ def kill_group(pid: int, graceful: bool = False) -> None:
 def pid_alive(pid: int) -> bool:
     """Whether a process with this PID runs (one we may not signal counts)."""
     if os.name == "nt":
-        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
-        kernel32.OpenProcess.restype = ctypes.c_void_p
+        kernel32 = _kernel32()
         handle = kernel32.OpenProcess(0x1000, False, pid)  # PROCESS_QUERY_LIMITED_INFORMATION
         if not handle:
             return ctypes.get_last_error() == 5  # ERROR_ACCESS_DENIED: it exists
@@ -85,6 +85,14 @@ def pid_alive(pid: int) -> bool:
     return True
 
 
+@functools.cache
+def _kernel32() -> Any:
+    """A private kernel32 (its restype settings stay out of ctypes.windll)."""
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel32.OpenProcess.restype = ctypes.c_void_p
+    return kernel32
+
+
 def try_lock(handle: IO[Any]) -> bool:
     """Take the exclusive lock on an open file without waiting; False when another holds it."""
     if os.name == "nt":
@@ -100,14 +108,19 @@ def try_lock(handle: IO[Any]) -> bool:
         return False
 
 
-def lock(handle: IO[Any]) -> None:
-    """Wait for the exclusive lock on an open file (Ctrl+C stops the wait).
-    Closing the file releases it."""
-    if os.name != "nt":
+def lock(handle: IO[Any], timeout: float | None = None) -> bool:
+    """Wait for the exclusive lock on an open file, at most `timeout` seconds
+    (None: as long as it takes; Ctrl+C stops the wait); False when the time
+    ran out. Closing the file releases it."""
+    if timeout is None and os.name != "nt":
         fcntl.flock(handle, fcntl.LOCK_EX)  # PEP 475 retries it after a signal handler
-        return
+        return True
+    deadline = None if timeout is None else time.monotonic() + timeout
     while not try_lock(handle):
+        if deadline is not None and time.monotonic() >= deadline:
+            return False
         time.sleep(0.05)
+    return True
 
 
 def unlock(handle: IO[Any]) -> None:

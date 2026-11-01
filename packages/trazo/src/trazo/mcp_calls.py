@@ -50,10 +50,6 @@ def project_env(project: Project) -> dict[str, str]:
     return {**os.environ, "TRAZO_ROOT": str(project.root)}
 
 
-def kill_group(process: subprocess.Popen) -> None:
-    portable.kill_group(process.pid)
-
-
 class Calls:
     """Tool calls in progress, by request id, and the subprocess each one
     runs, in its own process group."""
@@ -80,7 +76,7 @@ class Calls:
             self.cancelled[key] = True
             process = self.processes.get(key)
         if process:
-            kill_group(process)
+            portable.kill_group(process.pid)
 
     def run(self, key, where: Project | Path, *argv: str, env=None) -> subprocess.CompletedProcess:
         """`trazo ARGV` for the call `key`, with `env` added, in the project
@@ -105,4 +101,4 @@ class Calls:
             self.closed = True
             processes = list(self.processes.values())
         for process in processes:
-            kill_group(process)
+            portable.kill_group(process.pid)

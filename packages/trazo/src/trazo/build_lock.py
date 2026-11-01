@@ -40,12 +40,10 @@ import hashlib
 import os
 import sys
 import threading
-import time
 from collections.abc import Callable, Iterator, Mapping
 from contextlib import ExitStack, contextmanager
 from functools import wraps
 from pathlib import Path
-from typing import IO
 
 from .portable import lock, pid_alive, try_lock
 from .project import PROJECT, Project
@@ -105,10 +103,8 @@ def build_lock(project: Project = PROJECT,
                 yield
                 return
             log(WAITING)
-            if wait is None:
-                lock(handle)  # Ctrl+C interrupts it
-            else:
-                _flock_within(handle, wait)
+            if not lock(handle, wait):  # Ctrl+C interrupts the wait
+                raise TimeoutError(f"another build of this project was still running after {wait:g} s")
         handle.seek(0)
         handle.truncate()
         handle.write(str(os.getpid()))
@@ -127,14 +123,6 @@ def _bounded_wait() -> float | None:
         return float(os.environ.pop(WAIT_ENV))
     except (KeyError, ValueError):
         return None
-
-
-def _flock_within(handle: IO[str], seconds: float) -> None:
-    deadline = time.monotonic() + seconds
-    while not try_lock(handle):
-        if time.monotonic() >= deadline:
-            raise TimeoutError(f"another build of this project was still running after {seconds:g} s")
-        time.sleep(0.1)
 
 
 def _marker_pid(path: Path) -> int | None:

@@ -17,6 +17,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
+from .portable import no_window
 from .project import PROJECT, chrome_flags
 
 if os.name == "nt":
@@ -150,7 +151,7 @@ class Chrome:
         return subprocess.Popen(
             [*command, f"--remote-debugging-io-pipes={handles[0]},{handles[1]}"],
             startupinfo=subprocess.STARTUPINFO(lpAttributeList={"handle_list": handles}),
-            creationflags=subprocess.CREATE_NO_WINDOW, stdin=subprocess.DEVNULL,
+            stdin=subprocess.DEVNULL, **no_window(),
             stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
 
     def _read_pipe(self) -> None:

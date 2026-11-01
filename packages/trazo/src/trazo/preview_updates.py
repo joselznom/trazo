@@ -38,7 +38,6 @@ from typing import Any
 
 from . import __version__, machine, manifest
 from .local_server import Conflict
-from .portable import no_window
 from .project import PROJECT, Project
 
 SETUP_SCRIPT = Path("plugin") / "scripts" / "setup.sh"
@@ -134,7 +133,7 @@ def apply(project: Project = PROJECT) -> dict[str, Any]:
         if step["install"]:
             root, _ = machine.plugin_version()
             result = subprocess.run([*setup_command(root), "--offline", root], capture_output=True, text=True,
-                                    timeout=SETUP_TIMEOUT, **no_window())
+                                    timeout=SETUP_TIMEOUT, **machine.no_window())
             if result.returncode:
                 return {"ok": False, "download": result.returncode == OFFLINE_EXIT, "error": last_line(result)}
         restart = RESTART if step["restart"] else None

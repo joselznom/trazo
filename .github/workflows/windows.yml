@@ -123,7 +123,7 @@ jobs:
       - name: The MCP server starts through plugin\mcp.cmd and previews a paper
         run: |
           python -u - <<'EOF'
-          import http.client, json, os, subprocess
+          import http.client, json, os, subprocess, time
           from pathlib import Path
           paper = Path(os.environ["RUNNER_TEMP"]) / "mi artículo"
           with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as env:
@@ -152,15 +152,21 @@ jobs:
           preview = call(5, "preview_start", project=str(paper))
           print(preview)
           # http.client, as trazo does: urllib would take the proxy from the registry.
-          connection = http.client.HTTPConnection("127.0.0.1", preview["port"], timeout=30)
-          try:
-              connection.request("GET", "/manuscript.html")  # "/" redirects here
+          def get(path):
+              connection = http.client.HTTPConnection("127.0.0.1", preview["port"], timeout=30)
+              connection.request("GET", path)
               reply = connection.getresponse()
-              page = reply.read().decode("utf-8")
-              assert reply.status == 200, reply.status
-          except OSError:
+              assert reply.status == 200, (path, reply.status)
+              return reply.read().decode("utf-8")
+          for _ in range(120):  # the page builds after preview_start returns
+              status = json.loads(get("/__status"))
+              if status["manuscript"]["ok"] and status["supplementary"]["ok"]:
+                  break
+              time.sleep(1)
+          else:
               print((paper / ".build" / "preview.log").read_text(encoding="utf-8", errors="replace"))
-              raise
+              raise AssertionError(status)
+          page = get("/manuscript.html")  # "/" redirects here
           assert "Introduction" in page, page[:2000]
           print(call(6, "preview_stop", project=str(paper)))
           assert not (paper / ".build" / "preview.json").exists()
