@@ -14,6 +14,10 @@ Each preview_start gives its view a token; a request with an older token of
 the same paper answers `superseded`, so only the newest view in the
 conversation keeps polling. Panel tokens are never superseded, and tokens
 this process did not issue (a view from before a restart) are served.
+
+TRAZO_MCP_VIEWS=0 (plugin/mcp.sh sets it for Claude's manifest) turns the
+view off whatever the client declares: the Claude app draws views but
+refuses the tool calls they make, so the view could show nothing.
 """
 
 from __future__ import annotations
@@ -21,6 +25,7 @@ from __future__ import annotations
 import base64
 import http.client
 import json
+import os
 import re
 import secrets
 import threading
@@ -33,6 +38,7 @@ from .project import ASSETS_DIR, Project
 EXTENSION = "io.modelcontextprotocol/ui"
 MIME_TYPE = "text/html;profile=mcp-app"
 VIEW_URI = "ui://trazo/preview"
+VIEWS_ENV = "TRAZO_MCP_VIEWS"
 TEXT_TYPES = ("text/", "application/json", "application/javascript", "image/svg+xml")
 REQUEST_TIMEOUT = 60
 
@@ -67,7 +73,10 @@ def load_paper(args: dict[str, Any]) -> Project:
 
 
 def supports_ui(params: dict[str, Any]) -> bool:
-    """Whether an initialize request's client declares MCP Apps HTML views."""
+    """Whether an initialize request's client declares MCP Apps HTML views,
+    unless VIEWS_ENV turns them off."""
+    if os.environ.get(VIEWS_ENV) == "0":
+        return False
     capabilities = params.get("capabilities")
     extensions = capabilities.get("extensions") if isinstance(capabilities, dict) else None
     settings = extensions.get(EXTENSION) if isinstance(extensions, dict) else None

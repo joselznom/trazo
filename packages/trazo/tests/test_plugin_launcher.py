@@ -52,8 +52,9 @@ def install(data, version, server=True, machine_file=True):
 class Launcher:
     """plugin/mcp.sh in `root` over pipes, with `env` only."""
 
-    def __init__(self, root, env):
-        self.process = subprocess.Popen(["/bin/sh", str(root / "plugin" / "mcp.sh")], env={"PATH": "/usr/bin:/bin", **env},
+    def __init__(self, root, env, args=()):
+        self.process = subprocess.Popen(["/bin/sh", str(root / "plugin" / "mcp.sh"), *args],
+                                        env={"PATH": "/usr/bin:/bin", **env},
                                         stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                         encoding="utf-8")
 
@@ -90,15 +91,15 @@ class LauncherTests(unittest.TestCase):
         self.home.mkdir()
         copy_plugin(self.root)
 
-    def launch(self, env):
-        launcher = Launcher(self.root, {"HOME": str(self.home), **env})
+    def launch(self, env, args=()):
+        launcher = Launcher(self.root, {"HOME": str(self.home), **env}, args)
         self.addCleanup(lambda: launcher.process.poll() is None and launcher.process.kill())
         return launcher
 
-    def started(self, env=None):
+    def started(self, env=None, args=()):
         """What mcp.sh started: the fake trazo's command line, or the stand-in's stderr."""
         before = sorted(self.tmp.rglob("*"))
-        code, stdout, stderr = self.launch(env or {}).close()
+        code, stdout, stderr = self.launch(env or {}, args).close()
         self.assertEqual(sorted(self.tmp.rglob("*")), before, "the launcher wrote files")
         self.assertEqual(code, 0)
         return stdout or stderr
@@ -122,6 +123,16 @@ class LauncherTests(unittest.TestCase):
         (old.parents[1] / "lib" / "python3.12" / "site-packages" / "trazo").mkdir()
         (old.parents[1] / "lib" / "python3.12" / "site-packages" / "trazo" / "mcp.py").write_text("")
         self.assertEqual(self.started(data), f"{old} mcp\n")
+
+    def test_claude_turns_the_view_off(self):
+        # Claude's manifest passes --no-views; Codex's passes nothing.
+        checkout = self.root / "packages" / "trazo" / ".venv" / "bin" / "trazo"
+        checkout.parent.mkdir(parents=True)
+        checkout.write_text('#!/bin/sh\necho "views=${TRAZO_MCP_VIEWS-unset}"\n')
+        checkout.chmod(0o755)
+        self.assertEqual(self.started(args=["--no-views"]), "views=0\n")
+        self.assertEqual(self.started(), "views=unset\n")
+        self.assertEqual(self.started({"TRAZO_MCP_VIEWS": "1"}), "views=1\n")
 
     def test_stand_in_speaks_mcp(self):
         server = self.launch({"TRAZO_DATA_DIR": str(self.data)})

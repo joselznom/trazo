@@ -30,6 +30,9 @@ Internal changes (tests, CI, refactoring) stay out.
 
 ### Fixed
 
+- In the Claude app, `/trazo:open` shows the preview only in the Browser
+  pane. Before, it also showed an "Open full screen" card that could not load
+  the paper ("IPC not available for MCP tool call").
 - The preview starts at once on a Mac whose network is slow to answer name
   lookups; before, it could give up after 20 seconds with an empty message.
 - On a busy computer, moving between pages of the preview no longer fades
