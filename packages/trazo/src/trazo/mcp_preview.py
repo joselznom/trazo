@@ -201,9 +201,20 @@ def restart(port: int) -> None:
     sys.stderr.flush()
     if os.name == "nt":
         RESTART_PORT.append(port)
-        signal.raise_signal(signal.SIGTERM)
+        stop_serving()
         return
     os.execv(sys.executable, trazo_argv("mcp", "--serve", str(port)))
+
+
+def stop_serving() -> None:
+    """End this preview's server.serve() from another thread: SIGTERM, which
+    serve handles; on Windows, where os.kill would end the process at once
+    and skip its cleanup, by shutting the server down."""
+    if os.name == "nt":
+        from . import server
+        server.shutdown()
+    else:
+        os.kill(os.getpid(), signal.SIGTERM)
 
 
 def serve_child(port: int) -> None:
@@ -221,7 +232,7 @@ def serve_child(port: int) -> None:
 
     def watch_stdin():
         sys.stdin.buffer.read()
-        signal.raise_signal(signal.SIGTERM)  # os.kill would end it at once on Windows
+        stop_serving()
     threading.Thread(target=watch_stdin, daemon=True).start()
     try:
         try:

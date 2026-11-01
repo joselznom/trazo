@@ -215,8 +215,18 @@ class Handler(GuardedHandler):
         return None
 
 
+SERVING: list[LocalServer] = []  # the server serve() runs, for shutdown()
+
+
+def shutdown() -> None:
+    """Make serve() return, from another thread: Windows cannot send itself
+    the SIGTERM serve otherwise stops on."""
+    for server in list(SERVING):
+        server.shutdown()
+
+
 def serve(port=8765, on_bind=None):
-    """Serve until SIGTERM or Ctrl-C; on_bind(port) runs once the port is bound."""
+    """Serve until SIGTERM, Ctrl-C or shutdown(); on_bind(port) runs once the port is bound."""
     from . import diagram_editor, preview
     stop_event = threading.Event()
     def stop(signum, frame):
@@ -231,11 +241,13 @@ def serve(port=8765, on_bind=None):
         for worker in workers:
             worker.start()
         print(f"[trazo] http://127.0.0.1:{server.server_port}/", flush=True)
+        SERVING.append(server)
         try:
             server.serve_forever()
         except KeyboardInterrupt:
             pass
         finally:
+            SERVING.remove(server)
             stop_event.set()
             preview.DOCX_JOB.stop("cancelled")
             diagram_editor.shutdown()

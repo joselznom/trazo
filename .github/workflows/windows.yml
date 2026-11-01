@@ -9,9 +9,6 @@ name: windows
 # builds, verifies and exports its diagram with scripts\trazo.cmd and with
 # scripts/trazo in Git Bash. The desktop apps themselves are not covered.
 on:
-  push:
-    branches: [feat/windows-support]
-    tags: ["v*"]
   pull_request:
     paths:
       - .github/workflows/windows.yml
@@ -20,10 +17,17 @@ on:
       - packages/trazo/**
       - plugin/**
       - template/**
+  push:
+    branches: [feat/windows-support]  # TEMPORARY: until the pull request runs it
+    tags: ["v*"]
   workflow_dispatch:
 
 permissions:
   contents: read
+
+concurrency:
+  group: windows-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
   PYTHONUTF8: "1"  # as plugin\mcp.cmd, setup.ps1 and scripts\trazo.cmd set it
