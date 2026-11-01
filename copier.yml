@@ -72,5 +72,5 @@ example:
 # the template.
 trazo_version:
   type: str
-  default: v1.0.0
+  default: v1.1.0
   when: false

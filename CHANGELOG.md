@@ -16,7 +16,9 @@ its line under "Unreleased"; a release renames that heading to
 Internal changes (tests, CI, refactoring) stay out.
 -->
 
-## Unreleased
+## v1.1.0 (2026-11-01)
+
+trazo now runs on Linux, Windows and Intel Macs, and the preview is more reliable.
 
 ### New
 
@@ -31,21 +33,21 @@ Internal changes (tests, CI, refactoring) stay out.
   PNG and PDF exports. Papers get `scripts/trazo.cmd`, so their commands
   run from PowerShell and cmd too, and a `.gitattributes` that keeps LF line
   endings in a clone on Windows; update a paper with the plugin's
-  `paper_update` to get them.
+  `paper_update` to get them (#7).
 - trazo is now tested on Intel Macs as well as Apple silicon: setup, the
   Word build, diagram export and the preview (#4).
 - When setup finishes in a paper's folder and that paper was made with an
-  earlier trazo, the agent suggests updating it.
+  earlier trazo, the agent suggests updating it (#10).
 
 ### Fixed
 
 - In the Claude app, `/trazo:open` shows the preview only in the Browser
   pane. Before, it also showed an "Open full screen" card that could not load
-  the paper ("IPC not available for MCP tool call").
+  the paper ("IPC not available for MCP tool call") (#8).
 - The preview starts at once on a Mac whose network is slow to answer name
-  lookups; before, it could give up after 20 seconds with an empty message.
+  lookups; before, it could give up after 20 seconds with an empty message (#3).
 - On a busy computer, moving between pages of the preview no longer fades
-  into a blank page before the paper appears.
+  into a blank page before the paper appears (#3).
 - Setup and the tools check say when the Chrome they found does not start
   (on Linux, a computer without a desktop's libraries) instead of showing
   it as ready (#5).
