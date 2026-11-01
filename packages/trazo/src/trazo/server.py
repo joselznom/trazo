@@ -216,11 +216,13 @@ class Handler(GuardedHandler):
 
 
 SERVING: list[LocalServer] = []  # the server serve() runs, for shutdown()
+STOPPING = threading.Event()  # shutdown() was called, maybe before serve() bound
 
 
 def shutdown() -> None:
     """Make serve() return, from another thread: Windows cannot send itself
     the SIGTERM serve otherwise stops on."""
+    STOPPING.set()
     for server in list(SERVING):
         server.shutdown()
 
@@ -242,6 +244,8 @@ def serve(port=8765, on_bind=None):
             worker.start()
         print(f"[trazo] http://127.0.0.1:{server.server_port}/", flush=True)
         SERVING.append(server)
+        if STOPPING.is_set():  # asked before it was registered: serve_forever returns at once
+            threading.Thread(target=server.shutdown, daemon=True).start()
         try:
             server.serve_forever()
         except KeyboardInterrupt:

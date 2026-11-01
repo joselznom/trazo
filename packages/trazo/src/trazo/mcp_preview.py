@@ -223,6 +223,8 @@ def relay(argv: list[str]) -> int:
     its own, closed when this process's stdin closes; its exit code. Not this
     stdin: watch_stdin's read holds the pipe, and Windows serialises every
     call on a synchronous pipe, so the new interpreter would hang on it."""
+    if STDIN_CLOSED.is_set():  # the MCP server is gone: nothing to restart for
+        return 0
     child = subprocess.Popen(argv, stdin=subprocess.PIPE, stdout=sys.stdout, stderr=sys.stderr)
     while child.poll() is None and not STDIN_CLOSED.wait(0.5):
         pass
