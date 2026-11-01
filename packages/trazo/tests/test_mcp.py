@@ -165,7 +165,7 @@ class McpServerTests(unittest.TestCase):
         self.assertEqual((info["project"], info["port"], info["reused"]), (str(self.project), self.port, False))
         self.assertEqual(info["url"], f"http://127.0.0.1:{self.port}")
         recorded = json.loads((self.project / ".build" / "preview.json").read_text())
-        self.assertEqual(recorded, {k: info[k] for k in ("url", "port", "pid", "ppid", "project")})
+        self.assertEqual(recorded, {k: info[k] for k in ("url", "port", "pid", "id", "project")})
         connection = http.client.HTTPConnection("127.0.0.1", self.port, timeout=10)
         connection.request("GET", "/__status")
         reply = connection.getresponse()

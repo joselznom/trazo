@@ -5,13 +5,17 @@ free port, then writes <build>/preview.json (url, port, pid, project) and
 removes it when it stops; /__status names its pid and project, so a
 session reuses only a preview really serving the project, also another
 session's, and stops another session's with SIGTERM (on Windows, which
-has no SIGTERM to send, by ending its process and removing its preview.json)."""
+has no SIGTERM to send, by ending its process tree and removing its
+preview.json). preview.json also holds the id the server gave the child in
+$TRAZO_PREVIEW_ID, which tells the server its own preview: on Windows the
+pid Popen sees is the venv launcher's, not the interpreter's."""
 
 from __future__ import annotations
 
 import functools
 import json
 import os
+import secrets
 import signal
 import subprocess
 import sys
@@ -76,10 +80,12 @@ class Previews:
             self.stop_child(project.root)
             log_path = project.path("build") / "preview.log"
             log_path.parent.mkdir(parents=True, exist_ok=True)
+            preview_id = secrets.token_hex(8)
             with open(log_path, "wb") as log:
                 child = subprocess.Popen(trazo_argv("mcp", "--serve", str(PREVIEW_PORT)), cwd=project.root,
-                                         env=project_env(project), stdin=subprocess.PIPE, stdout=log,
-                                         stderr=subprocess.STDOUT)
+                                         env={**project_env(project), PREVIEW_ID_ENV: preview_id},
+                                         stdin=subprocess.PIPE, stdout=log, stderr=subprocess.STDOUT)
+            child.preview_id = preview_id  # type: ignore[attr-defined]
             self.children[project.root] = (child, info_path(project))
             deadline = time.monotonic() + START_TIMEOUT
             while True:
@@ -118,10 +124,13 @@ class Previews:
         # Another session's: running() just matched its pid to /__status, so the
         # signal reaches that preview. It stops on SIGTERM and removes preview.json;
         # its session starts a new one on its next preview_start.
-        try:
-            os.kill(info["pid"], signal.SIGTERM)  # Windows: TerminateProcess
-        except OSError:  # gone already
-            pass
+        if os.name == "nt":  # no SIGTERM there: end its tree, its builds and Chrome too
+            kill_group(info["pid"])
+        else:
+            try:
+                os.kill(info["pid"], signal.SIGTERM)
+            except ProcessLookupError:
+                pass
         # It stops answering first and removes preview.json last.
         deadline = time.monotonic() + START_TIMEOUT
         if os.name == "nt":  # ended at once: nothing removes preview.json but this
@@ -159,9 +168,13 @@ class Previews:
                 self.stop_child(root)
 
 
+PREVIEW_ID_ENV = "TRAZO_PREVIEW_ID"
+RESTART_PORT: list[int] = []  # Windows: the port restart() hands to the next preview
+
+
 def started_by(child: subprocess.Popen, info: dict[str, Any]) -> bool:
-    """Whether preview.json's preview is `child` (or, on Windows, its launcher's child)."""
-    return child.pid in (info.get("pid"), info.get("ppid"))
+    """Whether preview.json's preview is `child`, also after a restart in place."""
+    return bool(info.get("id")) and info.get("id") == getattr(child, "preview_id", None)
 
 
 def preview_pid(child: subprocess.Popen, info: dict[str, Any]) -> int:
@@ -181,11 +194,15 @@ def restart(port: int) -> None:
     """Run this preview again as the installed trazo (trazo.preview_updates):
     the same pid, so preview.json and the MCP server's Previews stay right, and
     the same stdin pipe; the listening socket is not inherited, so the port is
-    free to bind again."""
+    free to bind again. Windows has no exec: there this preview stops serving
+    first, then serve_child runs the new one, with the same stdin and
+    $TRAZO_PREVIEW_ID, and waits for it."""
     sys.stdout.flush()
     sys.stderr.flush()
-    if os.name == "nt":  # execv starts a new process there: wait for it as this pid
-        sys.exit(subprocess.call(trazo_argv("mcp", "--serve", str(port))))
+    if os.name == "nt":
+        RESTART_PORT.append(port)
+        signal.raise_signal(signal.SIGTERM)
+        return
     os.execv(sys.executable, trazo_argv("mcp", "--serve", str(port)))
 
 
@@ -198,10 +215,8 @@ def serve_child(port: int) -> None:
     path = info_path(PROJECT)
 
     def record(bound: int) -> None:
-        # ppid: on Windows the venv's python.exe is a launcher that runs the
-        # interpreter as its own child, so the pid Popen saw is the parent's.
-        write_json(path, {"url": f"http://127.0.0.1:{bound}", "port": bound, "pid": os.getpid(), "ppid": os.getppid(),
-                          "project": str(PROJECT.root)}, indent=2)
+        write_json(path, {"url": f"http://127.0.0.1:{bound}", "port": bound, "pid": os.getpid(),
+                          "id": os.environ.get(PREVIEW_ID_ENV, ""), "project": str(PROJECT.root)}, indent=2)
         preview_updates.RESTART = functools.partial(restart, bound)
 
     def watch_stdin():
@@ -218,3 +233,5 @@ def serve_child(port: int) -> None:
     finally:
         if (read_info(path) or {}).get("pid") == os.getpid():
             path.unlink(missing_ok=True)
+    if RESTART_PORT:  # Windows: restart() stopped serving to free the port
+        sys.exit(subprocess.call(trazo_argv("mcp", "--serve", str(RESTART_PORT[0]))))
