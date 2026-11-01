@@ -38,7 +38,7 @@ The app connects to it, so a new chat after setup gets the real server.
 
 For a client that declares MCP Apps views, the server also offers the
 preview as a full-screen view (`trazo.mcp_app`). Claude's manifest turns
-it off (`plugin/mcp.sh --no-views`): the Claude app draws the view but
+it off (`plugin/mcp --no-views`): the Claude app draws the view but
 refuses the tool calls it makes, so there the preview opens in the
 Browser pane only.
 
