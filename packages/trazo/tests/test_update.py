@@ -188,7 +188,7 @@ class UpdateTest(unittest.TestCase):
             report = update.update(folder, self.store)
             self.assertEqual(agents.check(agents.canonical_skills(project), project), [], name)
             for target in targets:
-                self.assertIn(os.path.relpath(target / "retired-skill", folder), report.removed, name)
+                self.assertIn(Path(os.path.relpath(target / "retired-skill", folder)).as_posix(), report.removed, name)
                 self.assertFalse((target / "retired-skill").exists(), name)
                 self.assertEqual((target / "add-reference/SKILL.md").read_text(), "The paper's own skill.\n")
                 self.assertTrue((target / "my-notes/SKILL.md").is_file(), name)

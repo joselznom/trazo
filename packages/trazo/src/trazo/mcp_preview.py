@@ -99,14 +99,19 @@ class Previews:
         project = load(args)
         with self.lock:
             entry = self.children.get(project.root)
-            exited = entry[0] if entry is not None and entry[0].poll() is not None else None
+            recorded = read_info(info_path(project)) or {}
+            exited = None
+            # On Windows its launcher outlives the interpreter for a moment.
+            if entry is not None and (entry[0].poll() is not None
+                                      or started_by(entry[0], recorded) and not pid_alive(recorded["pid"])):
+                exited = entry[0]
             stopped = self.stop_child(project.root)
             # Another session may have stopped this one's preview and started its own.
             info = self.running(project)
             if not info:
                 if exited is not None:
-                    return {"stopped": False, "pid": exited.pid, "reason": f"the preview had already exited "
-                            f"(code {exited.returncode}); see .build/preview.log"}
+                    return {"stopped": False, "pid": preview_pid(exited, recorded), "reason": f"the preview had "
+                            f"already exited (code {exited.returncode}); see .build/preview.log"}
                 if stopped is not None:
                     return {"stopped": True, "pid": stopped, "started_here": True}
                 return {"stopped": False, "reason": "no preview is running for this project"}
@@ -136,6 +141,7 @@ class Previews:
         child, path = self.children.pop(root, (None, None))
         if child is None:
             return None
+        recorded = read_info(path) or {}  # it removes preview.json when it stops
         if child.poll() is None:
             child.stdin.close()  # the child stops itself (see serve_child)
             try:
@@ -145,7 +151,7 @@ class Previews:
                 child.wait()
         if started_by(child, read_info(path) or {}):  # the child could not remove it
             path.unlink(missing_ok=True)
-        return child.pid
+        return preview_pid(child, recorded)
 
     def stop_all(self) -> None:
         with self.lock:
@@ -156,6 +162,11 @@ class Previews:
 def started_by(child: subprocess.Popen, info: dict[str, Any]) -> bool:
     """Whether preview.json's preview is `child` (or, on Windows, its launcher's child)."""
     return child.pid in (info.get("pid"), info.get("ppid"))
+
+
+def preview_pid(child: subprocess.Popen, info: dict[str, Any]) -> int:
+    """The preview's own pid, as preview.json records it: on Windows not the launcher's."""
+    return info["pid"] if started_by(child, info) else child.pid
 
 
 def kill_tree(child: subprocess.Popen) -> None:

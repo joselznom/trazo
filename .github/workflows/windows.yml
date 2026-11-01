@@ -154,8 +154,10 @@ jobs:
           # http.client, as trazo does: urllib would take the proxy from the registry.
           connection = http.client.HTTPConnection("127.0.0.1", preview["port"], timeout=30)
           try:
-              connection.request("GET", "/")
-              page = connection.getresponse().read().decode("utf-8")
+              connection.request("GET", "/manuscript.html")  # "/" redirects here
+              reply = connection.getresponse()
+              page = reply.read().decode("utf-8")
+              assert reply.status == 200, reply.status
           except OSError:
               print((paper / ".build" / "preview.log").read_text(encoding="utf-8", errors="replace"))
               raise

@@ -145,7 +145,8 @@ class PreviewInputsTests(unittest.TestCase):
         (self.project / "data" / "n.txt").write_text("5757\n")
         result = session.tool("preview_start", project=str(self.project))["structuredContent"]
         self.assertTrue(result["reused"])
-        self.assertIn("manuscript: IsADirectoryError", result["note"])
+        # Windows refuses to open a folder with PermissionError.
+        self.assertIn(f"manuscript: {'PermissionError' if os.name == 'nt' else 'IsADirectoryError'}", result["note"])
         self.assertIn("4242", page(info["port"]))
 
     def test_a_failing_figure_script_is_a_tool_error_and_starts_no_preview(self):
