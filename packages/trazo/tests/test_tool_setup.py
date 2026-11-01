@@ -1,6 +1,6 @@
-"""trazo setup: the pinned Pandoc zip, its download, check and unpacking.
+"""trazo setup: the pinned Pandoc archive, its download, check and unpacking.
 
-The zips are fakes served from a local http.server; nothing leaves the machine."""
+The zips and tarballs are fakes served from a local http.server; nothing leaves the machine."""
 
 import contextlib
 import hashlib
@@ -16,11 +16,11 @@ import threading
 import unittest
 import urllib.error
 import urllib.request
-import zipfile
 from pathlib import Path
 from unittest.mock import patch
 
 import _support  # noqa: F401  (sets TRAZO_ROOT first)
+from test_tool_setup_unpack import make_tar, make_zip
 
 from trazo import cli, machine, tool_setup
 from trazo.tool_setup import Asset
@@ -29,23 +29,14 @@ PANDOC_SCRIPT = b"#!/bin/sh\necho 'pandoc 3.9.0.2'\necho 'Features: +server +lua
 CHROME_SCRIPT = b"#!/bin/sh\necho 'Google Chrome for Testing 156.0.0.0'\n"
 
 
-def make_zip(entries) -> bytes:
-    """entries: (name, data, mode) with mode None for a directory."""
-    buffer = io.BytesIO()
-    with zipfile.ZipFile(buffer, "w") as archive:
-        for name, data, mode in entries:
-            info = zipfile.ZipInfo(name)
-            info.external_attr = (mode or (stat.S_IFDIR | 0o755)) << 16
-            archive.writestr(info, data)
-    return buffer.getvalue()
-
-
-PANDOC_ZIP = make_zip([
+PANDOC_ENTRIES = [
     ("pandoc-x/", b"", None),
     ("pandoc-x/bin/pandoc", PANDOC_SCRIPT, stat.S_IFREG | 0o755),
     ("pandoc-x/bin/pandoc-lua", b"pandoc", stat.S_IFLNK | 0o755),
     ("pandoc-x/share/man/pandoc.1", b"manual", stat.S_IFREG | 0o644),
-])
+]
+PANDOC_ZIP = make_zip(PANDOC_ENTRIES)
+PANDOC_TAR = make_tar(PANDOC_ENTRIES)  # Pandoc for Linux comes as a .tar.gz
 
 
 CHROME_ZIP = make_zip([
@@ -55,8 +46,8 @@ CHROME_ZIP = make_zip([
 ])
 
 
-def asset_for(data: bytes, sha256: str | None = None) -> Asset:
-    return Asset("pandoc-test.zip", len(data), sha256 or hashlib.sha256(data).hexdigest(),
+def asset_for(data: bytes, sha256: str | None = None, name: str = "pandoc-test.zip") -> Asset:
+    return Asset(name, len(data), sha256 or hashlib.sha256(data).hexdigest(),
                  "pandoc-x/bin/pandoc", 1000)
 
 
@@ -103,37 +94,6 @@ def run(argv):
     return code, out.getvalue(), err.getvalue()
 
 
-class AssetTests(unittest.TestCase):
-    def test_platform_to_asset(self):
-        self.assertEqual(tool_setup.pandoc_asset("Darwin", "arm64").name, "pandoc-3.9.0.2-arm64-macOS.zip")
-        self.assertEqual(tool_setup.pandoc_asset("Darwin", "x86_64").name, "pandoc-3.9.0.2-x86_64-macOS.zip")
-        for name in ("AMD64", "x86_64"):
-            self.assertEqual(tool_setup.pandoc_asset("Windows", name).name, "pandoc-3.9.0.2-windows-x86_64.zip")
-        for system, name in (("Linux", "x86_64"), ("Windows", "ARM64"), ("Darwin", "ppc")):
-            self.assertIsNone(tool_setup.pandoc_asset(system, name))
-
-    def test_pins_are_consistent(self):
-        for asset in tool_setup.PANDOC_ASSETS.values():
-            self.assertIn(tool_setup.PANDOC_VERSION, asset.name)
-            self.assertRegex(asset.sha256, "^[0-9a-f]{64}$")
-            self.assertTrue(asset.binary.endswith(("/pandoc", "/pandoc.exe")))
-
-    def test_chrome_platform_to_asset_and_url(self):
-        base = "https://storage.googleapis.com/chrome-for-testing-public/" + tool_setup.CHROME_VERSION
-        arm, intel = tool_setup.chrome_asset("Darwin", "arm64"), tool_setup.chrome_asset("Darwin", "x86_64")
-        self.assertEqual(tool_setup.chrome_url(arm), f"{base}/mac-arm64/chrome-headless-shell-mac-arm64.zip")
-        self.assertEqual(tool_setup.chrome_url(intel), f"{base}/mac-x64/chrome-headless-shell-mac-x64.zip")
-        for system, name in (("Linux", "x86_64"), ("Windows", "AMD64"), ("Darwin", "ppc")):
-            self.assertIsNone(tool_setup.chrome_asset(system, name))
-
-    def test_chrome_pins_are_consistent(self):
-        for asset in tool_setup.CHROME_ASSETS.values():
-            stem = asset.name.removesuffix(".zip")
-            self.assertRegex(asset.sha256, "^[0-9a-f]{64}$")
-            self.assertEqual(asset.binary, f"{stem}/chrome-headless-shell")
-            self.assertGreater(asset.unpacked, asset.size)
-
-
 @unittest.skipIf(os.name == "nt", "the fake Pandoc is a shell script")
 class SetupTests(unittest.TestCase):
     def setUp(self):
@@ -146,6 +106,7 @@ class SetupTests(unittest.TestCase):
             patcher.start()
             self.addCleanup(patcher.stop)
         self.server = Server({f"/{tool_setup.PANDOC_VERSION}/pandoc-test.zip": PANDOC_ZIP,
+                              f"/{tool_setup.PANDOC_VERSION}/pandoc-test.tar.gz": PANDOC_TAR,
                               f"/{tool_setup.CHROME_VERSION}/test/chrome-headless-shell-test.zip": CHROME_ZIP})
         self.addCleanup(self.server.close)
         self.use(asset_for(PANDOC_ZIP))
@@ -202,6 +163,17 @@ class SetupTests(unittest.TestCase):
         self.assertEqual(len(self.server.requests), 1)
         self.assertTrue((self.data / "machine.json").is_file())
         self.assertIn("nothing to download", run(["--plan"])[1])
+
+    def test_setup_unpacks_a_tarball(self):
+        self.use(asset_for(PANDOC_TAR, name="pandoc-test.tar.gz"))
+        code, out, err = run([])
+        self.assertEqual(code, 0, out + err)
+        binary = self.data / "pandoc" / tool_setup.PANDOC_VERSION / "pandoc-x" / "bin" / "pandoc"
+        self.assertTrue(os.access(binary, os.X_OK))
+        self.assertEqual(os.readlink(binary.with_name("pandoc-lua")), "pandoc")
+        self.assertEqual(stat.S_IMODE((binary.parent.parent / "share/man/pandoc.1").stat().st_mode), 0o644)
+        tools = json.loads((self.data / "machine.json").read_text())["tools"]
+        self.assertEqual(tools["pandoc"], {"path": str(binary), "version": "pandoc 3.9.0.2", "found": "data folder"})
 
     def test_checksum_failure_deletes_the_download(self):
         self.use(asset_for(PANDOC_ZIP, "0" * 64))
@@ -322,6 +294,19 @@ class SetupTests(unittest.TestCase):
         self.assertFalse((self.data / "chrome").exists())
         self.assertEqual(json.loads((self.data / "machine.json").read_text())["tools"]["chrome"]["found"], "PATH")
 
+    def test_a_chrome_that_does_not_start_says_so(self):
+        # The headless shell on a Linux without a desktop's libraries: found, but it cannot run.
+        asset = chrome_asset_for(CHROME_ZIP)
+        self.use_chrome(asset)
+        binary = tool_setup.chrome_binary(asset)
+        binary.parent.mkdir(parents=True)
+        binary.write_text("#!/bin/sh\nexit 127\n")
+        binary.chmod(0o755)
+        code, out, err = run([])
+        self.assertEqual(code, 0, out + err)
+        self.assertEqual(self.server.requests[-1:], [f"/{tool_setup.PANDOC_VERSION}/pandoc-test.zip"])
+        self.assertIn(f"  Chrome {machine.CHROME_BROKEN}.\n  To turn them on: {machine.CHROME_BROKEN_FIX}.", out)
+
     def test_a_failed_chrome_download_does_not_fail_setup(self):
         # Chrome is optional: Pandoc and machine.json are done, and the user is told what is off.
         self.use_chrome(chrome_asset_for(CHROME_ZIP, "0" * 64))
@@ -366,25 +351,10 @@ class SetupTests(unittest.TestCase):
 
     def test_unsupported_platform_without_pandoc_fails(self):
         with patch.object(tool_setup, "PANDOC_ASSETS", {}):
-            self.assertIn("downloads Pandoc only for macOS and Windows", run(["--plan"])[1])
+            self.assertIn("downloads Pandoc only for macOS, Linux and Windows", run(["--plan"])[1])
             code, _, err = run([])
         self.assertEqual(code, 1)
         self.assertIn("no Pandoc found", err)
-
-    def test_unpack_refuses_paths_and_links_outside_the_folder(self):
-        link = stat.S_IFLNK | 0o777
-        for entries in ([("../evil", b"x", stat.S_IFREG | 0o644)],
-                        [("a/link", b"../../evil", link)],
-                        [("a/link", b"/etc", link)],
-                        # Each link stays inside when made; together L points outside.
-                        [("d1/d2/L", b"x/../..", link), ("d1/d2/x", b"../..", link)],
-                        [("d1/d2/x", b"../..", link)]):
-            archive = self.bin / "bad.zip"
-            archive.write_bytes(make_zip(entries))
-            with self.subTest(entries=entries), self.assertRaises(tool_setup.SetupError):
-                tool_setup.unpack(archive, self.data / "out")
-        self.assertFalse((self.data / "evil").exists())
-        self.assertFalse((self.data.parent / "evil").exists())
 
 
 if __name__ == "__main__":

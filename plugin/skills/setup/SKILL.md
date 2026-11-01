@@ -17,7 +17,10 @@ paths, versions, tool names and terminal output stay inside your tool
 calls; your messages carry only the plain status.
 
 1. Call trazo's `setup_status` (no `project` needed), unless this chat
-   already did. Keep its `plugin.root`. Then follow its `next`:
+   already did. When no trazo tool is available at all (a minimal Linux
+   whose Perl lacks the modules of the stand-in server), go on with step
+   2 with an empty `plugin.root`. Keep its `plugin.root`. Then follow its
+   `next`:
    - "plugin": the installed trazo is newer than this plugin (the other
      app's plugin installed it). Tell the user to update the trazo plugin
      in this app's plugin settings, and stop; setup would install the
@@ -58,15 +61,24 @@ calls; your messages carry only the plain status.
 5. Once it succeeds, read its last lines yourself, then tell the user
    that trazo is ready and that a new chat loads it. Add only what
    changes what they can do:
+   - This chat had no trazo tool at all (step 1): Claude Code remembers
+     a failed server for about 15 minutes, so a new chat may still lack
+     the tools. Tell the user that, in Claude Code, `/mcp`, then trazo,
+     then Reconnect loads them at once.
    - A Chrome line (still no Chrome, Edge or Chromium found): setup
-     downloads one on a Mac that has none, so this means the download
-     failed (its error is just above; explain it as in step 4) or the
-     computer is not a Mac. Diagrams and the preview's PNG and PDF exports
-     stay off; offer to try again, or give the Google Chrome download page
-     from that line.
-   - A `quarantine:` line other than `none`, or no Pandoc version: macOS
-     blocked a downloaded tool. Say so in plain words instead of "ready",
-     and stop; the quarantine attribute stays as it is.
+     downloads one on a Mac or an x64 Linux computer that has none, so
+     this means the download failed (its error is just above; explain it
+     as in step 4) or the computer is an ARM Linux one, where the user
+     installs Chromium with the system's package manager. Diagrams and the
+     preview's PNG and PDF exports stay off; offer to try again, or give
+     the Google Chrome download page from that line.
+   - A "Chrome does not start" line: on Linux, the computer lacks the
+     system libraries Chrome needs. Diagrams and the PNG and PDF exports
+     stay off until the user installs Google Chrome or Chromium with the
+     system's package manager, which brings them; say so in plain words.
+   - A `quarantine:` line other than `none` (macOS), or no Pandoc
+     version: the system blocked a downloaded tool. Say so in plain words
+     instead of "ready", and stop; the quarantine attribute stays as it is.
 
 ## If the user asks what setup installs
 
@@ -76,6 +88,6 @@ trazo itself from the plugin's files. When the computer has no Chrome,
 Edge or Chromium, also a headless Chrome from Chrome for Testing (about
 110 MB), used only for diagrams and PNG and PDF exports; an installed
 browser is never replaced. Everything goes into one folder,
-`~/Library/Application Support/trazo` (about 280 MB, about 500 MB with
-Chrome); no admin password and no other change to the computer. Deleting
-that folder undoes it.
+`~/Library/Application Support/trazo` on a Mac, `~/.local/share/trazo` on
+Linux (about 280 MB, about 500 MB with Chrome); no admin password and no
+other change to the computer. Deleting that folder undoes it.

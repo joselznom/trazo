@@ -20,6 +20,11 @@ Internal changes (tests, CI, refactoring) stay out.
 
 ### New
 
+- The plugin now works on Linux (x64 and ARM) in Claude Code and Codex:
+  setup downloads uv, Python and Pandoc into `~/.local/share/trazo`
+  (`$XDG_DATA_HOME/trazo` when that is set), and a headless Chrome on x64
+  when no Chrome, Edge or Chromium is installed. The session hook and the
+  MCP server's launcher now find a Linux install too (#5).
 - trazo is now tested on Intel Macs as well as Apple silicon: setup, the
   Word build, diagram export and the preview (#4).
 
@@ -29,6 +34,9 @@ Internal changes (tests, CI, refactoring) stay out.
   lookups; before, it could give up after 20 seconds with an empty message.
 - On a busy computer, moving between pages of the preview no longer fades
   into a blank page before the paper appears.
+- Setup and the tools check say when the Chrome they found does not start
+  (on Linux, a computer without a desktop's libraries) instead of showing
+  it as ready (#5).
 
 ## v1.0.0 (2026-10-31)
 

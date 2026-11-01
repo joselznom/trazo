@@ -9,6 +9,7 @@ import subprocess
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 import _support  # noqa: F401  (sets TRAZO_ROOT before trazo is imported)
 
@@ -114,7 +115,9 @@ class LauncherTests(unittest.TestCase):
         # An install without the MCP server gives way to the checkout's.
         self.assertEqual(self.started(data), f"{checkout} mcp\n")
 
-        default = install(self.home / "Library" / "Application Support" / "trazo", "0.6.0")
+        # The default folder is trazo.machine.data_dir's for this computer.
+        with patch.dict(os.environ, {"HOME": str(self.home), "TRAZO_DATA_DIR": "", "XDG_DATA_HOME": ""}):
+            default = install(machine.data_dir(), "0.6.0")
         self.assertEqual(self.started(), f"{default} mcp\n")
         (old.parents[1] / "lib" / "python3.12" / "site-packages" / "trazo").mkdir()
         (old.parents[1] / "lib" / "python3.12" / "site-packages" / "trazo" / "mcp.py").write_text("")

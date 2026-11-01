@@ -50,10 +50,15 @@ TOOLS = ("uv", "python", "pandoc", "chrome")
 DEFAULT_PANDOC = ["pandoc"]
 # Where Homebrew puts Pandoc; a GUI-launched app's PATH lacks these folders.
 PANDOC_LOCATIONS = ("/opt/homebrew/bin/pandoc", "/usr/local/bin/pandoc")
-CHROME_MISSING = ("Chrome, Edge or Chromium not found: diagram export, the diagram editor, "
-                  "preview PNG/PDF exports and `scripts/trazo verify` are off")
+CHROME_OFF = "diagram export, the diagram editor, preview PNG/PDF exports and `scripts/trazo verify` are off"
+CHROME_MISSING = f"Chrome, Edge or Chromium not found: {CHROME_OFF}"
 CHROME_FIX = ("install Google Chrome (https://www.google.com/chrome/) or Microsoft Edge "
               "(https://www.microsoft.com/edge), or set browser.chrome in trazo.toml")
+# A Chrome that is found but cannot run, such as the downloaded headless
+# shell on a Linux without a desktop's libraries (libglib, libnss3, ...).
+CHROME_BROKEN = f"does not start (its --version fails): {CHROME_OFF}"
+CHROME_BROKEN_FIX = ("install Google Chrome or Chromium with the system's package manager (on Linux it also "
+                     "installs the libraries Chrome needs), or set browser.chrome in trazo.toml")
 _warned: set[str] = set()
 
 
@@ -124,6 +129,11 @@ def version_line(command: list[str]) -> str:
         return ""
     lines = (result.stdout or result.stderr).decode("utf-8", errors="replace").strip().splitlines()
     return lines[0].strip() if result.returncode == 0 and lines else ""
+
+
+def chrome_starts(path: str, version: str) -> bool:
+    """Whether a found Chrome ran `--version`; Windows records no version (detect), so it counts as starting."""
+    return not path or bool(version) or os.name == "nt"
 
 
 def executable(name: str) -> str:

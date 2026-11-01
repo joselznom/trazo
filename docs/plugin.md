@@ -13,7 +13,7 @@ server also runs from a clone's development venv: run `make test-package`
 
 A `SessionStart` hook (`hooks/hooks.json`, `plugin/session-start.sh`;
 new sessions, `/clear` and compaction, not resume or fork) checks offline,
-on macOS, whether setup is done and the installed trazo is the plugin's
+on macOS and Linux, whether setup is done and the installed trazo is the plugin's
 version. If not, it gives the agent a factual note (not shown to the user)
 that the trazo tools need the setup skill, so the agent can bring it up
 when the user asks for paper work.

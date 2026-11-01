@@ -1,5 +1,5 @@
 #!/bin/sh
-# Set trazo up for this macOS user: uv, Python 3.12, trazo and Pandoc.
+# Set trazo up for this macOS or Linux user: uv, Python 3.12, trazo and Pandoc.
 #
 #   sh plugin/scripts/setup.sh [--offline] [PLUGIN_ROOT]
 #
@@ -8,8 +8,10 @@
 # downloads nothing: it exits 3 when uv, Python or Pandoc must be
 # downloaded, which only setup in the chat does.
 # Everything goes into the per-user data folder ($TRAZO_DATA_DIR, else
-# ~/Library/Application Support/trazo; it must be an absolute path, ~ is
-# not expanded); no PATH, profile or admin change.
+# ~/Library/Application Support/trazo on macOS and
+# ${XDG_DATA_HOME:-~/.local/share}/trazo on Linux, as trazo.machine.data_dir;
+# it must be an absolute path, ~ is not expanded); no PATH, profile or
+# admin change.
 # This script only bootstraps uv (pinned below, sha256 from the release's
 # assets) and trazo's environment; `trazo setup` downloads Pandoc.
 # The setup skill runs it (plugin/skills/setup/SKILL.md).
@@ -20,18 +22,30 @@ offline=
 temporary=
 if [ "${1:-}" = --offline ]; then offline=1; shift; fi
 root=${1:-$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)}
-data=${TRAZO_DATA_DIR:-$HOME/Library/Application Support/trazo}
+system=$(uname -s)
+if [ "$system" = Darwin ]; then
+    default="$HOME/Library/Application Support/trazo"
+else
+    default="${XDG_DATA_HOME:-$HOME/.local/share}/trazo"
+fi
+data=${TRAZO_DATA_DIR:-$default}
 arch=$(uname -m)
 # Under Rosetta uname says x86_64 on Apple silicon; install arm64 tools.
-if [ "$(/usr/sbin/sysctl -n sysctl.proc_translated 2>/dev/null)" = 1 ]; then arch=arm64; fi
-case "$(uname -s) $arch" in
+if [ "$system" = Darwin ] && [ "$(/usr/sbin/sysctl -n sysctl.proc_translated 2>/dev/null)" = 1 ]; then arch=arm64; fi
+case "$system $arch" in
     "Darwin arm64")
         target=aarch64-apple-darwin
         sha256=743f85035a1996ecb350659e01cd9faea9709829be09b1b4b03c73eaf3c9cd73 ;;
     "Darwin x86_64")
         target=x86_64-apple-darwin
         sha256=b0f52b0e3945b4107d89024ea38e625683011fbfc05a0d98f9fa2d6dcee28c66 ;;
-    *) echo "setup.sh: macOS only for now (this is $(uname -s) $arch)" >&2; exit 1 ;;
+    "Linux x86_64")
+        target=x86_64-unknown-linux-gnu
+        sha256=f68d291c75783122dad58ab77def0e13f3233f358731db5d6d7e8715603b928f ;;
+    "Linux aarch64")
+        target=aarch64-unknown-linux-gnu
+        sha256=4bb69cf95ed13f23713bb7bc09f241896ea0c75b7c557e615a20604b82f9c403 ;;
+    *) echo "setup.sh: macOS and Linux (x86_64, arm64) only for now (this is $system $arch)" >&2; exit 1 ;;
 esac
 if [ ! -f "$root/packages/trazo/pyproject.toml" ]; then
     echo "setup.sh: $root is not the plugin folder (no packages/trazo)" >&2
@@ -50,13 +64,27 @@ if ! "$uv" --version 2>/dev/null | grep -q "^uv $UV_VERSION "; then
     temporary=$(mktemp -d "$data/.setup.XXXXXX")
     trap 'rm -rf "$temporary"' EXIT
     echo "Downloading $url"
-    /usr/bin/curl --fail --location --silent --show-error --output "$temporary/uv.tar.gz" "$url"
-    if [ "$(/usr/bin/shasum -a 256 "$temporary/uv.tar.gz" | cut -d ' ' -f 1)" != "$sha256" ]; then
+    # Some Linux desktops ship wget but not curl. macOS has no sha256sum
+    # before 15, Linux no shasum without Perl.
+    if [ -x /usr/bin/curl ]; then
+        /usr/bin/curl --fail --location --silent --show-error --output "$temporary/uv.tar.gz" "$url"
+    elif command -v wget >/dev/null 2>&1; then
+        wget --quiet --output-document="$temporary/uv.tar.gz" "$url"
+    else
+        echo "setup.sh: curl or wget is needed to download uv; install one with the system's package manager" >&2
+        exit 1
+    fi
+    if [ "$system" = Darwin ]; then
+        sum=$(/usr/bin/shasum -a 256 "$temporary/uv.tar.gz")
+    else
+        sum=$(sha256sum "$temporary/uv.tar.gz")
+    fi
+    if [ "${sum%% *}" != "$sha256" ]; then
         echo "setup.sh: uv-$target.tar.gz does not have the expected sha256; nothing was installed" >&2
         exit 1
     fi
     mkdir "$temporary/uv"
-    /usr/bin/tar -xzf "$temporary/uv.tar.gz" -C "$temporary/uv" --strip-components 1
+    tar -xzf "$temporary/uv.tar.gz" -C "$temporary/uv" --strip-components 1
     rm -rf "$data/uv"
     mv "$temporary/uv" "$data/uv"
 fi
@@ -84,7 +112,7 @@ run_uv() {
 # fails, so put a no-op one first on PATH for this step. xcode-select -p
 # fails on such a Mac without opening the dialog.
 saved_path=$PATH
-if ! /usr/bin/xcode-select -p >/dev/null 2>&1; then
+if [ "$system" = Darwin ] && ! /usr/bin/xcode-select -p >/dev/null 2>&1; then
     if [ -z "$temporary" ]; then
         temporary=$(mktemp -d "$data/.setup.XXXXXX")
         trap 'rm -rf "$temporary"' EXIT

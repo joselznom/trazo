@@ -7,9 +7,17 @@
 # closed", and Claude Code caches the failure past setup and the new chat.
 # Needs no PATH and writes nothing.
 root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-# Both apps share this per-user folder.
+# Both apps share this per-user folder (trazo.machine.data_dir).
 # $TRAZO_DATA_DIR must be an absolute path (no ~ expansion here).
-data=${TRAZO_DATA_DIR:-"$HOME/Library/Application Support/trazo"}
+# uname by full path, since PATH may lack it: /bin on Linux without merged /usr.
+uname=/usr/bin/uname
+[ -x "$uname" ] || uname=/bin/uname
+if [ "$("$uname" -s 2>/dev/null)" = Darwin ]; then
+    default="$HOME/Library/Application Support/trazo"
+else
+    default="${XDG_DATA_HOME:-$HOME/.local/share}/trazo"
+fi
+data=${TRAZO_DATA_DIR:-$default}
 # setup_status compares the installed trazo with this plugin's version.
 export TRAZO_PLUGIN_ROOT="$root"
 # An install without trazo/mcp.py (0.5.0 and older) has no `mcp` command.

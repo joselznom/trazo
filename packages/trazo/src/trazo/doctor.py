@@ -97,6 +97,9 @@ def check_chrome() -> list[dict[str, str]]:
         return [item("chrome", "note", f"Chrome is set to {path} ({where}), which is not found",
                      "fix browser.chrome in trazo.toml or $TRAZO_CHROME")]
     version = "" if os.name == "nt" else machine.version_line([path])
+    if not machine.chrome_starts(path, version):
+        return [item("chrome", "note", f"Chrome at {path} ({where}) {machine.CHROME_BROKEN}",
+                     machine.CHROME_BROKEN_FIX)]
     return [found("chrome", "Chrome", version, path, where)]
 
 
