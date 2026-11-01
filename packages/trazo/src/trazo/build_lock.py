@@ -1,4 +1,4 @@
-"""One build of a project at a time, across processes (fcntl.flock).
+"""One build of a project at a time, across processes (flock; on Windows, msvcrt.locking: trazo.portable).
 
 Everything that writes build records (<build>/steps.json) or build outputs
 takes the lock: `trazo build` (also --prepare; the MCP `build` tool and
@@ -47,6 +47,7 @@ from functools import wraps
 from pathlib import Path
 from typing import IO
 
+from .portable import lock, pid_alive, try_lock
 from .project import PROJECT, Project
 
 LOCK_ENV = "TRAZO_BUILD_LOCK"
@@ -86,13 +87,6 @@ def build_lock(project: Project = PROJECT,
     processes the holder starts (see the module docstring). A wait bounded by
     $TRAZO_BUILD_LOCK_WAIT that runs out raises TimeoutError."""
     wait = _bounded_wait()
-    try:
-        import fcntl
-    except ImportError:
-        # Windows has no fcntl (its lock is phase 4 work): builds there
-        # are not serialized yet, as before this lock existed.
-        yield
-        return
     path = lock_path(project) if project.found else None  # outside a project: nothing to share
     if path is None or getattr(_HELD, "path", None) == path:
         yield
@@ -101,19 +95,18 @@ def build_lock(project: Project = PROJECT,
     handle = None
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
-        # O_NOFOLLOW: the holder truncates the file; never one a symlink points to.
-        handle = os.fdopen(os.open(path, os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW, 0o644), "r+")
-        try:
-            fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except BlockingIOError:
+        # O_NOFOLLOW: the holder truncates the file; never one a symlink points to (Windows has no flag).
+        flags = os.O_RDWR | os.O_CREAT | getattr(os, "O_NOFOLLOW", 0)
+        handle = os.fdopen(os.open(path, flags, 0o644), "r+", encoding="utf-8")
+        if not try_lock(handle):
             pid = _marker_pid(path)
-            if pid is not None and _holder(path) == pid and _alive(pid):  # started by the holder
+            if pid is not None and _holder(path) == pid and pid_alive(pid):  # started by the holder
                 _HELD.path, _HELD.marker = path, os.environ[LOCK_ENV]
                 yield
                 return
             log(WAITING)
             if wait is None:
-                fcntl.flock(handle, fcntl.LOCK_EX)  # Ctrl+C interrupts it (PEP 475)
+                lock(handle)  # Ctrl+C interrupts it
             else:
                 _flock_within(handle, wait)
         handle.seek(0)
@@ -126,7 +119,7 @@ def build_lock(project: Project = PROJECT,
         for key, value in saved.items():
             setattr(_HELD, key, value)
         if handle is not None:
-            handle.close()  # closing the file releases the flock
+            handle.close()  # closing the file releases the lock
 
 
 def _bounded_wait() -> float | None:
@@ -137,16 +130,11 @@ def _bounded_wait() -> float | None:
 
 
 def _flock_within(handle: IO[str], seconds: float) -> None:
-    import fcntl
     deadline = time.monotonic() + seconds
-    while True:
-        try:
-            fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
-            return
-        except BlockingIOError:
-            if time.monotonic() >= deadline:
-                raise TimeoutError(f"another build of this project was still running after {seconds:g} s") from None
-            time.sleep(0.1)
+    while not try_lock(handle):
+        if time.monotonic() >= deadline:
+            raise TimeoutError(f"another build of this project was still running after {seconds:g} s")
+        time.sleep(0.1)
 
 
 def _marker_pid(path: Path) -> int | None:
@@ -160,16 +148,6 @@ def _holder(path: Path) -> int | None:
         return int(path.read_text(encoding="utf-8").strip())
     except (OSError, ValueError):
         return None
-
-
-def _alive(pid: int) -> bool:
-    try:
-        os.kill(pid, 0)
-    except ProcessLookupError:
-        return False
-    except PermissionError:
-        return True
-    return True
 
 
 def exclusive[**P, R](function: Callable[P, R]) -> Callable[P, R]:

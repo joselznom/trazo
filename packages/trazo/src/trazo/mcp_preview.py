@@ -4,11 +4,11 @@ closes, that is when the server exits. It binds 127.0.0.1:8765, else a
 free port, then writes <build>/preview.json (url, port, pid, project) and
 removes it when it stops; /__status names its pid and project, so a
 session reuses only a preview really serving the project, also another
-session's, and stops another session's with SIGTERM."""
+session's, and stops another session's with SIGTERM (on Windows, which
+has no SIGTERM to send, by ending its process and removing its preview.json)."""
 
 from __future__ import annotations
 
-import errno
 import functools
 import json
 import os
@@ -22,6 +22,7 @@ from typing import Any
 
 from . import preview_inputs
 from .mcp_calls import ToolError, load, project_env, trazo_argv
+from .portable import address_in_use, pid_alive
 from .preview_inputs import preview_status
 from .project import Project
 from .review_storage import write_json
@@ -113,11 +114,16 @@ class Previews:
         # signal reaches that preview. It stops on SIGTERM and removes preview.json;
         # its session starts a new one on its next preview_start.
         try:
-            os.kill(info["pid"], signal.SIGTERM)
-        except ProcessLookupError:
+            os.kill(info["pid"], signal.SIGTERM)  # Windows: TerminateProcess
+        except OSError:  # gone already
             pass
         # It stops answering first and removes preview.json last.
         deadline = time.monotonic() + START_TIMEOUT
+        if os.name == "nt":  # ended at once: nothing removes preview.json but this
+            while pid_alive(info["pid"]) and time.monotonic() < deadline:
+                time.sleep(0.1)
+            if not pid_alive(info["pid"]) and (read_info(info_path(project)) or {}).get("pid") == info["pid"]:
+                info_path(project).unlink(missing_ok=True)
         while ((self.running(project) or (read_info(info_path(project)) or {}).get("pid") == info["pid"])
                and time.monotonic() < deadline):
             time.sleep(0.1)
@@ -154,6 +160,8 @@ def restart(port: int) -> None:
     free to bind again."""
     sys.stdout.flush()
     sys.stderr.flush()
+    if os.name == "nt":  # execv starts a new process there: wait for it as this pid
+        sys.exit(subprocess.call(trazo_argv("mcp", "--serve", str(port))))
     os.execv(sys.executable, trazo_argv("mcp", "--serve", str(port)))
 
 
@@ -172,13 +180,13 @@ def serve_child(port: int) -> None:
 
     def watch_stdin():
         sys.stdin.buffer.read()
-        os.kill(os.getpid(), signal.SIGTERM)
+        signal.raise_signal(signal.SIGTERM)  # os.kill would end it at once on Windows
     threading.Thread(target=watch_stdin, daemon=True).start()
     try:
         try:
             server.serve(port, on_bind=record)
         except OSError as exc:
-            if exc.errno != errno.EADDRINUSE or not port:
+            if not address_in_use(exc) or not port:
                 raise
             server.serve(0, on_bind=record)
     finally:

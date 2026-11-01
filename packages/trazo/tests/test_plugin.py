@@ -197,11 +197,13 @@ class PluginTests(unittest.TestCase):
                 data = install(Path(tmp) / "data", "0.0.0")
                 self.assertIn(f"the plugin is {manifest['version']};",
                               run_hook(REPO, {"TRAZO_DATA_DIR": str(data)}, Path(tmp)))
+        # One command for both systems: plugin/mcp runs here, and Windows finds
+        # plugin/mcp.cmd through PATHEXT; neither needs PATH.
         for server in manifest["mcpServers"].values():
-            self.assertTrue(Path(server["command"]).is_absolute())
-            for arg in server["args"]:
-                if arg.startswith("${CLAUDE_PLUGIN_ROOT}/"):
-                    self.assertTrue((REPO / arg.removeprefix("${CLAUDE_PLUGIN_ROOT}/")).is_file(), arg)
+            self.assertEqual((server["command"], server["args"]), ("${CLAUDE_PLUGIN_ROOT}/plugin/mcp", ["--no-views"]))
+        self.assertTrue(os.access(REPO / "plugin" / "mcp", os.X_OK) or os.name == "nt")
+        self.assertTrue((REPO / "plugin" / "mcp.cmd").is_file())
+        self.assertIn(b"\r\n", (REPO / "plugin" / "mcp.cmd").read_bytes())  # cmd.exe misreads LF-only batch files
 
     def test_codex_manifest(self):
         # ChatGPT's Codex reads .codex-plugin/, which also names the install folder by version.
@@ -215,11 +217,8 @@ class PluginTests(unittest.TestCase):
         servers = json.loads((REPO / codex["mcpServers"]).read_text())["mcpServers"]
         self.assertEqual(list(servers), list(claude["mcpServers"]))
         for server in servers.values():
-            self.assertEqual((server["command"], server["cwd"]), ("/bin/sh", "."))
             # Only Claude's server turns the MCP Apps view off (trazo.mcp_app.VIEWS_ENV).
-            self.assertEqual(claude["mcpServers"]["trazo"]["args"][-1], "--no-views")
-            self.assertEqual(server["args"], [arg.replace("${CLAUDE_PLUGIN_ROOT}/", "./")
-                                              for arg in claude["mcpServers"]["trazo"]["args"][:-1]])
+            self.assertEqual((server["command"], server["args"], server["cwd"]), ("./plugin/mcp", [], "."))
         # Codex shows these in its plugin list and composer; paths are from the plugin root.
         for key in ("composerIcon", "logo", "logoDark"):
             path = codex["interface"][key]

@@ -42,7 +42,9 @@ class DataFolderTests(unittest.TestCase):
             self.assertEqual(machine.machine_path(), Path("/tmp/elsewhere/machine.json"))
 
     def test_windows_chrome_and_edge_locations(self):
-        env = {**os.environ, "ProgramFiles": "/pf", "ProgramFiles(x86)": "/pf86"}
+        # Windows variable names ignore case: drop the real ones first.
+        env = {key: value for key, value in os.environ.items() if not key.upper().startswith("PROGRAMFILES")}
+        env.update({"ProgramFiles": "/pf", "ProgramFiles(x86)": "/pf86"})
         out = subprocess.run([sys.executable, "-c", "from trazo.project import CHROME_PATHS; print('\\n'.join(CHROME_PATHS))"],
                              env=env, capture_output=True, text=True, check=True).stdout.splitlines()
         self.assertEqual(out[3:], [str(Path("/pf") / r"Google\Chrome\Application\chrome.exe"),
@@ -248,34 +250,6 @@ class PandocResolutionTests(ToolFolderCase):
             result = pandoc_run.run(["--version"], text=True, cwd=self.folder)
         self.assertEqual(result.args[0], str(self.recorded))
         self.assertEqual(result.stdout, "pandoc 3.9.0.2 (machine file)\n")
-
-
-class WithoutFcntl(unittest.TestCase):
-    """Windows has no fcntl: machine, setup --plan and review_storage's
-    non-locking helpers import and run without it (tested here by blocking it)."""
-
-    def test_machine_and_setup_plan_import_without_fcntl(self):
-        import importlib
-        names = ["trazo.review_storage", "trazo.machine", "trazo.tool_setup"]
-        with patch.dict(sys.modules, {"fcntl": None, **{name: None for name in names}}):
-            for name in names:
-                del sys.modules[name]
-            storage = importlib.import_module("trazo.review_storage")
-            importlib.import_module("trazo.machine")
-            setup = importlib.import_module("trazo.tool_setup")
-            with tempfile.TemporaryDirectory() as folder:
-                path = Path(folder) / "store.json"
-                self.assertEqual(storage.read_list(path), [])
-                storage.write_json(path, [{"id": 1}])
-                self.assertEqual(storage.read_list(path), [{"id": 1}])
-                with patch.dict(os.environ, {machine.DATA_ENV: folder}), redirect_stderr(io.StringIO()), \
-                        patch("sys.stdout", new_callable=io.StringIO) as out:
-                    self.assertEqual(setup.main(["--plan"]), 0)
-                self.assertIn(folder, out.getvalue())
-            with self.assertRaises(ImportError):  # the lock itself is POSIX-only for now
-                with storage.review_lock():
-                    pass
-        self.assertIs(sys.modules["trazo.machine"], machine)
 
 
 if __name__ == "__main__":

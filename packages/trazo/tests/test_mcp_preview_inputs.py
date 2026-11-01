@@ -67,7 +67,6 @@ def lock_taken(root):
     return False
 
 
-@unittest.skipIf(os.name == "nt", "the build lock needs fcntl (POSIX)")
 class PreviewInputsTests(unittest.TestCase):
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp(prefix="trazo-mcp-inputs-")).resolve()

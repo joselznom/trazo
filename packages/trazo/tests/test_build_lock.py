@@ -45,7 +45,6 @@ def step(name, *run, outputs=()):
     return f'[[build.steps]]\nname = "{name}"\nrun = {json.dumps(list(run))}\noutputs = {json.dumps(list(outputs))}\n'
 
 
-@unittest.skipIf(os.name == "nt", "the build lock needs fcntl (POSIX)")
 class BuildLock(unittest.TestCase):
     def setUp(self):
         self.root = Path(tempfile.mkdtemp()).resolve()
@@ -165,18 +164,6 @@ tables = [{json.dumps(sys.executable)}, "-c", "open('tables.txt', 'w').write('re
         output = self.root / "tables/output/md/cohorts.md"
         output.unlink(missing_ok=True)
         return output
-
-    def test_without_fcntl_builds_run_unlocked(self):
-        # fcntl is built into CPython, so only a None entry in sys.modules hides it.
-        code = "import runpy, sys; sys.modules['fcntl'] = None; runpy.run_module('trazo', run_name='__main__')"
-        output = self.copy_tables()
-        for argv, written in ((["run", "fast"], self.root / "fast.txt"), (["table", "render", "cohorts"], output)):
-            with self.subTest(argv):
-                result = subprocess.run([sys.executable, "-c", code, *argv], cwd=self.root, env=self.env,
-                                        capture_output=True, text=True, timeout=60)
-                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-                self.assertTrue(written.is_file())
-        self.assertEqual((self.root / "fast.txt").read_text(), "fast")
 
     def test_a_build_with_another_temp_folder_waits(self):
         # The MCP server and an agent's sandboxed shell can have different temp folders.

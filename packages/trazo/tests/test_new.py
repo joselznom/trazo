@@ -30,8 +30,9 @@ class NewTest(unittest.TestCase):
         self.assertIn('description = "A \\"quoted\\" title: C:\\\\papers 😀"',
                       (folder / "pyproject.toml").read_text(encoding="utf-8"))
         self.assertTrue((folder / "data").is_dir())
-        self.assertTrue(os.access(folder / "scripts/trazo", os.X_OK))
-        self.assertFalse(os.access(folder / "trazo.toml", os.X_OK))
+        if os.name != "nt":  # Windows has no executable bit
+            self.assertTrue(os.access(folder / "scripts/trazo", os.X_OK))
+            self.assertFalse(os.access(folder / "trazo.toml", os.X_OK))
         self.assertFalse((folder / ".git").exists())
         saved = manifest.read(folder)
         self.assertEqual(saved["template"], store.template)

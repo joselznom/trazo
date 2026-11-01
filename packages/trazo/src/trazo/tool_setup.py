@@ -96,6 +96,11 @@ CHROME_ASSETS = {
         "chrome-headless-shell-linux64.zip", 126938225,
         "77eb8d52798efc7a857ab61abcc62a456d8ea9635b02341d06dffee2761768c8",
         "chrome-headless-shell-linux64/chrome-headless-shell", 287433281),
+    # Windows has Edge, but an EEA user may remove it.
+    ("Windows", "AMD64"): Asset(
+        "chrome-headless-shell-win64.zip", 125506562,
+        "e6d26810df71efd0a3dfd0f7246d75d279ebdf8a8ec153d1ac44069657298628",
+        "chrome-headless-shell-win64/chrome-headless-shell.exe", 294930633),
 }
 QUARANTINE = "com.apple.quarantine"
 
@@ -104,18 +109,23 @@ class SetupError(Exception):
     """A download, check or unpack failed."""
 
 
-def pandoc_asset(system: str | None = None, machine_name: str | None = None) -> Asset | None:
-    """The Pandoc zip for this platform; None where trazo downloads none."""
+def platform_key(system: str | None = None, machine_name: str | None = None) -> tuple[str, str]:
+    """(platform.system(), platform.machine()) as the asset tables name them."""
     system = system or platform.system()
     machine_name = machine_name or machine.machine_name()
     if system == "Windows" and machine_name.lower() in ("amd64", "x86_64"):
         machine_name = "AMD64"
-    return PANDOC_ASSETS.get((system, machine_name))
+    return system, machine_name
+
+
+def pandoc_asset(system: str | None = None, machine_name: str | None = None) -> Asset | None:
+    """The Pandoc zip for this platform; None where trazo downloads none."""
+    return PANDOC_ASSETS.get(platform_key(system, machine_name))
 
 
 def chrome_asset(system: str | None = None, machine_name: str | None = None) -> Asset | None:
     """The Chrome zip for this platform; None where trazo downloads none."""
-    return CHROME_ASSETS.get((system or platform.system(), machine_name or machine.machine_name()))
+    return CHROME_ASSETS.get(platform_key(system, machine_name))
 
 
 def pandoc_folder() -> Path:
@@ -311,7 +321,7 @@ def plan(asset: Asset | None, existing: tuple[str, str], chrome: Asset | None, b
     if browser[0]:
         lines.append(f"Chrome: {browser[0]} ({browser[1]}); nothing to download")
     elif chrome is None:
-        lines.append(f"Chrome: trazo downloads Chrome only for macOS and Linux x64, not "
+        lines.append(f"Chrome: trazo downloads Chrome only for macOS, Linux x64 and Windows x64, not "
                      f"{platform.system()} {platform.machine()}; "
                      "install Google Chrome, Edge or Chromium for diagrams and PNG/PDF exports")
     else:

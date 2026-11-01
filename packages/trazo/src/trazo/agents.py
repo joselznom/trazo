@@ -110,19 +110,19 @@ def check_skill(source: Path, target: Path, marker: str, root: Path) -> list[str
     expected = expected_files(source, target, marker)
 
     if not target.exists():
-        return [f"missing generated skill: {os.path.relpath(target, root)}"]
+        return [f"missing generated skill: {Path(os.path.relpath(target, root)).as_posix()}"]
 
     actual_files = set(iter_files(target))
     expected_paths = set(expected)
 
     for path, data in expected.items():
         if not path.exists():
-            errors.append(f"missing file: {os.path.relpath(path, root)}")
+            errors.append(f"missing file: {Path(os.path.relpath(path, root)).as_posix()}")
         elif path.read_bytes() != data:
-            errors.append(f"out of sync: {os.path.relpath(path, root)}")
+            errors.append(f"out of sync: {Path(os.path.relpath(path, root)).as_posix()}")
 
     for extra in sorted(actual_files - expected_paths):
-        errors.append(f"unexpected file: {os.path.relpath(extra, root)}")
+        errors.append(f"unexpected file: {Path(os.path.relpath(extra, root)).as_posix()}")
 
     return errors
 
@@ -133,7 +133,7 @@ def check_stale(target_dir: Path, expected_names: set[str], root: Path) -> list[
     errors: list[str] = []
     for path in sorted(target_dir.iterdir()):
         if path.is_dir() and path.name not in expected_names and is_managed(path):
-            errors.append(f"stale generated skill: {os.path.relpath(path, root)}")
+            errors.append(f"stale generated skill: {Path(os.path.relpath(path, root)).as_posix()}")
     return errors
 
 

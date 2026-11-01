@@ -6,13 +6,13 @@ server exits."""
 from __future__ import annotations
 
 import os
-import signal
 import subprocess
 import sys
 import threading
 from pathlib import Path
 from typing import Any
 
+from . import portable
 from .project import CONFIG_NAME, ConfigError, Project
 
 
@@ -51,10 +51,7 @@ def project_env(project: Project) -> dict[str, str]:
 
 
 def kill_group(process: subprocess.Popen) -> None:
-    try:
-        os.killpg(process.pid, signal.SIGKILL)
-    except (ProcessLookupError, PermissionError):
-        pass
+    portable.kill_group(process.pid)
 
 
 class Calls:
@@ -94,7 +91,7 @@ class Calls:
                 raise ToolError("cancelled")
             process = subprocess.Popen(trazo_argv(*argv), cwd=cwd, env={**base, **(env or {})},
                                        stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                                       encoding="utf-8", errors="replace", start_new_session=True)
+                                       encoding="utf-8", errors="replace", **portable.group_options())
             self.processes[key] = process
         try:
             stdout, stderr = process.communicate()

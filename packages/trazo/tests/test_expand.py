@@ -71,6 +71,7 @@ class SubstitutionTests(unittest.TestCase):
         with self.assertRaisesRegex(expand.ValuesError, "stale"):
             expand.load_values(self.values_path)
 
+    @unittest.skipIf(os.name == "nt", "Windows has no change time: st_ctime is the creation time")
     def test_input_edited_keeping_size_and_mtime_is_still_stale(self):
         source = self.recorded_input()
         # Cache digests at once, as for an input untouched for a while.

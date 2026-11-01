@@ -1,12 +1,32 @@
 name: windows
 
+# trazo on Windows x64. test-package runs the package tests. setup-and-build
+# sets trazo up the way a user's Windows is: plugin\scripts\setup.ps1 from an
+# empty data folder whose path has a space and non-ASCII letters downloads
+# uv, Python and Pandoc, and finds the preinstalled Edge (Chrome is removed).
+# Then the MCP server starts through plugin\mcp.cmd, a paper in a folder with
+# a space and non-ASCII letters is created and previewed through it, and it
+# builds, verifies and exports its diagram with scripts\trazo.cmd and with
+# scripts/trazo in Git Bash. The desktop apps themselves are not covered.
 on:
   push:
     branches: [feat/windows-support]
+    tags: ["v*"]
+  pull_request:
+    paths:
+      - .github/workflows/windows.yml
+      - .gitattributes
+      - copier.yml
+      - packages/trazo/**
+      - plugin/**
+      - template/**
   workflow_dispatch:
 
 permissions:
   contents: read
+
+env:
+  PYTHONUTF8: "1"  # as plugin\mcp.cmd, setup.ps1 and scripts\trazo.cmd set it
 
 jobs:
   test-package:
@@ -20,7 +40,7 @@ jobs:
           persist-credentials: false
       - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
-          python-version: "3.12"
+          python-version: "3.12" # the Python setup.ps1 gives users
       - name: Pandoc and pandoc-crossref
         run: |
           . scripts/ci-versions.sh
@@ -30,6 +50,9 @@ jobs:
           curl -fsSL -o "$RUNNER_TEMP/crossref.7z" "https://github.com/lierdakil/pandoc-crossref/releases/download/${CROSSREF_VERSION}/pandoc-crossref-Windows-X64.7z"
           7z e -o"$RUNNER_TEMP/tools" "$RUNNER_TEMP/crossref.7z" pandoc-crossref.exe > /dev/null
           echo "$RUNNER_TEMP/tools" >> "$GITHUB_PATH"
+      - name: Pandoc to a pipe (diagnostic)
+        run: |
+          python -c "import subprocess; r = subprocess.run(['pandoc', '--to=docx'], input=b'# x', capture_output=True); print(r.returncode, len(r.stdout), r.stderr)"
       - name: Git identity for the test papers
         run: |
           git config --global user.email ci@example.com
@@ -45,3 +68,121 @@ jobs:
         with:
           name: tests-log
           path: ${{ runner.temp }}/tests.log
+
+  setup-and-build:
+    runs-on: windows-2025
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Hide the runner's Chrome and Pandoc
+        # Windows always has Edge; trazo setup must find it rather than
+        # download a headless Chrome, and download Pandoc.
+        run: |
+          rm -rf "/c/Program Files/Google/Chrome" "/c/Program Files (x86)/Google/Chrome"
+          for tool in pandoc chrome; do
+            if path=$(command -v "$tool"); then rm -f "$path"; fi
+          done
+          test -f "/c/Program Files (x86)/Microsoft/Edge/Application/msedge.exe"
+      - name: Set up trazo like a user (setup.ps1)
+        shell: pwsh
+        run: |
+          $data = Join-Path $env:LOCALAPPDATA "Jösé Lozano\trazo"
+          "TRAZO_DATA_DIR=$data" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
+          if (Test-Path -LiteralPath $data) { throw "the data folder exists" }
+          $env:TRAZO_DATA_DIR = $data
+          & "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -ExecutionPolicy Bypass -File plugin\scripts\setup.ps1
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: The tools came from the data folder, and Chrome is Edge
+        run: |
+          python - "$TRAZO_DATA_DIR/machine.json" <<'EOF'
+          import json, sys
+          tools = json.load(open(sys.argv[1], encoding="utf-8"))["tools"]
+          for name in ("uv", "python", "pandoc", "chrome"):
+              print(name, tools[name])
+              assert tools[name]["path"], f"{name} not found"
+          assert tools["pandoc"]["found"] == "data folder", "Pandoc was not downloaded"
+          assert tools["chrome"]["path"].endswith("msedge.exe"), "Edge was not found"
+          EOF
+      - name: A second run downloads nothing (--offline)
+        shell: pwsh
+        run: |
+          & "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -ExecutionPolicy Bypass -File plugin\scripts\setup.ps1 --offline
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Git identity for the test paper
+        run: |
+          git config --global user.email ci@example.com
+          git config --global user.name ci
+      - name: The MCP server starts through plugin\mcp.cmd and previews a paper
+        run: |
+          python - <<'EOF'
+          import json, os, subprocess, urllib.request
+          from pathlib import Path
+          paper = Path(os.environ["RUNNER_TEMP"]) / "mi artículo"
+          with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as env:
+              print(f"PAPER={paper}", file=env)  # cmd reads its script in the OEM code page
+          server = subprocess.Popen([str(Path("plugin/mcp.cmd").resolve())], stdin=subprocess.PIPE,
+                                    stdout=subprocess.PIPE, encoding="utf-8")
+          def rpc(id_, method, params=None):
+              server.stdin.write(json.dumps({"jsonrpc": "2.0", "id": id_, "method": method, "params": params or {}}) + "\n")
+              server.stdin.flush()
+              reply = json.loads(server.stdout.readline())
+              assert "error" not in reply, reply
+              return reply["result"]
+          def call(id_, name, **arguments):
+              result = rpc(id_, "tools/call", {"name": name, "arguments": arguments})
+              assert not result["isError"], result
+              return result.get("structuredContent")
+          print(rpc(1, "initialize", {"protocolVersion": "2025-06-18", "capabilities": {},
+                                      "clientInfo": {"name": "ci", "version": "0"}})["serverInfo"])
+          tools = [tool["name"] for tool in rpc(2, "tools/list")["tools"]]
+          print(tools)
+          assert "paper_create" in tools and "preview_start" in tools, "not the real server"
+          status = call(3, "setup_status")
+          assert status["next"] == "ok", status
+          print(call(4, "paper_create", folder=str(paper), kind="article", example=True, title="Ünïcode title"))
+          subprocess.run(["git", "init", "-q"], cwd=paper, check=True)
+          preview = call(5, "preview_start", project=str(paper))
+          print(preview)
+          page = urllib.request.urlopen(preview["url"], timeout=30).read().decode("utf-8")
+          assert "Introduction" in page, page[:2000]
+          print(call(6, "preview_stop", project=str(paper)))
+          assert not (paper / ".build" / "preview.json").exists()
+          server.stdin.close()
+          assert server.wait(timeout=60) == 0
+          EOF
+      - name: mcp.cmd --no-views turns the MCP Apps view off (Claude's manifest)
+        run: |
+          python -u - <<'EOF'
+          import json, subprocess
+          from pathlib import Path
+          def capabilities(*args):
+              server = subprocess.Popen([str(Path("plugin/mcp.cmd").resolve()), *args], stdin=subprocess.PIPE,
+                                        stdout=subprocess.PIPE, encoding="utf-8")
+              view = {"io.modelcontextprotocol/ui": {"mimeTypes": ["text/html;profile=mcp-app"]}}
+              server.stdin.write(json.dumps({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {
+                  "protocolVersion": "2025-06-18", "capabilities": {"extensions": view},
+                  "clientInfo": {"name": "ci", "version": "0"}}}) + "\n")
+              server.stdin.flush()
+              reply = json.loads(server.stdout.readline())["result"]["capabilities"]
+              server.stdin.close()
+              assert server.wait(timeout=60) == 0
+              return reply
+          assert "resources" in capabilities(), "the view is off without --no-views"
+          assert "resources" not in capabilities("--no-views"), "--no-views left the view on"
+          EOF
+      - name: scripts\trazo.cmd builds, verifies and exports the diagram
+        shell: cmd
+        run: |
+          cd /d "%PAPER%"
+          call scripts\trazo.cmd diagram export --all || exit /b 1
+          call scripts\trazo.cmd verify || exit /b 1
+          call scripts\trazo.cmd doctor || exit /b 1
+      - name: scripts/trazo runs in Git Bash
+        run: |
+          cd "$PAPER"
+          scripts/trazo version
+          scripts/trazo build

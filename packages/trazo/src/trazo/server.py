@@ -7,7 +7,6 @@ All static files go through the same resolver, including figure resources.
 
 from __future__ import annotations
 
-import errno
 import hashlib
 import html
 import json
@@ -20,6 +19,7 @@ from urllib.parse import parse_qs, unquote, urlparse
 from . import counts
 from .frontmatter import separate_title_page
 from .local_server import GuardedHandler, LocalServer
+from .portable import address_in_use
 from .project import ASSETS_DIR, PROJECT
 from .resources import local_file
 
@@ -250,7 +250,7 @@ def serve_from_terminal(port: int, command: str) -> None:
     try:
         serve(port)
     except OSError as exc:
-        if exc.errno != errno.EADDRINUSE:
+        if not address_in_use(exc):
             raise
         raise SystemExit(f"trazo: port {port} is already in use; stop what is using it, "
                          f"or pick another port: {command} --port N") from None
