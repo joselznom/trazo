@@ -245,4 +245,7 @@ def serve_child(port: int) -> None:
         if (read_info(path) or {}).get("pid") == os.getpid():
             path.unlink(missing_ok=True)
     if RESTART_PORT:  # Windows: restart() stopped serving to free the port
-        sys.exit(subprocess.call(trazo_argv("mcp", "--serve", str(RESTART_PORT[0]))))
+        # Named, so they are inherited: without them Windows gives the new
+        # preview no stdin (it would stop at once) and no log.
+        sys.exit(subprocess.call(trazo_argv("mcp", "--serve", str(RESTART_PORT[0])),
+                                 stdin=sys.stdin, stdout=sys.stdout, stderr=sys.stderr))
