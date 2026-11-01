@@ -34,6 +34,18 @@ def address_in_use(exc: OSError) -> bool:
     return exc.errno == errno.EADDRINUSE or getattr(exc, "winerror", None) == 10048
 
 
+def replace(source: str | os.PathLike[str], target: str | os.PathLike[str]) -> None:
+    """os.replace. Windows refuses it while another process has `target`
+    open (a reader of the same state file), so there it retries for a second."""
+    for _ in range(20 if os.name == "nt" else 0):
+        try:
+            os.replace(source, target)
+            return
+        except PermissionError:
+            time.sleep(0.05)
+    os.replace(source, target)
+
+
 def no_window() -> dict[str, Any]:
     """Popen options: no console window on Windows."""
     return {"creationflags": subprocess.CREATE_NO_WINDOW} if os.name == "nt" else {}

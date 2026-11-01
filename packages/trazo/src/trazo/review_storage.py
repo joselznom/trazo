@@ -10,7 +10,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
-from .portable import lock, unlock
+from .portable import lock, replace, unlock
 from .project import PROJECT
 
 ROOT = PROJECT.root
@@ -48,7 +48,7 @@ def write_atomic(path: Path, data: bytes, default_mode: int = 0o644) -> None:
         with os.fdopen(fd, "wb") as handle:
             handle.write(data)
         os.chmod(tmp, mode)  # mkstemp creates 0600
-        os.replace(tmp, path)
+        replace(tmp, path)
     except BaseException:
         Path(tmp).unlink(missing_ok=True)
         raise

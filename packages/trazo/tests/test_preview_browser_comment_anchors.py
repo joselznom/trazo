@@ -1,6 +1,7 @@
 """Viewer regressions in Chrome: where a comment attaches (paragraphs, quotes and their context)."""
 
 import json
+import time
 import unittest
 
 import _support  # noqa: F401  (sets TRAZO_ROOT before trazo loads)
@@ -25,7 +26,12 @@ class CommentAnchorTests(PreviewBrowserTestCase):
     def test_agent_reply_navigates_before_and_after_a_rewrite(self):
         for rewritten in (False, True, "complete"):
             with self.subTest(rewritten=rewritten):
-                preview.COMMENTS_PATH.unlink(missing_ok=True)
+                for _ in range(50):  # Windows: the server may be reading the file the page polls
+                    try:
+                        preview.COMMENTS_PATH.unlink(missing_ok=True)
+                        break
+                    except PermissionError:
+                        time.sleep(0.1)
                 comment = preview.change_comments({"op": "add", "doc": "manuscript",
                     "para": "Introduction ¶2", "section": "Introduction", "quote": "Another paragraph.",
                     "anchor": {"text": "Another paragraph.", "before": "A word, H2O.",
