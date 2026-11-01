@@ -53,6 +53,11 @@ calls; your messages carry only the plain status.
    powershell -NoProfile -ExecutionPolicy Bypass -File "<plugin.root>\plugin\scripts\setup.ps1"
    ```
 
+   When the chat's folder, or a folder the user named, holds
+   `trazo.toml`, add `--paper "<its absolute path>"` after `setup.sh` or
+   `setup.ps1`: setup then says whether that paper was made with an
+   older trazo.
+
    It downloads only what is missing and also handles updates. In the
    ChatGPT app it needs the app's approval to use the network and to
    write outside the workspace: request that approval with the command
@@ -82,6 +87,11 @@ calls; your messages carry only the plain status.
      system libraries Chrome needs. Diagrams and the PNG and PDF exports
      stay off until the user installs Google Chrome or Chromium with the
      system's package manager, which brings them; say so in plain words.
+   - A `paper: older template` line: the paper was made with an earlier
+     version of trazo. Suggest updating it in the new chat, in plain
+     words about what it brings (the latest improvements to its tools and
+     instructions; their own writing stays as it is), and leave the tool,
+     script and version names out. Update it only when they ask.
    - A `quarantine:` line other than `none` (macOS), or no Pandoc
      version: the system blocked a downloaded tool. Say so in plain words
      instead of "ready", and stop; the quarantine attribute stays as it is.

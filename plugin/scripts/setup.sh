@@ -1,12 +1,14 @@
 #!/bin/sh
 # Set trazo up for this macOS or Linux user: uv, Python 3.12, trazo and Pandoc.
 #
-#   sh plugin/scripts/setup.sh [--offline] [PLUGIN_ROOT]
+#   sh plugin/scripts/setup.sh [--offline] [--paper FOLDER] [PLUGIN_ROOT]
 #
 # PLUGIN_ROOT (the folder with packages/trazo) defaults to the one this
 # script is in. --offline (the preview's update, trazo.preview_updates)
 # downloads nothing: it exits 3 when uv, Python or Pandoc must be
-# downloaded, which only setup in the chat does.
+# downloaded, which only setup in the chat does. --paper (the chat's paper
+# folder) goes to `trazo setup`, which says when that paper's template is
+# older than the trazo just installed.
 # Everything goes into the per-user data folder ($TRAZO_DATA_DIR, else
 # ~/Library/Application Support/trazo on macOS and
 # ${XDG_DATA_HOME:-~/.local/share}/trazo on Linux, as trazo.machine.data_dir;
@@ -20,7 +22,9 @@ set -eu
 UV_VERSION=0.13.5
 offline=
 temporary=
+paper=
 if [ "${1:-}" = --offline ]; then offline=1; shift; fi
+if [ "${1:-}" = --paper ]; then paper=${2:?"setup.sh: --paper needs a folder"}; shift 2; fi
 root=${1:-$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)}
 system=$(uname -s)
 if [ "$system" = Darwin ]; then
@@ -129,4 +133,6 @@ else
     run_uv venv --quiet --allow-existing --python 3.12 "$data/venv"
 fi
 run_uv pip install --quiet --python "$data/venv/bin/python" --reinstall-package trazo "$root/packages/trazo"
-"$data/venv/bin/trazo" setup ${offline:+--offline}
+# The folder may hold spaces, so it goes through "$@" rather than ${paper:+...}.
+if [ -n "$paper" ]; then set -- --paper "$paper"; else set --; fi
+"$data/venv/bin/trazo" setup ${offline:+--offline} "$@"

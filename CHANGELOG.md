@@ -34,6 +34,8 @@ Internal changes (tests, CI, refactoring) stay out.
   `paper_update` to get them.
 - trazo is now tested on Intel Macs as well as Apple silicon: setup, the
   Word build, diagram export and the preview (#4).
+- When setup finishes in a paper's folder and that paper was made with an
+  earlier trazo, the agent suggests updating it.
 
 ### Fixed
 

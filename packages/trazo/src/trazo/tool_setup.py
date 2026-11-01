@@ -4,6 +4,9 @@
                             PATH and a headless Chrome when no Chrome, Edge or
                             Chromium is installed, then write machine.json
     trazo setup --plan   print what would be downloaded and where; change nothing
+    trazo setup --paper FOLDER
+                         also print `paper: older template ...` when FOLDER is a
+                         paper whose template is older than this trazo's
 
 The Pandoc archive (a zip, or a .tar.gz on Linux) is the official release
 asset for this platform, pinned below by version and sha256 (record 002);
@@ -39,7 +42,7 @@ from functools import partial
 from pathlib import Path
 from typing import IO, NamedTuple, cast
 
-from . import machine
+from . import machine, manifest
 
 
 class Asset(NamedTuple):
@@ -345,6 +348,25 @@ def report(data: dict) -> list[str]:
     return lines
 
 
+def paper_notice(folder: str) -> str | None:
+    """The line the setup skill turns into a suggestion to update the paper,
+    when FOLDER was made by `trazo new` with an older template than this
+    trazo's. Nothing for a folder without a manifest (not a paper, or one
+    made with Copier), whose version is unknown, or for a newer one."""
+    # Imported here: variants imports dataclasses, and a stdlib module setup
+    # did not import before would write new .pyc files into the data
+    # folder's Python, which an offline setup must leave as it is.
+    from . import variants
+    try:
+        have = manifest.read(Path(folder))["template"]
+        ship = variants.Store().template
+        if manifest.version_key(have) < manifest.version_key(ship):
+            return f"paper: older template ({have}; this trazo has {ship})"
+    except (ValueError, RuntimeError):
+        pass
+    return None
+
+
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(prog="trazo setup", description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -352,6 +374,8 @@ def main(argv=None) -> int:
     parser.add_argument("--offline", action="store_true",
                         help="download nothing: exit 3 when Pandoc must be downloaded, "
                              "and skip Chrome, which is optional (the preview's update)")
+    parser.add_argument("--paper", metavar="FOLDER",
+                        help="the chat's paper: say when its template is older than this trazo's")
     args = parser.parse_args(argv)
     asset = pandoc_asset()
     existing = existing_pandoc()
@@ -389,4 +413,6 @@ def main(argv=None) -> int:
     if not pandoc["version"]:
         print(f"trazo setup: {pandoc['path']} --version failed", file=sys.stderr)
         return 1
+    if args.paper and (notice := paper_notice(args.paper)):
+        print(notice)
     return 0
