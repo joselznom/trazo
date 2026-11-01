@@ -24,7 +24,7 @@ case "$1" in
     venv) echo "install_name_tool in venv: $(command -v install_name_tool)" >> "{log}"
           for arg; do last=$arg; done
           /bin/mkdir -p "$last/bin"
-          printf '#!/bin/sh\\necho "trazo $* ran"\\n' > "$last/bin/trazo"
+          printf '#!/bin/sh\\necho "trazo $* ran"\\nfor arg; do echo "trazo arg: $arg" >> "{log}"; done\\n' > "$last/bin/trazo"
           /bin/chmod +x "$last/bin/trazo" ;;
 esac
 """
@@ -131,6 +131,14 @@ while [ $# -gt 0 ]; do [ "$1" = --output ] && out=$2; shift; done
             self.assertRegex(tool, rf"^{re.escape(str(self.data))}/\.setup\.[^/]+/bin/install_name_tool$")
             self.assertIn("install_name_tool in venv: /usr/bin/install_name_tool", calls)  # only for Python
             self.assertEqual(sorted(p.name for p in self.data.iterdir()), ["uv", "venv"])
+
+    def test_paper_goes_to_trazo_setup_as_one_argument(self):
+        script = self.script(hashlib.sha256(self.tarball.read_bytes()).hexdigest())
+        paper = self.folder / "my paper"
+        result = self.run_script(script, "--paper", str(paper))
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual([c for c in self.calls() if c.startswith("trazo arg: ")],
+                         ["trazo arg: setup", "trazo arg: --paper", f"trazo arg: {paper}"])
 
     def test_offline_installs_trazo_only_with_uv_in_place(self):
         script = self.script(hashlib.sha256(self.tarball.read_bytes()).hexdigest())
