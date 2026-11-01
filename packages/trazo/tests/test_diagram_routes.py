@@ -4,6 +4,7 @@ import http.client
 import json
 import tempfile
 import threading
+import time
 import unittest
 from pathlib import Path
 
@@ -172,7 +173,12 @@ class HttpTests(unittest.TestCase):
             ordinary.write_text("ordinary figure")
             try:
                 self.assertEqual(self.call("/figures/external/http-probe.svg"), (200, "ordinary figure"))
-                ordinary.unlink()
+                for _ in range(50):  # Windows: the server thread may still hold the file it served
+                    try:
+                        ordinary.unlink()
+                        break
+                    except PermissionError:
+                        time.sleep(0.1)
                 ordinary.symlink_to(outside)
                 self.assertEqual(self.call("/figures/external/http-probe.svg")[0], 404)
                 directory = ordinary.parent / "http-linked"

@@ -7,7 +7,7 @@ from ..hosts import codex
 from ..registry import scenario
 
 # What the installed copy needs to run in Codex (the cache drops symlinks, so check what is really there).
-CACHED_FILES = (".codex-plugin/plugin.json", ".codex-mcp.json", "hooks/hooks.json", "plugin/mcp.sh",
+CACHED_FILES = (".codex-plugin/plugin.json", ".codex-mcp.json", "hooks/hooks.json", "plugin/mcp", "plugin/mcp.sh",
                 "plugin/session-start.sh", "plugin/scripts/setup.sh", "plugin/skills", "packages/trazo/src/trazo/skills")
 
 

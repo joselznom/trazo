@@ -1,8 +1,8 @@
 {
   "mcpServers": {
     "trazo": {
-      "command": "/bin/sh",
-      "args": ["./plugin/mcp.sh"],
+      "command": "./plugin/mcp",
+      "args": [],
       "cwd": "."
     }
   }

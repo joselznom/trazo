@@ -7,7 +7,6 @@ All static files go through the same resolver, including figure resources.
 
 from __future__ import annotations
 
-import errno
 import hashlib
 import html
 import json
@@ -20,6 +19,7 @@ from urllib.parse import parse_qs, unquote, urlparse
 from . import counts
 from .frontmatter import separate_title_page
 from .local_server import GuardedHandler, LocalServer
+from .portable import address_in_use
 from .project import ASSETS_DIR, PROJECT
 from .resources import local_file
 
@@ -215,8 +215,20 @@ class Handler(GuardedHandler):
         return None
 
 
+SERVING: list[LocalServer] = []  # the server serve() runs, for shutdown()
+STOPPING = threading.Event()  # shutdown() was called, maybe before serve() bound
+
+
+def shutdown() -> None:
+    """Make serve() return, from another thread: Windows cannot send itself
+    the SIGTERM serve otherwise stops on."""
+    STOPPING.set()
+    for server in list(SERVING):
+        server.shutdown()
+
+
 def serve(port=8765, on_bind=None):
-    """Serve until SIGTERM or Ctrl-C; on_bind(port) runs once the port is bound."""
+    """Serve until SIGTERM, Ctrl-C or shutdown(); on_bind(port) runs once the port is bound."""
     from . import diagram_editor, preview
     stop_event = threading.Event()
     def stop(signum, frame):
@@ -231,11 +243,15 @@ def serve(port=8765, on_bind=None):
         for worker in workers:
             worker.start()
         print(f"[trazo] http://127.0.0.1:{server.server_port}/", flush=True)
+        SERVING.append(server)
+        if STOPPING.is_set():  # asked before it was registered: serve_forever returns at once
+            threading.Thread(target=server.shutdown, daemon=True).start()
         try:
             server.serve_forever()
         except KeyboardInterrupt:
             pass
         finally:
+            SERVING.remove(server)
             stop_event.set()
             preview.DOCX_JOB.stop("cancelled")
             diagram_editor.shutdown()
@@ -250,7 +266,7 @@ def serve_from_terminal(port: int, command: str) -> None:
     try:
         serve(port)
     except OSError as exc:
-        if exc.errno != errno.EADDRINUSE:
+        if not address_in_use(exc):
             raise
         raise SystemExit(f"trazo: port {port} is already in use; stop what is using it, "
                          f"or pick another port: {command} --port N") from None

@@ -96,6 +96,11 @@ def iter_files(path: Path) -> list[Path]:
                   if p.is_file() and "__pycache__" not in p.parts and p.name != ".DS_Store")
 
 
+def shown(path: Path, root: Path) -> str:
+    """`path` from `root`, with / on every system."""
+    return Path(os.path.relpath(path, root)).as_posix()
+
+
 def expected_files(source: Path, target: Path, marker: str) -> dict[Path, bytes]:
     expected: dict[Path, bytes] = {}
     for src_file in iter_files(source):
@@ -110,19 +115,19 @@ def check_skill(source: Path, target: Path, marker: str, root: Path) -> list[str
     expected = expected_files(source, target, marker)
 
     if not target.exists():
-        return [f"missing generated skill: {os.path.relpath(target, root)}"]
+        return [f"missing generated skill: {shown(target, root)}"]
 
     actual_files = set(iter_files(target))
     expected_paths = set(expected)
 
     for path, data in expected.items():
         if not path.exists():
-            errors.append(f"missing file: {os.path.relpath(path, root)}")
+            errors.append(f"missing file: {shown(path, root)}")
         elif path.read_bytes() != data:
-            errors.append(f"out of sync: {os.path.relpath(path, root)}")
+            errors.append(f"out of sync: {shown(path, root)}")
 
     for extra in sorted(actual_files - expected_paths):
-        errors.append(f"unexpected file: {os.path.relpath(extra, root)}")
+        errors.append(f"unexpected file: {shown(extra, root)}")
 
     return errors
 
@@ -133,7 +138,7 @@ def check_stale(target_dir: Path, expected_names: set[str], root: Path) -> list[
     errors: list[str] = []
     for path in sorted(target_dir.iterdir()):
         if path.is_dir() and path.name not in expected_names and is_managed(path):
-            errors.append(f"stale generated skill: {os.path.relpath(path, root)}")
+            errors.append(f"stale generated skill: {shown(path, root)}")
     return errors
 
 
@@ -141,7 +146,7 @@ def copy_skill(source: Path, target: Path, marker: str) -> None:
     if target.exists():
         shutil.rmtree(target)
     shutil.copytree(source, target, ignore=shutil.ignore_patterns("__pycache__", ".DS_Store"))
-    marker_path(target).write_text(marker, encoding="utf-8")
+    marker_path(target).write_bytes(marker.encode("utf-8"))  # as check compares it, LF on Windows too
 
 
 def check(skills: dict[str, Path], project: Project) -> list[str]:

@@ -78,7 +78,7 @@ class AbbreviationTests(unittest.TestCase):
                                       input=rendered, text=True).stdout
                 found = counts.count_page(html, DEFAULTS["counts"]["exclude"])
                 self.assertEqual((found["words"], found["tables"]), (5, 0))
-                word = subprocess.run(["pandoc", "-f", "markdown", "-t", "docx"],
+                word = subprocess.run(["pandoc", "-f", "markdown", "-t", "docx", "-o", "-"],
                                       input=rendered.encode(), capture_output=True, check=True).stdout
                 with zipfile.ZipFile(io.BytesIO(docx_indexes.apply(word))) as archive:
                     document = ET.fromstring(archive.read("word/document.xml"))
@@ -128,7 +128,7 @@ class AbbreviationTests(unittest.TestCase):
                                       input=rendered, capture_output=True, text=True, check=True).stdout
                 self.assertNotIn("Abbreviations", html)
                 self.assertIn("Keep that.", html)
-                word = subprocess.run(["pandoc", "-f", "markdown", "-t", "docx"],
+                word = subprocess.run(["pandoc", "-f", "markdown", "-t", "docx", "-o", "-"],
                                       input=rendered.encode(), capture_output=True, check=True).stdout
                 with zipfile.ZipFile(io.BytesIO(word)) as archive:
                     document = ET.fromstring(archive.read("word/document.xml"))

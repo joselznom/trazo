@@ -14,7 +14,7 @@ class SourceEditTests(PreviewBrowserTestCase):
     def test_table_captions_share_gallery_controls_and_save_to_each_original_source(self):
         from trazo import table
         source = _support.ROOT / "manuscript/supplementary/99_viewer_table.md"
-        source.write_text('# Introduction\n\n| Value |\n| --- |\n| 1 |\n\n: Demo table. {#tbl:demo.caption}\n')
+        source.write_text('# Introduction\n\n| Value |\n| --- |\n| 1 |\n\n: Demo table. {#tbl:demo.caption}\n', newline="\n")
         self.addCleanup(source.unlink, missing_ok=True)
         self.keep_files(preview.FILE_HISTORY_PATH, table.HISTORY_PATH, table.output_path("cohorts"))
         cases = [("cohorts", "manuscript", table.spec_path("cohorts"), "Table title"),
@@ -54,7 +54,7 @@ class SourceEditTests(PreviewBrowserTestCase):
                               "document.querySelector('[data-view=figures]').click()")
         # A Markdown caption is edited as a title and a legend. An untitled
         # one opens as it is and offers its first sentence as the title.
-        source.write_text(source.read_text().replace(": Demo table.", ": Demo table. Legend text."))
+        source.write_text(source.read_text().replace(": Demo table.", ": Demo table. Legend text."), newline="\n")
         demo = '.pv-fcard[data-key="supplementary|tbl:demo.caption"] [data-a="edit-caption"]'
         self.wait_for(f"document.querySelector({json.dumps(demo)})")
         self.evaluate(f"document.querySelector({json.dumps(demo)}).click()")
@@ -97,7 +97,7 @@ class SourceEditTests(PreviewBrowserTestCase):
     def test_figure_caption_controls_save_original_markdown(self):
         source = _support.ROOT / "manuscript/main/99_viewer_controls.md"
         original = '# Introduction\n\nAnother paragraph.\n\n![Diagram caption.](figures/external/example.png){#fig:diagram width=100%}\n'
-        source.write_text(original)
+        source.write_text(original, newline="\n")
         self.addCleanup(source.unlink, missing_ok=True)
         history = source.parent / "viewer_history.json"
         patcher = patch.object(preview, "FILE_HISTORY_PATH", history)
@@ -146,7 +146,7 @@ class SourceEditTests(PreviewBrowserTestCase):
         self.assertIn('![Only a legend.](figures/external/example.png)', source.read_text())
         # An untitled caption opens unchanged and offers its first sentence.
         state = "document.querySelector('.pv-caption-editor .pv-tf-state').textContent"
-        source.write_text(original.replace("Diagram caption.", "Study design. (A) Panels, e.g. one."))
+        source.write_text(original.replace("Diagram caption.", "Study design. (A) Panels, e.g. one."), newline="\n")
         self.evaluate(edit)
         self.wait_for(loaded)
         self.assertEqual(self.evaluate(fields), ["", "Study design. (A) Panels, e.g. one."])
@@ -158,7 +158,7 @@ class SourceEditTests(PreviewBrowserTestCase):
         self.evaluate("window.confirm = () => true; document.querySelector('.pv-caption-editor [data-op=close]').click()")
         self.assertFalse(self.evaluate("!!document.querySelector('.pv-caption-editor')"))
         # A title wrapped in the source keeps a space between its lines.
-        source.write_text(original.replace("Diagram caption.", "[Wrapped\ntitle.]{.caption-title} Legend."))
+        source.write_text(original.replace("Diagram caption.", "[Wrapped\ntitle.]{.caption-title} Legend."), newline="\n")
         self.evaluate(edit)
         self.wait_for(loaded)
         self.assertEqual(self.evaluate(fields), ["Wrapped title.", "Legend."])
@@ -184,7 +184,7 @@ class SourceEditTests(PreviewBrowserTestCase):
             {"file": source.relative_to(_support.ROOT).as_posix(), "title": "Introduction"}]) + ';')
         for change in ("resize earlier", "insert earlier", "delete earlier", "shorten visible", "shorten first"):
             with self.subTest(change=change):
-                source.write_text(original)
+                source.write_text(original, newline="\n")
                 current_html = html.replace('<p>A <em>word</em>, H<sub>2</sub>O.</p>', '') if change == "shorten first" else html
                 page.write_text(current_html)
                 self.open()

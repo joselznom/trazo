@@ -40,6 +40,7 @@ from pathlib import Path
 from typing import Any
 
 from . import __version__
+from .portable import no_window
 from .project import CHROME_COMMANDS, CHROME_PATHS
 from .review_storage import write_json
 
@@ -116,15 +117,10 @@ def machine_name() -> str:
     return name
 
 
-def run_options() -> dict[str, Any]:
-    """No console window for subprocesses on Windows."""
-    return {"creationflags": subprocess.CREATE_NO_WINDOW} if os.name == "nt" else {}
-
-
 def version_line(command: list[str]) -> str:
     """The first line `command --version` prints, or "" when it cannot run."""
     try:
-        result = subprocess.run([*command, "--version"], capture_output=True, timeout=30, **run_options())
+        result = subprocess.run([*command, "--version"], capture_output=True, timeout=30, **no_window())
     except (OSError, subprocess.SubprocessError):
         return ""
     lines = (result.stdout or result.stderr).decode("utf-8", errors="replace").strip().splitlines()

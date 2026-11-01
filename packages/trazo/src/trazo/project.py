@@ -388,7 +388,7 @@ def build_steps(value: Any) -> list[dict[str, Any]]:
             items = raw.get(key, [])
             if not isinstance(items, list) or not all(isinstance(item, str) and item.strip() for item in items):
                 raise ConfigError(f"{CONFIG_NAME}: {where}.{key} must be a list of nonempty strings")
-            if key == "outputs" and any(Path(item).is_absolute() or ".." in Path(item).parts for item in items):
+            if key == "outputs" and any(Path(item).anchor or ".." in Path(item).parts for item in items):
                 raise ConfigError(f"{CONFIG_NAME}: {where}.{key} must stay inside the project")
             step[key] = list(items)
         if not step["run"] and not step["check"]:

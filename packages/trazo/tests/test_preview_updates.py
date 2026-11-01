@@ -26,6 +26,7 @@ echo "$*" >> "{log}"
 [ "${{FAKE_SETUP_EXIT:-0}}" = 3 ] && echo "setup.sh: offline: uv 9.9.9 must be downloaded; nothing was changed" >&2
 exit "${{FAKE_SETUP_EXIT:-0}}"
 """
+FAKE_SETUP_PS1 = 'Add-Content -LiteralPath "{log}" -Value ($args -join " ")\nexit 0\n'
 
 
 @unittest.skipIf(os.name == "nt", "the fake setup.sh is a shell script")
@@ -153,9 +154,9 @@ class UpdateNoticeTests(unittest.TestCase):
             preview_updates.apply(project)
 
 
-@unittest.skipIf(os.name == "nt", "the fake setup.sh is a shell script")
 class RestartTests(unittest.TestCase):
-    """The preview restarts in place after trazo was reinstalled."""
+    """The preview restarts in place after trazo was reinstalled; on Windows,
+    which has no exec, as a new process on the same port."""
 
     def test_the_preview_restarts_in_place(self):
         tmp = Path(tempfile.mkdtemp(prefix="trazo-mcp-")).resolve()
@@ -164,9 +165,10 @@ class RestartTests(unittest.TestCase):
         plugin = tmp / "plugin"
         (plugin / ".claude-plugin").mkdir(parents=True)
         (plugin / ".claude-plugin" / "plugin.json").write_text('{"name": "trazo", "version": "99.0.0"}')
-        script = plugin / preview_updates.SETUP_SCRIPT
+        windows = os.name == "nt"
+        script = plugin / (preview_updates.SETUP_SCRIPT_WINDOWS if windows else preview_updates.SETUP_SCRIPT)
         script.parent.mkdir(parents=True)
-        script.write_text(FAKE_SETUP.format(log=tmp / "setup.log"))
+        script.write_text((FAKE_SETUP_PS1 if windows else FAKE_SETUP).format(log=tmp / "setup.log"))
         (tmp / "data").mkdir()
         (tmp / "data" / "venv").symlink_to(sys.prefix)
         port = free_port()
@@ -184,12 +186,19 @@ class RestartTests(unittest.TestCase):
         log = project / ".build" / "preview.log"
         bound = f"[trazo] http://127.0.0.1:{info['port']}/"
         self.assertTrue(wait_until(lambda: log.read_text().count(bound) == 2, 30), log.read_text())
-        self.assertTrue(wait_until(lambda: json.loads((project / ".build" / "preview.json").read_text()) == {
-            "url": info["url"], "port": info["port"], "pid": info["pid"], "project": str(project)}))
+        def recorded():
+            try:
+                return json.loads((project / ".build" / "preview.json").read_text())
+            except (OSError, ValueError):  # Windows: between the old preview and the new one
+                return {}
+        same = {key: info[key] for key in ("url", "port", "id", "project")}
+        self.assertTrue(wait_until(lambda: {key: recorded().get(key) for key in same} == same
+                                   and (recorded().get("pid") != info["pid"]) == windows))
+        pid = recorded()["pid"]
         again = session.tool("preview_start", project=str(project))["structuredContent"]
-        self.assertEqual((again["pid"], again["reused"]), (info["pid"], True))
+        self.assertEqual((again["pid"], again["reused"]), (pid, True))
         stop = session.tool("preview_stop", project=str(project))["structuredContent"]
-        self.assertEqual(stop, {"stopped": True, "pid": info["pid"], "started_here": True})
+        self.assertEqual(stop, {"stopped": True, "pid": pid, "started_here": True})
 
 
 if __name__ == "__main__":

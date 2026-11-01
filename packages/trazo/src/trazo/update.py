@@ -131,7 +131,7 @@ def _skill_copies(project: Project | None, folder: Path, report: UpdateReport) -
         report.notes.append(f"regenerated the skill copies in {targets}, as `trazo agents` does")
     for dropped in agents.dropped_targets(project):
         if dropped.is_dir() and any(agents.is_managed(path) for path in dropped.iterdir()):
-            report.notes.append(f"{os.path.relpath(dropped, folder)} is not among [paths] skill_targets, so its "
+            report.notes.append(f"{Path(os.path.relpath(dropped, folder)).as_posix()} is not among [paths] skill_targets, so its "
                                 "skill copies were not updated; delete it if no agent reads it")
 
 

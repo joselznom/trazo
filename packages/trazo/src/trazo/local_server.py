@@ -13,6 +13,7 @@
 """
 
 import json
+import os
 import socketserver
 import sys
 from collections.abc import Callable
@@ -72,6 +73,9 @@ class LocalServer(ThreadingHTTPServer):
     """
 
     request_queue_size = 128
+    # On Windows SO_REUSEADDR lets a second server bind a port one already
+    # listens on, so a busy 8765 would not fail over to a free port.
+    allow_reuse_address = os.name != "nt"
 
     def server_bind(self) -> None:
         # HTTPServer.server_bind names the server with socket.getfqdn, a reverse

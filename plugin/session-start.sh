@@ -8,7 +8,10 @@
 # a non-empty machine.json, which `trazo setup` writes last.
 # trazo.machine.installed_version follows the same rule; setup_status is
 # stricter (it also wants uv and Pandoc), this hook checks install and
-# version only. macOS and Linux, like plugin/scripts/setup.sh.
+# version only. macOS and Linux, like plugin/scripts/setup.sh. On Windows
+# it exits at once in Git Bash and fails quietly in PowerShell, where
+# /bin/sh does not exist; there the MCP stand-in (plugin/mcp-standin.ps1)
+# tells the agent instead.
 # $TRAZO_DATA_DIR must be an absolute path (no ~ expansion here).
 case $(uname -s 2>/dev/null) in
     Darwin) default="$HOME/Library/Application Support/trazo" ;;

@@ -18,13 +18,19 @@ import json, os, sys, time
 from pathlib import Path
 
 Path(__file__).with_suffix('.started').touch()
+IN, OUT = 3, 4
+if os.name == 'nt':
+    import msvcrt
+    pipes = next(arg for arg in sys.argv if arg.startswith('--remote-debugging-io-pipes='))
+    IN, OUT = (msvcrt.open_osfhandle(int(handle), flags)
+               for handle, flags in zip(pipes.partition('=')[2].split(','), (os.O_RDONLY, os.O_WRONLY)))
 if MODE == 'startup-error':
     sys.stderr.write('x' * 100000 + '\nprofile could not be opened\n')
     sys.stderr.flush()
     sys.exit(23)
 pending = b''
 while True:
-    chunk = os.read(3, 65536)
+    chunk = os.read(IN, 65536)
     if not chunk:
         break
     pending += chunk
@@ -45,7 +51,7 @@ while True:
         elif method == 'Target.closeTarget' and MODE == 'render-error':
             sys.stderr.write('cleanup failed\n')
             sys.exit(7)
-        os.write(4, json.dumps({'id': request['id'], 'result': result}).encode() + b'\0')
+        os.write(OUT, json.dumps({'id': request['id'], 'result': result}).encode() + b'\0')
         if method == 'Browser.close':
             if MODE == 'hang-close':
                 time.sleep(600)
@@ -60,14 +66,17 @@ class BrowserTests(unittest.TestCase):
         self.root = Path(folder.name)
 
     def peer(self, mode):
+        """Run the peer script as Chrome: Python, with the script as Chrome's
+        first flag (a shebang breaks on a path with spaces, and Windows has none)."""
         path = self.root / "peer"
-        path.write_text(f"#!{sys.executable}\nMODE = {mode!r}\n" + PEER)
-        path.chmod(0o755)
-        patcher = patch.object(browser, "CHROME", str(path))
-        patcher.start()
-        self.addCleanup(patcher.stop)
+        path.write_text(f"MODE = {mode!r}\n" + PEER)
+        for name, value in (("CHROME", sys.executable), ("chrome_flags", lambda: [str(path)])):
+            patcher = patch.object(browser, name, value)
+            patcher.start()
+            self.addCleanup(patcher.stop)
         return path
 
+    @unittest.skipIf(os.name == "nt", "counts the descriptors in /dev/fd")
     def test_failed_launch_releases_profile_and_pipe_descriptors(self):
         executable = self.root / "not-executable"
         executable.touch()

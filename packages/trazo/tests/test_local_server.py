@@ -43,6 +43,21 @@ class BindTests(unittest.TestCase):
         self.assertNotEqual(server.server_port, 0)
 
 
+class ShutdownTests(unittest.TestCase):
+    def test_a_shutdown_before_serve_binds_still_stops_it(self):
+        # Windows stops a preview with server.shutdown(); during a restart that
+        # can come before the new preview has registered its server.
+        from trazo import server
+        self.addCleanup(lambda: getattr(server, "STOPPING", threading.Event()).clear())
+        server.shutdown()
+        late = threading.Timer(20, server.shutdown)  # a lost request: stop it anyway, and fail
+        late.start()
+        self.addCleanup(late.cancel)
+        with contextlib.redirect_stdout(io.StringIO()):
+            server.serve(0)
+        self.assertTrue(late.is_alive(), "serve() ran until the second shutdown")
+
+
 class ErrorReportTests(unittest.TestCase):
     def test_a_client_that_leaves_mid_reply_is_not_reported(self):
         for failure in (BrokenPipeError(32, "Broken pipe"), ConnectionResetError(54, "Connection reset by peer")):

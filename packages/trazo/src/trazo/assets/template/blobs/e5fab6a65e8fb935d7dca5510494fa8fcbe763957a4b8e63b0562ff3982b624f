@@ -6,24 +6,33 @@
 # an update of the plugin (then its setup) the install.
 #   TRAZO_DEV=../trazo/packages/trazo  run a local checkout
 #   TRAZO_DATA_DIR=...  the per-user folder (default as trazo.machine.data_dir:
-#     ~/Library/Application Support/trazo on macOS, else
-#     ${XDG_DATA_HOME:-~/.local/share}/trazo; Windows comes in phase 4)
+#     ~/Library/Application Support/trazo on macOS, %LOCALAPPDATA%\trazo on
+#     Windows, else ${XDG_DATA_HOME:-~/.local/share}/trazo)
 # uv (TRAZO_DEV runs it): on PATH, else the one setup unpacked into
 # <data folder>/uv/, with its Python and cache kept in the data folder
 # (trazo.machine.uv_environment).
+# On Windows this runs in Git Bash; PowerShell and cmd run scripts/trazo.cmd.
 set -e
 root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+bin=bin exe= site=lib/python*/site-packages
+case $(uname -s) in
+    MINGW*|MSYS*|CYGWIN*)
+        bin=Scripts exe=.exe site=Lib/site-packages
+        # trazo reads and writes UTF-8 everywhere, as on macOS (Python's UTF-8 mode).
+        export PYTHONUTF8=1 ;;
+esac
 if [ -n "${TRAZO_DATA_DIR:-}" ]; then
     data=$TRAZO_DATA_DIR
 else
     case $(uname -s) in
         Darwin) data="$HOME/Library/Application Support/trazo" ;;
+        MINGW*|MSYS*|CYGWIN*) data="$(cygpath -u "$LOCALAPPDATA")/trazo" ;;
         *) data="${XDG_DATA_HOME:-$HOME/.local/share}/trazo" ;;
     esac
 fi
 uv=uv
-if ! command -v uv >/dev/null 2>&1 && [ -x "$data/uv/uv" ]; then
-    uv="$data/uv/uv"
+if ! command -v uv >/dev/null 2>&1 && [ -x "$data/uv/uv$exe" ]; then
+    uv="$data/uv/uv$exe"
     export TRAZO_DATA_DIR="$data" UV_CACHE_DIR="$data/cache" UV_PYTHON_INSTALL_DIR="$data/python" \
         UV_PYTHON_BIN_DIR="$data/bin" UV_TOOL_DIR="$data/tools" UV_TOOL_BIN_DIR="$data/bin" UV_MANAGED_PYTHON=1
 fi
@@ -42,7 +51,7 @@ if [ -z "$version" ]; then
     echo "scripts/trazo: trazo.toml has no version" >&2
     exit 2
 fi
-installed="$data/venv/bin/trazo"
+installed="$data/venv/$bin/trazo$exe"
 if [ ! -x "$installed" ]; then
     echo "scripts/trazo: trazo is not set up on this computer: set it up (the plugin's setup skill)" >&2
     exit 127
@@ -51,7 +60,7 @@ fi
 # plugin/session-start.sh reads it: asking it would stop at an error in
 # trazo.toml, which the command itself reports.
 have=
-for info in "$data"/venv/lib/python*/site-packages/trazo-*.dist-info; do
+for info in "$data"/venv/$site/trazo-*.dist-info; do
     [ -d "$info" ] || continue
     [ -z "$have" ] || { have=; break; }  # more than one: a broken install
     have=${info##*/trazo-}
@@ -61,4 +70,6 @@ if [ "$have" != "${version#v}" ]; then
     shown=${have:+trazo $have}
     echo "scripts/trazo: this paper pins trazo $version, but ${shown:-another trazo} is set up here: update the older one (the paper with the plugin's paper_update, or the plugin and its setup)" >&2
 fi
+# Windows: python.exe -m trazo, since setup cannot replace a running trazo.exe.
+if [ -n "$exe" ]; then exec "$data/venv/Scripts/python.exe" -P -m trazo "$@"; fi
 exec "$installed" "$@"

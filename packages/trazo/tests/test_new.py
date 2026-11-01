@@ -30,8 +30,9 @@ class NewTest(unittest.TestCase):
         self.assertIn('description = "A \\"quoted\\" title: C:\\\\papers 😀"',
                       (folder / "pyproject.toml").read_text(encoding="utf-8"))
         self.assertTrue((folder / "data").is_dir())
-        self.assertTrue(os.access(folder / "scripts/trazo", os.X_OK))
-        self.assertFalse(os.access(folder / "trazo.toml", os.X_OK))
+        if os.name != "nt":  # Windows has no executable bit
+            self.assertTrue(os.access(folder / "scripts/trazo", os.X_OK))
+            self.assertFalse(os.access(folder / "trazo.toml", os.X_OK))
         self.assertFalse((folder / ".git").exists())
         saved = manifest.read(folder)
         self.assertEqual(saved["template"], store.template)
@@ -79,6 +80,7 @@ class NewTest(unittest.TestCase):
             new.paper_create(self.root / "outer" / "notes" / "inner", kind="article", example=False, title="T")
         self.assertFalse((self.root / "outer" / "notes" / "inner").exists())
 
+    @unittest.skipIf(os.name == "nt", "Windows has no executable bits")
     def test_executables_get_all_three_x_bits(self):
         path = self.root / "tool"
         path.write_text("#!/bin/sh\n")
