@@ -1,6 +1,7 @@
 """trazo setup's unpacking of the Pandoc and Chrome archives: zips and,
 for Pandoc on Linux, tarballs, and nothing written outside the folder."""
 
+import gzip
 import io
 import shutil
 import stat
@@ -76,6 +77,19 @@ class UnpackTests(unittest.TestCase):
         self.assertFalse((self.data / "evil").exists())
         self.assertFalse((self.data.parent / "evil").exists())
 
+
+
+    def test_a_cut_tarball_is_a_setup_error(self):
+        # A member cut short inside a valid gzip fails while its data is read, not its header.
+        whole = io.BytesIO()
+        with tarfile.open(fileobj=whole, mode="w") as tarred:
+            info = tarfile.TarInfo("a/file")
+            info.size = 4096
+            tarred.addfile(info, io.BytesIO(b"x" * 4096))
+        archive = self.folder / "short.tar.gz"
+        archive.write_bytes(gzip.compress(whole.getvalue()[:1024]))
+        with self.assertRaises(tool_setup.SetupError):
+            tool_setup.unpack(archive, self.data / "short")
 
 
 if __name__ == "__main__":
