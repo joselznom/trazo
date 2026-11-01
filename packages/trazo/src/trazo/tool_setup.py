@@ -188,7 +188,7 @@ def download(url: str, target: Path, asset: Asset) -> None:
 def members(archive: Path) -> Iterator[tuple[str, int, str | Callable[[], IO[bytes]] | None]]:
     """(name, Unix mode, content) for each entry of a zip or a .tar.gz:
     content is None for a folder, the target for a link and an opener for
-    a file (also for a zip's link on Windows, written as a file). Other tar
+    a file. Other tar
     entries (hard links, devices) are refused: Pandoc's tarballs have none."""
     if archive.name.endswith(".tar.gz"):
         import tarfile  # see unpack
@@ -207,7 +207,7 @@ def members(archive: Path) -> Iterator[tuple[str, int, str | Callable[[], IO[byt
             mode = member.external_attr >> 16
             if member.is_dir():
                 yield member.filename, mode, None
-            elif stat.S_ISLNK(mode) and os.name != "nt":
+            elif stat.S_ISLNK(mode):
                 yield member.filename, mode, zipped.read(member).decode("utf-8")
             else:
                 yield member.filename, mode, partial(zipped.open, member)
@@ -237,7 +237,10 @@ def unpack(archive: Path, folder: Path) -> None:
             if isinstance(content, str):
                 if os.path.isabs(content) or ".." in Path(content).parts:
                     raise SetupError(f"{archive.name}: link {name} points outside {folder}")
-                target.symlink_to(content)
+                if os.name == "nt":  # a link needs a privilege there: its target becomes the file's text
+                    target.write_text(content, encoding="utf-8")
+                else:
+                    target.symlink_to(content)
                 continue
             with content() as source, open(target, "wb") as out:
                 shutil.copyfileobj(source, out)
