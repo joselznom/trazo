@@ -168,7 +168,8 @@ figures, tables and a journal's format.
 - **Does it work on Windows or Linux?** Linux, yes: in Claude Code or
   Codex in a terminal, on x64 or ARM. On ARM Linux, setup downloads no
   Chrome: install Chromium with your system's package manager for
-  diagrams and PNG and PDF exports. Windows, not yet.
+  diagrams and PNG and PDF exports. Windows, not yet. On macOS it runs
+  on Apple silicon and Intel Macs.
 - **How do I uninstall it?** Remove the plugin from the app; your papers
   stay as they are.
   - Claude app: **+** next to the prompt box › **Plugins**, select

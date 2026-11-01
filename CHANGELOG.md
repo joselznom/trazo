@@ -25,6 +25,8 @@ Internal changes (tests, CI, refactoring) stay out.
   (`$XDG_DATA_HOME/trazo` when that is set), and a headless Chrome on x64
   when no Chrome, Edge or Chromium is installed. The session hook and the
   MCP server's launcher now find a Linux install too (#5).
+- trazo is now tested on Intel Macs as well as Apple silicon: setup, the
+  Word build, diagram export and the preview (#4).
 
 ### Fixed
 

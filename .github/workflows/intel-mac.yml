@@ -1,0 +1,112 @@
+name: intel-mac
+
+# trazo on an Intel Mac, set up the way a user's Mac is: plugin/scripts/setup.sh
+# from an empty data folder downloads uv, Python, Pandoc and, with no Chrome
+# installed, the x64 headless Chrome. Then the package tests, the example
+# paper's verify (build and diagram export) and a preview request run on
+# those tools. The desktop apps and Gatekeeper are not covered: a runner
+# never quarantines downloads.
+on:
+  pull_request:
+    paths:
+      - .github/workflows/intel-mac.yml
+      - copier.yml
+      - packages/trazo/pyproject.toml
+      - packages/trazo/src/**
+      - packages/trazo/uv.lock
+      - plugin/scripts/**
+      - template/**
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: intel-mac-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  setup-and-build:
+    strategy:
+      fail-fast: false
+      matrix:
+        # GitHub's standard x64 macOS runners; macOS 26 is the last for Intel.
+        os: [macos-15-intel, macos-26-intel]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Hide the runner's browsers and Pandoc
+        # trazo setup uses an installed Chrome, Edge, Chromium or Pandoc
+        # instead of downloading one; remove them so the x64 downloads run.
+        # The next step fails if one is left.
+        run: |
+          sudo rm -rf "/Applications/Google Chrome.app" "/Applications/Chromium.app" "/Applications/Microsoft Edge.app"
+          for tool in pandoc google-chrome chromium chrome; do
+            if path=$(command -v "$tool"); then sudo rm -f "$path"; fi
+          done
+      - name: Set up trazo like a user (setup.sh)
+        # The default data folder, as for users: its path has a space.
+        run: |
+          data="$HOME/Library/Application Support/trazo"
+          test ! -e "$data"
+          echo "DATA=$data" >> "$GITHUB_ENV"
+          sh plugin/scripts/setup.sh
+      - name: The tools are x64 and came from the data folder
+        run: |
+          python3 - "$DATA/machine.json" <<'EOF'
+          import json, os, subprocess, sys
+          tools = json.load(open(sys.argv[1]))["tools"]
+          for name, entry in tools.items():
+              kind = subprocess.run(["file", "-bL", entry["path"]], capture_output=True, text=True).stdout.strip()
+              print(name, entry, kind)
+              assert entry["found"] == "data folder" and "x86_64" in kind, name
+          with open(os.environ["GITHUB_ENV"], "a") as env:
+              print(f"PANDOC_DIR={os.path.dirname(tools['pandoc']['path'])}", file=env)
+              print(f"CHROME_PATH={tools['chrome']['path']}", file=env)
+          EOF
+      - name: pandoc-crossref for the tests' oracle
+        run: |
+          . scripts/ci-versions.sh
+          mkdir -p "$RUNNER_TEMP/crossref"
+          curl -fsSL "https://github.com/lierdakil/pandoc-crossref/releases/download/${CROSSREF_VERSION}/pandoc-crossref-macOS-X64.tar.xz" \
+            | tar -xJ -C "$RUNNER_TEMP/crossref"
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          python-version: "3.12" # the Python setup.sh gives users
+      - name: Git identity for the test papers
+        run: |
+          git config --global user.email ci@example.com
+          git config --global user.name ci
+      # Pandoc and Chrome named for the tests only, since some use an empty data
+      # folder; the paper below finds them the way a user's Mac does.
+      - name: Package tests
+        run: PATH="$PANDOC_DIR:$RUNNER_TEMP/crossref:$PATH" TRAZO_CHROME="$CHROME_PATH" make test-package
+      - name: The example paper builds and verifies with the installed trazo
+        if: ${{ !cancelled() }}
+        run: |
+          paper="$RUNNER_TEMP/paper"
+          "$DATA/venv/bin/trazo" new "$paper"
+          cd "$paper"
+          git init -q && git add -A && git commit -qm init
+          scripts/trazo diagram export --all  # verify exports only stale diagrams
+          scripts/trazo verify
+          scripts/trazo doctor
+      - name: The preview serves the built paper
+        if: ${{ !cancelled() }}
+        run: |
+          cd "$RUNNER_TEMP/paper"
+          scripts/trazo preview serve --port 8765 > "$RUNNER_TEMP/preview.log" 2>&1 &
+          server=$!
+          built() {
+            curl -fsS http://127.0.0.1:8765/__status > "$RUNNER_TEMP/status.json" 2>/dev/null &&
+              python3 -c 'import json, sys; d = json.load(open(sys.argv[1])); sys.exit(not all(d[k]["ok"] for k in ("manuscript", "supplementary")))' "$RUNNER_TEMP/status.json"
+          }
+          for _ in $(seq 120); do built && break; sleep 1; done
+          cat "$RUNNER_TEMP/preview.log" "$RUNNER_TEMP/status.json"
+          built
+          curl -fsSL http://127.0.0.1:8765/ | grep -q Introduction
+          kill "$server"
