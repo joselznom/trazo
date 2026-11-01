@@ -5,23 +5,34 @@ How the Claude Code and Codex plugin works. The install steps are in the [README
 The repository root is also a Claude Code plugin (`.claude-plugin/`) and
 a Codex plugin for the ChatGPT app (`.codex-plugin/`, `.codex-mcp.json`): the
 trazo skills, the `setup`, `open` and `close` skills and an MCP server
-(`trazo mcp`, started by `plugin/mcp.sh`) with the tools `setup_status`,
+(`trazo mcp`) with the tools `setup_status`,
 `doctor`, `build`, `check`, `paper_create`, `paper_update`, `preview_start`
 and `preview_stop`. Before setup, the
 server also runs from a clone's development venv: run `make test-package`
 (or `cd packages/trazo && uv sync`) once to create it.
+
+Both manifests start the server with one command, `plugin/mcp`, so the
+same plugin works everywhere: on macOS and Linux that file runs
+`plugin/mcp.sh`; on Windows a file without an extension cannot run, so
+both apps look the name up through `PATHEXT` and run `plugin/mcp.cmd`.
+Setup is `plugin/scripts/setup.sh` on macOS and Linux and
+`plugin/scripts/setup.ps1` (Windows PowerShell 5.1) on Windows; both
+install into the per-user data folder only.
 
 A `SessionStart` hook (`hooks/hooks.json`, `plugin/session-start.sh`;
 new sessions, `/clear` and compaction, not resume or fork) checks offline,
 on macOS and Linux, whether setup is done and the installed trazo is the plugin's
 version. If not, it gives the agent a factual note (not shown to the user)
 that the trazo tools need the setup skill, so the agent can bring it up
-when the user asks for paper work.
+when the user asks for paper work. On Windows the hook does nothing (or
+fails quietly where no Git Bash runs it); the stand-in server below tells
+the agent instead.
 
 `claude plugin validate .` checks both manifests (it warns that the root
 `CLAUDE.md` is not loaded by plugins). Without the per-user install or
-the clone's venv, or when neither provides the MCP server, `plugin/mcp.sh`
-starts a stand-in server (`plugin/mcp-standin.pl`, run by the system Perl)
+the clone's venv, or when neither provides the MCP server, the launcher
+starts a stand-in server (`plugin/mcp-standin.pl`, run by the system Perl
+on macOS; `plugin/mcp-standin.ps1`, run by Windows PowerShell, on Windows)
 whose only tool, `setup_status`, tells the agent to run the setup skill.
 The app connects to it, so a new chat after setup gets the real server.
 

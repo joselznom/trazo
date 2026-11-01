@@ -41,10 +41,16 @@ calls; your messages carry only the plain status.
 
 3. Run, with `plugin.root` from step 1 (if it is empty, the folder three
    levels above this skill's folder), as it is: no pipe such as
-   `| tail`, which hides its exit status:
+   `| tail`, which hides its exit status. On macOS and Linux:
 
    ```bash
    sh "<plugin.root>/plugin/scripts/setup.sh"
+   ```
+
+   On Windows (x64 only), from PowerShell, cmd or Git Bash alike:
+
+   ```
+   powershell -NoProfile -ExecutionPolicy Bypass -File "<plugin.root>\plugin\scripts\setup.ps1"
    ```
 
    It downloads only what is missing and also handles updates. In the
@@ -66,7 +72,7 @@ calls; your messages carry only the plain status.
      the tools. Tell the user that, in Claude Code, `/mcp`, then trazo,
      then Reconnect loads them at once.
    - A Chrome line (still no Chrome, Edge or Chromium found): setup
-     downloads one on a Mac or an x64 Linux computer that has none, so
+     downloads one on a Mac, a Windows PC or an x64 Linux computer that has none, so
      this means the download failed (its error is just above; explain it
      as in step 4) or the computer is an ARM Linux one, where the user
      installs Chromium with the system's package manager. Diagrams and the
@@ -88,6 +94,7 @@ trazo itself from the plugin's files. When the computer has no Chrome,
 Edge or Chromium, also a headless Chrome from Chrome for Testing (about
 110 MB), used only for diagrams and PNG and PDF exports; an installed
 browser is never replaced. Everything goes into one folder,
-`~/Library/Application Support/trazo` on a Mac, `~/.local/share/trazo` on
-Linux (about 280 MB, about 500 MB with Chrome); no admin password and no
-other change to the computer. Deleting that folder undoes it.
+`~/Library/Application Support/trazo` on a Mac, `%LOCALAPPDATA%\trazo` on
+Windows, `~/.local/share/trazo` on Linux (about 280 MB, about 500 MB with
+Chrome); no admin password and no other change to the computer. Deleting
+that folder undoes it.
