@@ -30,7 +30,6 @@ import shutil
 import stat
 import subprocess
 import sys
-import tarfile
 import tempfile
 import time
 import urllib.request
@@ -182,15 +181,21 @@ def members(archive: Path) -> Iterator[tuple[str, int, str | Callable[[], IO[byt
     a file (also for a zip's link on Windows, written as a file). Other tar
     entries (hard links, devices) are refused: Pandoc's tarballs have none."""
     if archive.name.endswith(".tar.gz"):
-        with tarfile.open(archive, "r:gz") as tarred:
-            for entry in tarred:
-                if entry.isdir() or entry.issym():
-                    yield entry.name, entry.mode, entry.linkname if entry.issym() else None
-                elif entry.isfile():
-                    # extractfile returns None only for what is not a file.
-                    yield entry.name, entry.mode, cast(Callable[[], IO[bytes]], partial(tarred.extractfile, entry))
-                else:
-                    raise SetupError(f"{archive.name}: {entry.name} is not a file, folder or link")
+        # Imported here: only Linux's Pandoc is a tarball, and an import writes
+        # tarfile's .pyc into the Python setup installed, which must stay as it is.
+        import tarfile
+        try:
+            with tarfile.open(archive, "r:gz") as tarred:
+                for entry in tarred:
+                    if entry.isdir() or entry.issym():
+                        yield entry.name, entry.mode, entry.linkname if entry.issym() else None
+                    elif entry.isfile():
+                        # extractfile returns None only for what is not a file.
+                        yield entry.name, entry.mode, cast(Callable[[], IO[bytes]], partial(tarred.extractfile, entry))
+                    else:
+                        raise SetupError(f"{archive.name}: {entry.name} is not a file, folder or link")
+        except tarfile.TarError as exc:
+            raise SetupError(f"{archive.name}: {exc}") from exc
         return
     with zipfile.ZipFile(archive) as zipped:
         for member in zipped.infolist():
@@ -209,26 +214,23 @@ def unpack(archive: Path, folder: Path) -> None:
     Pandoc's links are bare names, and such a link cannot be redirected
     outside the folder by a later one."""
     root = folder.resolve()
-    try:
-        for name, mode, content in members(archive):
-            target = (folder / name).resolve()
-            if not target.is_relative_to(root):
-                raise SetupError(f"{archive.name}: {name} would be written outside {folder}")
-            if content is None:
-                target.mkdir(parents=True, exist_ok=True)
-                continue
-            target.parent.mkdir(parents=True, exist_ok=True)
-            if isinstance(content, str):
-                if os.path.isabs(content) or ".." in Path(content).parts:
-                    raise SetupError(f"{archive.name}: link {name} points outside {folder}")
-                target.symlink_to(content)
-                continue
-            with content() as source, open(target, "wb") as out:
-                shutil.copyfileobj(source, out)
-            if mode & 0o777 and os.name != "nt":
-                target.chmod(mode & 0o755)
-    except tarfile.TarError as exc:
-        raise SetupError(f"{archive.name}: {exc}") from exc
+    for name, mode, content in members(archive):
+        target = (folder / name).resolve()
+        if not target.is_relative_to(root):
+            raise SetupError(f"{archive.name}: {name} would be written outside {folder}")
+        if content is None:
+            target.mkdir(parents=True, exist_ok=True)
+            continue
+        target.parent.mkdir(parents=True, exist_ok=True)
+        if isinstance(content, str):
+            if os.path.isabs(content) or ".." in Path(content).parts:
+                raise SetupError(f"{archive.name}: link {name} points outside {folder}")
+            target.symlink_to(content)
+            continue
+        with content() as source, open(target, "wb") as out:
+            shutil.copyfileobj(source, out)
+        if mode & 0o777 and os.name != "nt":
+            target.chmod(mode & 0o755)
 
 
 def quarantine(path: Path) -> str | None:
