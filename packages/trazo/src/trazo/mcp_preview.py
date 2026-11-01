@@ -170,6 +170,7 @@ class Previews:
 
 PREVIEW_ID_ENV = "TRAZO_PREVIEW_ID"
 RESTART_PORT: list[int] = []  # Windows: the port restart() hands to the next preview
+STDIN_CLOSED = threading.Event()  # set by serve_child's watch_stdin
 
 
 def started_by(child: subprocess.Popen, info: dict[str, Any]) -> bool:
@@ -195,8 +196,8 @@ def restart(port: int) -> None:
     the same pid, so preview.json and the MCP server's Previews stay right, and
     the same stdin pipe; the listening socket is not inherited, so the port is
     free to bind again. Windows has no exec: there this preview stops serving
-    first, then serve_child runs the new one, with the same stdin and
-    $TRAZO_PREVIEW_ID, and waits for it."""
+    first, then serve_child runs the new one, with $TRAZO_PREVIEW_ID, and
+    waits for it, closing its stdin when this one's closes."""
     print("[preview] restarting as the installed trazo", flush=True)
     sys.stderr.flush()
     if os.name == "nt":
@@ -217,6 +218,18 @@ def stop_serving() -> None:
         os.kill(os.getpid(), signal.SIGTERM)
 
 
+def relay(argv: list[str]) -> int:
+    """Windows: run the new preview with the log as its output and a stdin of
+    its own, closed when this process's stdin closes; its exit code. Not this
+    stdin: watch_stdin's read holds the pipe, and Windows serialises every
+    call on a synchronous pipe, so the new interpreter would hang on it."""
+    child = subprocess.Popen(argv, stdin=subprocess.PIPE, stdout=sys.stdout, stderr=sys.stderr)
+    while child.poll() is None and not STDIN_CLOSED.wait(0.5):
+        pass
+    child.stdin.close()
+    return child.wait()
+
+
 def serve_child(port: int) -> None:
     """The preview, run by preview_start in the project folder (see the
     module docstring). It stops on SIGTERM, which server.serve handles, or
@@ -232,6 +245,7 @@ def serve_child(port: int) -> None:
 
     def watch_stdin():
         sys.stdin.buffer.read()
+        STDIN_CLOSED.set()
         stop_serving()
     threading.Thread(target=watch_stdin, daemon=True).start()
     try:
@@ -246,7 +260,4 @@ def serve_child(port: int) -> None:
             path.unlink(missing_ok=True)
     if RESTART_PORT:  # Windows: restart() stopped serving to free the port
         print("[preview] stopped; starting the installed trazo", flush=True)
-        # Named, so they are inherited: without them Windows gives the new
-        # preview no stdin (it would stop at once) and no log.
-        sys.exit(subprocess.call(trazo_argv("mcp", "--serve", str(RESTART_PORT[0])),
-                                 stdin=sys.stdin, stdout=sys.stdout, stderr=sys.stderr))
+        sys.exit(relay(trazo_argv("mcp", "--serve", str(RESTART_PORT[0]))))
