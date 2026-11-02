@@ -116,9 +116,9 @@ already installed is not copied, so on a Mac that has both the seed is small
 throwaway `CLAUDE_CONFIG_DIR` and `CODEX_HOME` and skip, with the reason, when
 the CLI or its login is missing.
 
-- `hosts/claude.py`: `Claude(sb)` installs and updates the plugin from a folder
-  marketplace (`marketplace_add`, `install_from`, `update`, `plugins`) and
-  `run_session` runs `claude -p` with stream-json events (`claude_events.py`).
+- `hosts/claude.py`: `Claude(sb)` installs the plugin from a folder marketplace
+  (`marketplace_add`, `install_from`, `plugins`; `n2-update-claude` updates it
+  through trazo's `plugin_update`) and `run_session` runs `claude -p` with stream-json events (`claude_events.py`).
 - `hosts/codex.py`: the same for `codex plugin`, plus hook trust, the MCP
   server's state through `codex app-server` (`codex_appserver.py`) and
   `session` for a model run (`codex_events.py` reads its JSONL and rollout).

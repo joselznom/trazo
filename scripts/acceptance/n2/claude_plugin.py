@@ -64,8 +64,7 @@ def update(ctx: Context) -> None:
     # and runs `claude plugin marketplace update` and `claude plugin update` there.
     reply = plugin_update(ctx, claude, old_cache, sb.plugin(head))
     ctx.evidence.data("plugin_update", reply)
-    assert reply == {"ok": True, "app": "claude", "from": last.version, "version": head.version,
-                     "new_chat": True}, reply
+    assert reply == {"ok": True, "app": "claude", "from": last.version, "version": head.version}, reply
     after = claude.installed() or {}
     new_cache = Path(after.get("installPath", ""))
     ctx.evidence.data("plugin list entry after", {k: after.get(k) for k in ("version", "installPath", "lastUpdated")})

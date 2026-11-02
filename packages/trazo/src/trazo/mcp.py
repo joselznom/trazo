@@ -29,7 +29,7 @@ import time
 from pathlib import Path
 from typing import Any
 
-from . import __version__, machine, mcp_app, updates
+from . import __version__, machine, mcp_app, tool_setup, updates
 from .mcp_calls import Calls, ToolError, load
 from .mcp_preview import Previews, serve_child
 from .mcp_tools import INSTRUCTIONS, TOOLS
@@ -63,9 +63,10 @@ def setup_status(args):
     else:
         chrome, chrome_where = machine.find_chrome()
     data = machine.read()
-    latest = updates.latest_release(root) if root else ""
-    have, ship, out = machine.release_key(installed), machine.release_key(plugin), machine.release_key(latest)
-    paper = updates.paper_status(project.root) if project.found else None
+    have, ship = machine.release_key(installed), machine.release_key(plugin)
+    latest = updates.latest_release(root) if ship else ""  # unordered against an unknown version
+    out = machine.release_key(latest)
+    paper = tool_setup.paper_status(project.root) if project.found else None
     # Both apps share the install: a newer one came from the other app's plugin.
     if ship and ((have and have > ship) or (out and out > ship)):
         next_step = "plugin"

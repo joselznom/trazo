@@ -3,8 +3,8 @@
 The latest release is the version in `.claude-plugin/plugin.json` on the
 `main` branch of the repository the plugin's own plugin.json names
 (`repository`, a github.com URL): `main` moves only at a release, and it
-is what both apps install. setup_status asks every time it runs, with a
-short timeout; a plugin.json without a github.com repository (a test's) is
+is what both apps install. setup_status asks every time it runs and waits
+TIMEOUT at most; a plugin.json without a github.com repository (a test's) is
 not checked, and an unanswered request leaves the version unknown.
 
 An app installs the plugin into <config>/plugins/cache/<marketplace>/<plugin>/<version>.
@@ -30,15 +30,16 @@ import os
 import re
 import shutil
 import subprocess
+import threading
 import urllib.request
 from pathlib import Path
 from typing import Any, NamedTuple
 
-from . import machine, manifest, variants
+from . import machine
 
 LATEST_URL = "https://raw.githubusercontent.com/{repository}/main/.claude-plugin/plugin.json"
 GITHUB = re.compile(r"https://github\.com/([\w.-]+/[\w-]+(?:\.[\w-]+)*?)(?:\.git)?/?")
-TIMEOUT = 3  # seconds: setup_status waits for it
+TIMEOUT = 3  # seconds setup_status waits, name lookup included
 CLI_TIMEOUT = 300
 # Where an app keeps a CLI it does not put on PATH; globs, newest version first.
 CLI_LOCATIONS: dict[str, tuple[str, ...]] = {
@@ -59,31 +60,24 @@ class Install(NamedTuple):
 
 def latest_release(root: str) -> str:
     """The latest release's version; "" when unknown."""
-    try:
-        repository = json.loads((Path(root) / ".claude-plugin" / "plugin.json").read_text(encoding="utf-8"))["repository"]
-        match = GITHUB.fullmatch(repository)
-    except (OSError, ValueError, KeyError, TypeError):
-        return ""
+    repository = machine.plugin_manifest(root).get("repository")
+    match = GITHUB.fullmatch(repository) if isinstance(repository, str) else None
     if not match:
         return ""
-    try:
-        with urllib.request.urlopen(LATEST_URL.format(repository=match[1]), timeout=TIMEOUT) as reply:
-            version = json.loads(reply.read(1 << 16))["version"]
-    except (OSError, http.client.HTTPException, ValueError, KeyError, TypeError):
-        return ""
+    url, found = LATEST_URL.format(repository=match[1]), []
+
+    def fetch() -> None:
+        try:
+            with urllib.request.urlopen(url, timeout=TIMEOUT) as reply:
+                found.append(json.loads(reply.read(1 << 16))["version"])
+        except (OSError, http.client.HTTPException, ValueError, KeyError, TypeError):
+            pass
+    # urlopen's timeout leaves out the name lookup, which can hang far longer on a bad network.
+    thread = threading.Thread(target=fetch, daemon=True)
+    thread.start()
+    thread.join(TIMEOUT)
+    version = found[0] if found else ""
     return version if machine.release_key(version) else ""
-
-
-def paper_status(folder: Path) -> dict[str, Any] | None:
-    """The paper's template against the one the installed trazo ships (its
-    files on disk, so a reinstall in this chat counts); None for a folder
-    not made by `trazo new`."""
-    try:
-        have, ship = manifest.read(folder)["template"], variants.Store().template
-        behind = manifest.version_key(have) < manifest.version_key(ship)
-    except (ValueError, RuntimeError):
-        return None
-    return {"template": have, "current": ship, "behind": behind}
 
 
 def app_install(root: str) -> Install | None:
@@ -122,14 +116,6 @@ def claude_entry(install: Install, match: dict[str, Any]) -> dict[str, Any] | No
         return None
 
 
-def plugin_version_at(root: str, app: str) -> str:
-    try:
-        version = json.loads((Path(root) / MANIFESTS[app] / "plugin.json").read_text(encoding="utf-8"))["version"]
-    except (OSError, ValueError, KeyError, TypeError):
-        return ""
-    return version if isinstance(version, str) else ""
-
-
 def last_line(result: subprocess.CompletedProcess[str]) -> str:
     lines = (result.stderr or result.stdout or "").strip().splitlines()
     return lines[-1] if lines else f"exit code {result.returncode}"
@@ -138,7 +124,7 @@ def last_line(result: subprocess.CompletedProcess[str]) -> str:
 def plugin_update(args: dict[str, Any]) -> dict[str, Any]:
     """Update the plugin with the CLI of the app that installed it. `ok`,
     `app` ("claude", "codex" or None), `from` (this plugin's version) and
-    then `version` and `new_chat`, or `error`."""
+    then `version`, or `error`."""
     root, version = machine.plugin_version()
     install = app_install(root) if root else None
     reply: dict[str, Any] = {"ok": False, "app": install.app if install else None, "from": version or None}
@@ -148,15 +134,16 @@ def plugin_update(args: dict[str, Any]) -> dict[str, Any]:
     if not cli:
         return {**reply, "error": f"the {install.app} command was not found"}
     ref = f"{install.plugin}@{install.marketplace}"
-    cwd, scope = Path.home(), {"scope": "user"}
+    cwd = Path.home()
     if install.app == "claude":
         # The scope it was installed in (a project's runs in that project), found again after the update.
-        entry = claude_entry(install, {"installPath": root}) or scope
-        scope = {key: entry[key] for key in ("scope", "projectPath") if key in entry}
+        entry = claude_entry(install, {"installPath": root}) or {"scope": "user"}
+        scope: dict[str, Any] = {key: entry[key] for key in ("scope", "projectPath") if key in entry}
         cwd = Path(scope.get("projectPath") or cwd)
         steps = [["plugin", "marketplace", "update", install.marketplace],
                  ["plugin", "update", ref, "--scope", scope["scope"]]]
     else:
+        scope = {}
         steps = [["plugin", "marketplace", "upgrade", install.marketplace], ["plugin", "add", ref]]
     env = {**os.environ, CONFIG_ENV[install.app]: str(install.config)}
     for step in steps:
@@ -172,4 +159,5 @@ def plugin_update(args: dict[str, Any]) -> dict[str, Any]:
     else:
         found = re.search(r"Installed plugin root: (.+)", result.stdout)
         new_root = found[1].strip() if found else ""
-    return {**reply, "ok": True, "version": plugin_version_at(new_root, install.app) or None, "new_chat": True}
+    new = machine.plugin_manifest(new_root, MANIFESTS[install.app]).get("version") if new_root else None
+    return {**reply, "ok": True, "version": new if isinstance(new, str) else None}

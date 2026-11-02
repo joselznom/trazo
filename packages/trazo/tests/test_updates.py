@@ -6,6 +6,8 @@ import io
 import json
 import os
 import sys
+import threading
+import time
 import unittest
 import urllib.error
 from pathlib import Path
@@ -85,6 +87,18 @@ class LatestReleaseTests(ToolFolderCase):
                 self.assertEqual(updates.latest_release(root), "", outcome)
 
 
+    def test_a_hung_request_is_unknown_once_the_time_is_up(self):
+        # urlopen's own timeout does not cover the name lookup.
+        root = self.plugin({"repository": "https://github.com/someone/trazo"})
+        hung = threading.Event()
+        self.addCleanup(hung.set)
+        with patch.object(updates, "TIMEOUT", 0.2), \
+                patch.object(updates.urllib.request, "urlopen", side_effect=lambda *a, **k: hung.wait(30)):
+            started = time.monotonic()
+            self.assertEqual(updates.latest_release(root), "")
+        self.assertLess(time.monotonic() - started, 5)
+
+
 @unittest.skipIf(os.name == "nt", "the fake CLIs are shell scripts")
 class PluginUpdateTests(ToolFolderCase):
     def setUp(self):
@@ -125,7 +139,7 @@ class PluginUpdateTests(ToolFolderCase):
         config = self.claude()
         self.cli(self.bin, "claude", FAKE_CLAUDE)
         self.assertEqual(updates.plugin_update({}), {"ok": True, "app": "claude", "from": "1.0.0",
-                                                     "version": "1.1.0", "new_chat": True})
+                                                     "version": "1.1.0"})
         home = str(Path.home())
         self.assertEqual(self.calls(), [[str(config), home, "plugin", "marketplace", "update", "trazo"],
                                         [str(config), home, "plugin", "update", "trazo@trazo", "--scope", "user"]])
@@ -145,7 +159,7 @@ class PluginUpdateTests(ToolFolderCase):
         (config / "config.toml").write_text('[marketplaces.trazo]\nsource_type = "git"\n')
         self.cli(self.bin, "codex", FAKE_CODEX)
         self.assertEqual(updates.plugin_update({}), {"ok": True, "app": "codex", "from": "1.0.0",
-                                                     "version": "1.1.0", "new_chat": True})
+                                                     "version": "1.1.0"})
         home = str(Path.home())
         self.assertEqual(self.calls(), [[str(config), home, "plugin", "marketplace", "upgrade", "trazo"],
                                         [str(config), home, "plugin", "add", "trazo@trazo"]])
