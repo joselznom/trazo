@@ -173,7 +173,7 @@ class Page:
     def click(self, selector: str, text: str | None = None, settle: float = 0.3) -> None:
         """A real mouse click at the middle of the first element matching `selector` (and showing `text`),
         once the element has stood still for `settle` seconds. The page moves things after it loads (the
-        preview's word count shifts the update pill and its popup), and a button that moves between
+        preview's word count shifts the top bar), and a button that moves between
         the press and the release gets no click."""
         found = json.dumps([selector, text])
         locate = f"""(() => {{

@@ -165,8 +165,8 @@ def stub_page(name: str) -> bytes:
 
 
 def features():
-    from . import diagram_editor, page_bundle, preview, preview_updates, review, table_editor, workspace
-    return preview, table_editor, diagram_editor, workspace, review, preview_updates, page_bundle
+    from . import diagram_editor, page_bundle, preview, review, table_editor, workspace
+    return preview, table_editor, diagram_editor, workspace, review, page_bundle
 
 
 class Handler(GuardedHandler):

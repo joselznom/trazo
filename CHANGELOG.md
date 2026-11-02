@@ -18,6 +18,19 @@ Internal changes (tests, CI, refactoring) stay out.
 
 ## Unreleased
 
+### Changed
+
+- The agent now checks for a new trazo each time you ask it for trazo or
+  paper work, and installs it: the plugin first, through the app (the
+  Claude app never updated it by itself), then, in a new chat, trazo and
+  your paper. It tells you only what changes for you. Ask it to *"update
+  trazo"* to check at once.
+
+### Removed
+
+- The version pill in the preview's top bar: it could miss a new release,
+  and it could not update the plugin.
+
 ### Fixed
 
 - In the ChatGPT app, opening the preview shows it once, in the app's

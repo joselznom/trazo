@@ -4,10 +4,10 @@ How the Claude Code and Codex plugin works. The install steps are in the [README
 
 The repository root is also a Claude Code plugin (`.claude-plugin/`) and
 a Codex plugin for the ChatGPT app (`.codex-plugin/`, `.codex-mcp.json`): the
-trazo skills, the `setup`, `open` and `close` skills and an MCP server
-(`trazo mcp`) with the tools `setup_status`,
-`doctor`, `build`, `check`, `paper_create`, `paper_update`, `preview_start`
-and `preview_stop`. Before setup, the
+trazo skills, the `setup`, `update`, `open` and `close` skills and an MCP
+server (`trazo mcp`) with the tools `setup_status`,
+`doctor`, `build`, `check`, `paper_create`, `paper_update`, `plugin_update`,
+`preview_start` and `preview_stop`. Before setup, the
 server also runs from a clone's development venv: run `make test-package`
 (or `cd packages/trazo && uv sync`) once to create it.
 
@@ -42,6 +42,18 @@ off (`plugin/mcp --no-views`), so the preview opens in the app's browser
 only: the Claude app draws the view but refuses the tool calls it makes,
 and the ChatGPT app draws it for some accounts only, as a second window
 beside the browser.
+
+Updates start from the agent. The server's instructions ask it to call
+`setup_status` with the paper before the first trazo work in a chat, and
+`setup_status` asks GitHub every time for the latest release (the version
+in `.claude-plugin/plugin.json` on `main` of the plugin's `repository`;
+3 s timeout, unknown when offline). When the plugin is older, the update
+skill calls `plugin_update`, which runs the app's own CLI on the app's
+config folder: `claude plugin marketplace update` and `claude plugin
+update`, or `codex plugin marketplace upgrade` and `codex plugin add`. The
+Claude app does not update third-party marketplaces by itself. The next
+chat loads the new plugin; there the hook asks for setup, which reinstalls
+trazo, and `setup_status` says `"next": "paper"` until `paper_update` runs.
 
 ## Checks by hand
 
@@ -85,12 +97,13 @@ by hand. Agents run the scenarios, not the manual app checks.
   note asks for a plugin update and `setup_status` returns
   `"next": "plugin"`; the setup skill does not reinstall.
   `n1-install-newer-than-plugin` covers the hook and the tool; the agent
-  telling the user to update the plugin: by hand.
+  running the update skill: by hand.
 
-- With the plugin newer than the install, the open preview shows the
-  version pill; Update reinstalls trazo, updates the paper and reloads
-  the page on the same port. `n1-preview-update`. Updating the plugin in
-  the Claude app's browser first: by hand.
+- With a release newer than the plugin on GitHub, the first trazo request
+  in a chat updates the plugin through the app's CLI (`plugin_update`),
+  and the next chat reinstalls trazo and updates the paper, with only
+  plain words to the user. `n2-update-claude` covers `plugin_update` with
+  the claude CLI; the agent's flow in both apps: by hand.
 
 - Two sessions on one folder: the second `preview_start` reuses the first.
   `n1-two-sessions-share-preview`.

@@ -164,10 +164,7 @@
         loadAll().then(() => { if (view === "figures" && !hasUnsaved()) renderFigs(); });
       }
       const stale = (view !== "doc" ? docNames : [doc]).some((n) => versions[n] !== loaded[n]);
-      // An update rewrites the paper and then restarts this server: a reload served
-      // meanwhile can meet the restart and leave a page with no scripts. The update
-      // reloads the page itself, against the new server (preview-updates.js).
-      if (stale && !busy && !updateBusy && await App.reload(() => !hasUnsaved())) return;
+      if (stale && !busy && await App.reload(() => !hasUnsaved())) return;
       hold.hidden = !(busy && stale);
       if (view === "doc") for (const n of docNames) if (n !== doc) loaded[n] = versions[n];  // not shown here
       // Refresh copies fetched at another version, or before the first

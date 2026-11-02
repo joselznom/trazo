@@ -1,6 +1,9 @@
 """n2: installing and updating the plugin with the real claude CLI, from a folder marketplace."""
 
+import json
+import os
 import shutil
+import sys
 from pathlib import Path
 
 from ..context import Context
@@ -9,6 +12,16 @@ from ..registry import scenario
 from ..sandbox import clone
 
 SAY_OK = "Reply with the single word: ok"
+UPDATE = "import json; from trazo import updates; print(json.dumps(updates.plugin_update({})))"
+
+
+def plugin_update(ctx: Context, claude: Claude, root: Path, head: Path) -> dict:
+    """trazo.updates.plugin_update from the checkout's code, for the plugin installed at `root`."""
+    env = {**claude.env, "TRAZO_PLUGIN_ROOT": str(root), "PYTHONPATH": str(head / "packages" / "trazo" / "src"),
+           "PATH": os.pathsep.join([str(Path(claude.binary).parent), claude.env.get("PATH", "")])}
+    done = ctx.sandbox.run([sys.executable, "-B", "-c", UPDATE], env=env, timeout=600, secrets=[claude.token])
+    assert done.returncode == 0, done.stderr
+    return json.loads(done.stdout.splitlines()[-1])
 
 
 @scenario("n2-install-claude", needs=("darwin",))
@@ -47,8 +60,11 @@ def update(ctx: Context) -> None:
 
     shutil.rmtree(market)
     clone(head.path, market)
-    claude.marketplace_update()
-    ctx.evidence.note(f"plugin update: {claude.update().strip()}")
+    # Through trazo's plugin_update, as the agent does: it finds the config folder from the plugin's path
+    # and runs `claude plugin marketplace update` and `claude plugin update` there.
+    reply = plugin_update(ctx, claude, old_cache, sb.plugin(head))
+    ctx.evidence.data("plugin_update", reply)
+    assert reply == {"ok": True, "app": "claude", "from": last.version, "version": head.version}, reply
     after = claude.installed() or {}
     new_cache = Path(after.get("installPath", ""))
     ctx.evidence.data("plugin list entry after", {k: after.get(k) for k in ("version", "installPath", "lastUpdated")})

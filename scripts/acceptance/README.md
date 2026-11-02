@@ -116,9 +116,9 @@ already installed is not copied, so on a Mac that has both the seed is small
 throwaway `CLAUDE_CONFIG_DIR` and `CODEX_HOME` and skip, with the reason, when
 the CLI or its login is missing.
 
-- `hosts/claude.py`: `Claude(sb)` installs and updates the plugin from a folder
-  marketplace (`marketplace_add`, `install_from`, `update`, `plugins`) and
-  `run_session` runs `claude -p` with stream-json events (`claude_events.py`).
+- `hosts/claude.py`: `Claude(sb)` installs the plugin from a folder marketplace
+  (`marketplace_add`, `install_from`, `plugins`; `n2-update-claude` updates it
+  through trazo's `plugin_update`) and `run_session` runs `claude -p` with stream-json events (`claude_events.py`).
 - `hosts/codex.py`: the same for `codex plugin`, plus hook trust, the MCP
   server's state through `codex app-server` (`codex_appserver.py`) and
   `session` for a model run (`codex_events.py` reads its JSONL and rollout).
@@ -157,17 +157,6 @@ runs `claude /login`, `claude logout`, `claude setup-token`, `codex login` or
   them clean) and error messages (a timeout's command line included). A login that lives only in the
   keychain is not read: the scenario skips. A token about to expire skips too,
   so Codex never refreshes inside the sandbox and leaves the real login stale.
-
-## A flaky update until the fix is released
-
-`n1-preview-update` updates from the last release (a tag), whose preview still runs that release's
-viewer. Before the fix, the viewer reloaded itself when the paper's rebuild changed the build
-version, and a reload served while the old server restarted (`os.execv`, 0.5 s after the reply)
-left a page with no scripts. The viewer now skips that reload while an update runs
-(`updateBusy` in `preview-updates.js`), but the old page of this scenario is still the last
-release's, so the scenario fails about 1 run in 30 (more under load) until a tag includes the
-fix. The failure message prints the page's state (`loads`, `loadErrors`, `viewerLoaded`).
-To check the fix before then, run the scenario with `ctx.last_release("<commit with the fix>")`.
 
 ## Safety
 

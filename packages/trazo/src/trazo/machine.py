@@ -187,15 +187,21 @@ def installed_version() -> str:
     return found[0].removeprefix("trazo-").removesuffix(".dist-info") if len(found) == 1 else ""
 
 
+def plugin_manifest(root: str, folder: str = ".claude-plugin") -> dict[str, Any]:
+    """The plugin.json in root's `folder` (.claude-plugin or .codex-plugin); {} when unreadable."""
+    try:
+        data = json.loads((Path(root) / folder / "plugin.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
 def plugin_version() -> tuple[str, str]:
     """(plugin root, version in its .claude-plugin/plugin.json); "" for what is unknown."""
     root = os.environ.get("TRAZO_PLUGIN_ROOT") or os.environ.get("CLAUDE_PLUGIN_ROOT") or ""
     if not root:
         return "", ""
-    try:
-        version = json.loads((Path(root) / ".claude-plugin" / "plugin.json").read_text(encoding="utf-8"))["version"]
-    except (OSError, ValueError, KeyError, TypeError):
-        return root, ""
+    version = plugin_manifest(root).get("version")
     return root, version if isinstance(version, str) else ""
 
 

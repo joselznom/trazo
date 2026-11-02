@@ -1,8 +1,8 @@
-"""Drive the real `claude` CLI in a sandbox: install and update the plugin from
-a folder marketplace, and run headless sessions that return a Trace.
+"""Drive the real `claude` CLI in a sandbox: install the plugin from a folder
+marketplace, and run headless sessions that return a Trace.
 
     claude = Claude(sb)                        # Skip when claude or its login is missing
-    claude.marketplace_add(sb.plugin(folder))  # claude.install(), claude.update(), claude.plugins()
+    claude.marketplace_add(sb.plugin(folder))  # claude.install(), claude.plugins()
     run = claude.run_session(None, "Say ok.", model="haiku")   # run.trace, run.init, run.hook_responses...
 
 Credentials: a temporary CLAUDE_CONFIG_DIR has no login, so the OAuth access
@@ -139,9 +139,6 @@ class Claude:
     def marketplace_add(self, folder: Path) -> None:
         self.run(["plugin", "marketplace", "add", folder])
 
-    def marketplace_update(self, name: str = "trazo") -> None:
-        self.run(["plugin", "marketplace", "update", name])
-
     def install(self, ref: str = "trazo@trazo") -> None:
         self.run(["plugin", "install", ref])
 
@@ -150,9 +147,6 @@ class Claude:
         self.marketplace_add(folder)
         self.install()
         return self.installed() or {}
-
-    def update(self, ref: str = "trazo@trazo") -> str:
-        return self.run(["plugin", "update", ref]).stdout
 
     def plugins(self) -> list[dict]:
         return json.loads(self.run(["plugin", "list", "--json"]).stdout)

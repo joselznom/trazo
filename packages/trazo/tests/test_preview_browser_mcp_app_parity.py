@@ -1,22 +1,15 @@
 """What the browser offers that the MCP App view must offer
-too: exports, the host's theme, the diagram editor's fonts and the update
-notice, in Chrome as a host draws the view (see _mcp_app_view)."""
+too: exports, the host's theme and the diagram editor's fonts, in Chrome as a host draws the view (see _mcp_app_view)."""
 
 import base64
 import json
-import os
-import shutil
-import sys
-import tempfile
-import unittest
 from pathlib import Path
 from unittest.mock import patch
 
 import _support
 from _mcp_app_view import McpAppViewTestCase
-from test_preview_updates import FAKE_SETUP
 
-from trazo import preview_export, preview_updates
+from trazo import preview_export
 
 DOCX = b"PK\x03\x04 a Word file"
 EXPORT = (DOCX, "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "manuscript-intro.docx")
@@ -89,43 +82,3 @@ class ViewParityTests(McpAppViewTestCase):
                         " && f.status === 'loaded')")
         # The editor's own @font-face rules would point at URLs the CSP blocks.
         self.assertEqual(self.frame("d.getElementById('pk-figure-fonts')?.textContent ?? ''"), "")
-
-
-@unittest.skipIf(os.name == "nt", "the fake setup.sh is a shell script")
-class ViewUpdateTests(McpAppViewTestCase):
-    # The setup of test_preview_browser_updates.UpdateNoticeTests: a fake plugin root and a data
-    # folder whose venv is this test's own Python.
-    def setUp(self):
-        super().setUp()
-        tmp = Path(tempfile.mkdtemp(prefix="trazo-updates-")).resolve()
-        self.addCleanup(shutil.rmtree, tmp, True)
-        (tmp / "data").mkdir()
-        (tmp / "data" / "venv").symlink_to(sys.prefix)
-        plugin = tmp / "plugin"
-        (plugin / ".claude-plugin").mkdir(parents=True)
-        script = plugin / preview_updates.SETUP_SCRIPT
-        script.parent.mkdir(parents=True)
-        script.write_text(FAKE_SETUP.format(log=tmp / "setup.log"))
-        (plugin / ".claude-plugin" / "plugin.json").write_text(json.dumps({"name": "trazo", "version": "99.0.0"}))
-        index = plugin / preview_updates.PLUGIN_PACKAGE / preview_updates.TEMPLATE_INDEX
-        index.parent.mkdir(parents=True, exist_ok=True)
-        index.write_text(json.dumps({"template": "v99.0.0"}))
-        restart = lambda: setattr(preview_updates, "__version__", "99.0.0")  # noqa: E731
-        for patcher in (patch.dict(os.environ, {"TRAZO_DATA_DIR": str(tmp / "data"),
-                                                "TRAZO_PLUGIN_ROOT": str(plugin), "CLAUDE_PLUGIN_ROOT": ""}),
-                        patch.object(preview_updates, "RESTART", restart),
-                        patch.object(preview_updates, "__version__", preview_updates.__version__)):
-            patcher.start()
-            self.addCleanup(patcher.stop)
-
-    def test_the_page_reloads_in_the_view_after_an_update(self):
-        pill, pop = "d.querySelector('.pv-update-pill')", "d.querySelector('.pv-update-pop')"
-        self.host(sandbox=False)
-        self.wait_frame(f"{READY} && !{pill}.hidden")
-        self.frame("w.notReloaded = true")
-        self.frame(f"{pill}.click()")
-        self.frame(f"[...{pop}.querySelectorAll('button')].find(b => b.textContent === 'Update').click()")
-        # innerText stays empty until the notice's fade-in makes it visible.
-        self.wait_frame(f"!w.notReloaded && {pop} && !{pop}.hidden && {pop}.innerText")
-        self.assertEqual(self.frame(f"{pop}.innerText"), "Updated to 99.0.0.\nNew tools load in a new chat.")
-        self.assertEqual(self.frame("v.TRAZO_VIEW.path"), "/manuscript.html")

@@ -10,7 +10,9 @@ INSTRUCTIONS = ("trazo creates, builds, checks and previews Markdown papers. Pas
                 "not `scripts/trazo`, for what they do. In a sandbox (the ChatGPT app's), "
                 "`scripts/trazo` commands that start Chrome fail: `verify` and `diagram check`, "
                 "`render`, `export` or `describe` when the paper has diagrams; ask the user once to "
-                "approve running them outside it. Use the comments skill for review comments; "
+                "approve running them outside it. Before the first trazo work in a chat, call setup_status "
+                "with `project` and follow the trazo:update skill when its `next` is not \"ok\". "
+                "Use the comments skill for review comments; "
                 "the open and close skills require explicit user invocation.")
 
 PROJECT_ARG = {"project": {"type": "string", "description": "absolute path of the paper folder (holds trazo.toml)"}}
@@ -23,12 +25,13 @@ def schema(required=("project",), **extra):
 
 TOOLS = [
     {"name": "setup_status",
-     "description": "Whether trazo is set up; launches no tool's --version: the per-user install and its "
-                    "version against the plugin's, where uv, Pandoc and Chrome were found, the machine file's date, "
-                    "and `next`: \"setup\" (run the setup skill), \"update\" (run setup again), "
-                    "\"plugin\" (the install is newer: the user updates the plugin in the app) or \"ok\". "
+     "description": "Whether trazo is set up and current; launches no tool's --version: the per-user install "
+                    "and its version against the plugin's and the latest release's (asked from GitHub), where uv, "
+                    "Pandoc and Chrome were found, the machine file's date, the paper's template, and `next`: "
+                    "\"plugin\" (a newer plugin is out: plugin_update), \"setup\" (run the setup skill), "
+                    "\"update\" (run setup again), \"paper\" (paper_update) or \"ok\". "
                     "`next` ignores a project's own commands.pandoc, so check `pandoc.found` too. "
-                    "`project` (optional) applies its trazo.toml.",
+                    "`project` (optional) applies its trazo.toml and checks its template.",
      "inputSchema": schema(required=())},
     {"name": "doctor",
      "description": "trazo doctor --json: each tool's path, version, where it was found and what to "
@@ -59,6 +62,10 @@ TOOLS = [
                     "(trazo update). Returns replaced, added, removed, needs_merge (merge each <file>.new "
                     "into <file>, then delete it), skipped, notes and up_to_date.",
      "inputSchema": schema()},
+    {"name": "plugin_update",
+     "description": "Update the trazo plugin with the CLI of the app that installed it (Claude or ChatGPT). "
+                    "Returns `ok`, `app`, `from` and `version`, or `error`; the new plugin loads in a new chat.",
+     "inputSchema": {"type": "object", "properties": {}, "additionalProperties": False}},
     {"name": "preview_start",
      "description": "Regenerate changed values, tables and figures, then start the live preview or reuse "
                     "this folder's (also another chat's) once it shows them. Returns its URL (port 8765, else a "

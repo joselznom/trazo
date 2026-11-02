@@ -7,7 +7,8 @@ from ..hosts.claude import Claude
 from ..registry import scenario
 from .claude_plugin import SAY_OK
 
-TOOLS = {"build", "check", "doctor", "paper_create", "paper_update", "preview_start", "preview_stop", "setup_status"}
+TOOLS = {"build", "check", "doctor", "paper_create", "paper_update", "plugin_update", "preview_start", "preview_stop",
+         "setup_status"}
 ASK_STATUS = "Call the trazo setup_status tool once, then reply with only the value of its `next` field."
 STATUS_TOOL = ["mcp__plugin_trazo_trazo__setup_status"]
 # Measured on this Mac (Claude Code 2.1.312, a real install, six sessions): 39 to 80 ms. A limit of 1 s is

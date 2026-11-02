@@ -174,10 +174,15 @@ figures, tables and a journal's format.
 
 ## Update
 
-Update the plugin in the app's plugin browser. The next time the preview is
-open, a pill with the new version appears in its top bar: click it, then
-**Update**. If you changed a file that the update also changes, you get a
-`<file>.new` beside it; ask the agent to merge it.
+The agent checks for a new trazo each time you ask it for trazo or paper
+work, and installs it for you: first the plugin, then, in a new chat, trazo
+and your paper. Your writing stays as it is. To check now, ask it to
+*"update trazo"*.
+
+trazo asks GitHub for the latest version (one small request, no data about
+you or your paper). If the agent cannot update the plugin itself, it tells
+you how: in the ChatGPT app, quit and reopen it; in the Claude app, update
+trazo in the plugin settings.
 
 ## Problems
 
@@ -190,8 +195,6 @@ says what is missing and how to fix it.
 | "trazo is not set up on this computer" | Ask the agent to set up trazo |
 | "this paper pins trazo vX, but trazo vY is set up here" | Ask the agent to update the paper |
 | The preview does not appear in Claude | Click **Browser** in the toolbar to show the pane |
-| The update pill says to set up trazo | The new version needs a download: ask the agent to set up trazo |
-| The update pill says "Plugin" | The other app installed a newer trazo: update the plugin in this app too |
 | "Chrome not found" | Ask the agent to set up trazo; it downloads a headless Chrome |
 
 Still stuck? [Open an issue](https://github.com/joselznom/trazo/issues)

@@ -250,7 +250,7 @@ class SetupTests(unittest.TestCase):
         self.assertEqual(json.loads((self.data / "machine.json").read_text())["tools"]["pandoc"]["found"], "PATH")
 
     def test_offline_downloads_nothing(self):
-        # The preview's update: a Pandoc to download means setup in the chat, with consent.
+        # Offline: a Pandoc to download means setup in the chat, with consent.
         code, _, err = run(["--offline"])
         self.assertEqual((code, self.server.requests, self.files()), (3, [], []))
         self.assertIn(f"trazo setup: offline: Pandoc {tool_setup.PANDOC_VERSION} must be downloaded", err)
@@ -320,7 +320,7 @@ class SetupTests(unittest.TestCase):
         self.assertEqual(json.loads((self.data / "machine.json").read_text())["tools"]["chrome"]["path"], "")
 
     def test_offline_skips_chrome_without_failing(self):
-        # Chrome is optional, so the preview's update does not stop for it.
+        # Chrome is optional, so an offline setup does not stop for it.
         self.use_chrome(chrome_asset_for(CHROME_ZIP))
         (self.bin / "pandoc").write_bytes(PANDOC_SCRIPT)
         (self.bin / "pandoc").chmod(0o755)

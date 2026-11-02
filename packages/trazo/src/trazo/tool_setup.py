@@ -40,7 +40,7 @@ import zipfile
 from collections.abc import Callable, Iterator
 from functools import partial
 from pathlib import Path
-from typing import IO, NamedTuple, cast
+from typing import IO, Any, NamedTuple, cast
 
 from . import machine, manifest
 
@@ -348,22 +348,30 @@ def report(data: dict) -> list[str]:
     return lines
 
 
-def paper_notice(folder: str) -> str | None:
-    """The line the setup skill turns into a suggestion to update the paper,
-    when FOLDER was made by `trazo new` with an older template than this
-    trazo's. Nothing for a folder without a manifest (not a paper, or one
-    made with Copier), whose version is unknown, or for a newer one."""
+def paper_status(folder: Path) -> dict[str, Any] | None:
+    """The paper's template against the one this trazo ships (its files on
+    disk, so a reinstall since this process started counts): `template`,
+    `current` and `behind`. None for a folder without a manifest (not a
+    paper, or one made with Copier) or whose version is unknown."""
     # Imported here: variants imports dataclasses, and a stdlib module setup
     # did not import before would write new .pyc files into the data
     # folder's Python, which an offline setup must leave as it is.
     from . import variants
     try:
-        have = manifest.read(Path(folder))["template"]
-        ship = variants.Store().template
-        if manifest.version_key(have) < manifest.version_key(ship):
-            return f"paper: older template ({have}; this trazo has {ship})"
+        have, ship = manifest.read(folder)["template"], variants.Store().template
+        behind = manifest.version_key(have) < manifest.version_key(ship)
     except (ValueError, RuntimeError):
-        pass
+        return None
+    return {"template": have, "current": ship, "behind": behind}
+
+
+def paper_notice(folder: str) -> str | None:
+    """The line the setup skill turns into a note that the paper will be
+    updated, when FOLDER was made by `trazo new` with an older template
+    than this trazo's."""
+    status = paper_status(Path(folder))
+    if status and status["behind"]:
+        return f"paper: older template ({status['template']}; this trazo has {status['current']})"
     return None
 
 
@@ -373,7 +381,7 @@ def main(argv=None) -> int:
     parser.add_argument("--plan", action="store_true", help="print what would be downloaded and where; change nothing")
     parser.add_argument("--offline", action="store_true",
                         help="download nothing: exit 3 when Pandoc must be downloaded, "
-                             "and skip Chrome, which is optional (the preview's update)")
+                             "and skip Chrome, which is optional")
     parser.add_argument("--paper", metavar="FOLDER",
                         help="the chat's paper: say when its template is older than this trazo's")
     args = parser.parse_args(argv)

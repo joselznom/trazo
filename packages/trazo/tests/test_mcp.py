@@ -146,7 +146,7 @@ class McpServerTests(unittest.TestCase):
 
         tools = {tool["name"]: tool for tool in self.session.rpc("tools/list")["result"]["tools"]}
         self.assertEqual(set(tools), {"setup_status", "doctor", "build", "check", "paper_create", "paper_update",
-                                      "preview_start", "preview_stop"})
+                                      "plugin_update", "preview_start", "preview_stop"})
         self.assertIn("project", tools["build"]["inputSchema"]["properties"])
         self.assertTrue(all(tool["inputSchema"]["additionalProperties"] is False for tool in tools.values()))
         # Codex asks before a tool that is not read-only, always before a destructive one.
@@ -157,7 +157,8 @@ class McpServerTests(unittest.TestCase):
 
         status = self.session.tool("setup_status", project=str(self.project))["structuredContent"]
         self.assertEqual(status["trazo"]["version"], trazo.__version__)
-        self.assertEqual(set(status), {"trazo", "plugin", "install", "uv", "pandoc", "chrome", "machine", "next"})
+        self.assertEqual(set(status), {"trazo", "plugin", "install", "uv", "pandoc", "chrome", "machine", "paper",
+                                       "next"})
 
         start = self.session.tool("preview_start", project=str(self.project))
         self.assertFalse(start["isError"], start["content"])

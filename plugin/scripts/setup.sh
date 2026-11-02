@@ -4,7 +4,7 @@
 #   sh plugin/scripts/setup.sh [--offline] [--paper FOLDER] [PLUGIN_ROOT]
 #
 # PLUGIN_ROOT (the folder with packages/trazo) defaults to the one this
-# script is in. --offline (the preview's update, trazo.preview_updates)
+# script is in. --offline (the acceptance harness's reinstall)
 # downloads nothing: it exits 3 when uv, Python or Pandoc must be
 # downloaded, which only setup in the chat does. --paper (the chat's paper
 # folder) goes to `trazo setup`, which says when that paper's template is

@@ -4,7 +4,8 @@ from ..context import Context
 from ..hosts import codex
 from ..registry import scenario
 
-TOOLS = {"setup_status", "doctor", "build", "check", "paper_create", "paper_update", "preview_start", "preview_stop"}
+TOOLS = {"setup_status", "doctor", "build", "check", "paper_create", "paper_update", "plugin_update", "preview_start",
+         "preview_stop"}
 
 
 @scenario("n2-codex-tools-by-state", needs=("darwin", "seed"))

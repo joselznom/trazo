@@ -80,9 +80,9 @@ def update(installed: str, plugin: str) -> str:
 
 
 def older_plugin(installed: str, plugin: str) -> str:
-    return (f"trazo {installed} is installed, newer than this plugin ({plugin}): tell the user to update the "
-            "trazo plugin in this app. Do not run the trazo:setup skill, which would install the older "
-            "trazo. This matters when the user asks for trazo or paper work.")
+    return (f"trazo {installed} is installed, newer than this plugin ({plugin}): when the user asks for trazo "
+            "or paper work, run the trazo:update skill to update the trazo plugin in this app. Do not run the "
+            "trazo:setup skill, which would install the older trazo.")
 
 
 @unittest.skipIf(os.name == "nt", "the hook runs /bin/sh")
