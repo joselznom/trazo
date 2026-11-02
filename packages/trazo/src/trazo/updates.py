@@ -106,14 +106,14 @@ def find_cli(app: str) -> str:
     return ""
 
 
-def claude_entry(install: Install, match: dict[str, Any]) -> dict[str, Any] | None:
-    """The installed_plugins.json entry of this plugin whose keys match `match`."""
+def claude_entries(install: Install, match: dict[str, Any]) -> list[dict[str, Any]]:
+    """The installed_plugins.json entries of this plugin whose keys match `match`."""
     try:
         listing = json.loads((install.config / "plugins" / "installed_plugins.json").read_text(encoding="utf-8"))
         entries = listing["plugins"][f"{install.plugin}@{install.marketplace}"]
-        return next((entry for entry in entries if all(entry.get(k) == v for k, v in match.items())), None)
+        return [entry for entry in entries if all(entry.get(k) == v for k, v in match.items())]
     except (OSError, ValueError, KeyError, TypeError, AttributeError):
-        return None
+        return []
 
 
 def last_line(result: subprocess.CompletedProcess[str]) -> str:
@@ -137,8 +137,11 @@ def plugin_update(args: dict[str, Any]) -> dict[str, Any]:
     cwd = Path.home()
     if install.app == "claude":
         # The scope it was installed in (a project's runs in that project), found again after the update.
-        entry = claude_entry(install, {"installPath": root}) or {"scope": "user"}
-        scope: dict[str, Any] = {key: entry[key] for key in ("scope", "projectPath") if key in entry}
+        # Scopes at one version share the cache folder: with several, which one this chat runs is unknown.
+        installs = claude_entries(install, {"installPath": root}) or [{"scope": "user"}]
+        if len(installs) > 1:
+            return {**reply, "error": "trazo is installed in more than one Claude scope"}
+        scope: dict[str, Any] = {key: installs[0][key] for key in ("scope", "projectPath") if key in installs[0]}
         cwd = Path(scope.get("projectPath") or cwd)
         steps = [["plugin", "marketplace", "update", install.marketplace],
                  ["plugin", "update", ref, "--scope", scope["scope"]]]
@@ -155,7 +158,7 @@ def plugin_update(args: dict[str, Any]) -> dict[str, Any]:
         if result.returncode:
             return {**reply, "error": last_line(result)}
     if install.app == "claude":
-        new_root = (claude_entry(install, scope) or {}).get("installPath", "")
+        new_root = next(iter(claude_entries(install, scope)), {}).get("installPath", "")
     else:
         found = re.search(r"Installed plugin root: (.+)", result.stdout)
         new_root = found[1].strip() if found else ""

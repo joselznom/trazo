@@ -153,6 +153,19 @@ class PluginUpdateTests(ToolFolderCase):
         self.assertEqual(self.calls()[1][1:], [str(project.resolve()), "plugin", "update", "trazo@trazo",
                                                "--scope", "project"])
 
+    def test_claude_in_two_scopes_is_left_to_the_user(self):
+        # A user and a project install of one version share the cache folder: which one runs is unknown.
+        config = self.claude()
+        listing = config / "plugins" / "installed_plugins.json"
+        data = json.loads(listing.read_text())
+        [entry] = data["plugins"]["trazo@trazo"]
+        data["plugins"]["trazo@trazo"].append({**entry, "scope": "project", "projectPath": str(self.folder)})
+        listing.write_text(json.dumps(data))
+        self.cli(self.bin, "claude", FAKE_CLAUDE)
+        self.assertEqual(updates.plugin_update({}), {"ok": False, "app": "claude", "from": "1.0.0",
+                                                     "error": "trazo is installed in more than one Claude scope"})
+        self.assertFalse(self.log.exists())
+
     def test_codex(self):
         config = self.folder / "codex home"
         self.app_plugin(config, ".codex-plugin")
