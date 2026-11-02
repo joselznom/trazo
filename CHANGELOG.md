@@ -16,7 +16,9 @@ its line under "Unreleased"; a release renames that heading to
 Internal changes (tests, CI, refactoring) stay out.
 -->
 
-## Unreleased
+## v1.2.0 (2026-11-02)
+
+trazo now keeps itself up to date: the agent checks for a new version and installs it for you.
 
 ### Changed
 
@@ -24,17 +26,27 @@ Internal changes (tests, CI, refactoring) stay out.
   paper work, and installs it: the plugin first, through the app (the
   Claude app never updated it by itself), then, in a new chat, trazo and
   your paper. It tells you only what changes for you. Ask it to *"update
-  trazo"* to check at once.
+  trazo"* to check at once (#13).
 
 ### Removed
 
 - The version pill in the preview's top bar: it could miss a new release,
-  and it could not update the plugin.
+  and it could not update the plugin (#13).
 
 ### Fixed
 
 - In the ChatGPT app, opening the preview shows it once, in the app's
-  browser. Before, some accounts also got a full-screen copy of it.
+  browser. Before, some accounts also got a full-screen copy of it (#12).
+
+### Upgrade notes
+
+- In the Claude app, update the trazo plugin by hand this one time: earlier
+  versions cannot check for updates. Choose **+** next to the prompt box ›
+  **Plugins**, uninstall **trazo**, then add it again from **Browse
+  plugins**, and start a new chat; your papers stay as they are. With the
+  Claude Code CLI installed, `claude plugin marketplace update trazo` and
+  then `claude plugin update trazo@trazo` in a terminal do the same. The
+  ChatGPT app updates the plugin when it starts.
 
 ## v1.1.0 (2026-11-01)
 

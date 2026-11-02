@@ -2,7 +2,7 @@
 # trazo. An update (the plugin's paper_update) moves `version` to the
 # plugin's release. Every key is documented in trazo's project.py; the
 # defaults match this layout.
-version = "v1.1.0"
+version = "v1.2.0"
 # Document kind: article or report.
 kind = "article"
 

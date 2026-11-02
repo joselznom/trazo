@@ -2,7 +2,7 @@
 # trazo. An update (the plugin's paper_update) moves `version` to the
 # plugin's release. Every key is documented in trazo's project.py; the
 # defaults match this layout.
-version = "v1.1.0"
+version = "v1.2.0"
 # Document kind: article or report.
 kind = "report"
 
@@ -27,10 +27,10 @@ tables = 0
 references = 0
 
 # Project rules, run by `scripts/trazo build` when their inputs change
-# (keys documented in trazo's project.py). Add one per figure script:
-# [[build.steps]]
-# name = "fig1_name"
-# run = ["figures/scripts/fig1_name.py"]
-# inputs = ["figures/scripts/_style.py", "data/mydata.csv"]
-# outputs = ["figures/output/png/fig1_name.png"]
-# before = "diagrams"
+# (keys documented in trazo's project.py). Add one per figure script.
+[[build.steps]]
+name = "fig1_trend"
+run = ["figures/scripts/fig1_trend.py"]
+inputs = ["figures/scripts/_style.py"]
+outputs = ["figures/output/png/fig1_trend.png"]
+before = "diagrams"

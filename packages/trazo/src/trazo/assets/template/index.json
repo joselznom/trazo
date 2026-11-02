@@ -1,6 +1,6 @@
 {
  "format": 1,
- "template": "v1.1.0",
+ "template": "v1.2.0",
  "src_path": "https://github.com/joselznom/trazo",
  "copier": "9.19.1",
  "placeholders": {
@@ -121,7 +121,7 @@
     "tables/specs/_shared.json": "07b7bf27875e0e4c2b73f921287628fe974c33cccd7ed3476a11e61c672d98ec",
     "tables/specs/summary.json": "0467eccc273174200366492b575f0802b7c558e3b451866283ba06abbbff023f",
     "templates/reference_universal.docx": "baa7c39ee614db6970ab40ca33436fd1aa85edc72a531c60aa52766a50f41eab",
-    "trazo.toml": "7bf6ca78bb60bc5f1292ef65560c259fc82da6426983db3ea7b133ec393331a6"
+    "trazo.toml": "d6bb21a42225b39cccb8a0a3d8e7667e8c979096ae39a4d8b8f3aaab53ae169a"
    },
    "executable": [
     "scripts/trazo"
@@ -244,7 +244,7 @@
     "tables/scripts/generate_tables.py": "a7459504c7318fbc91fab2e632ad21e02ae6fb850fccd2f80a6c09a281a7e6b8",
     "tables/specs/_shared.json": "07b7bf27875e0e4c2b73f921287628fe974c33cccd7ed3476a11e61c672d98ec",
     "templates/reference_universal.docx": "baa7c39ee614db6970ab40ca33436fd1aa85edc72a531c60aa52766a50f41eab",
-    "trazo.toml": "89806a89c36c4068cfe81c2ce088d50c0be1b55bd763efa787893ffdb74c4de1"
+    "trazo.toml": "a3ef9bb07f4391dee946e0dc5b55b08b8f5e718947d54f5f7f2e9ac5990f84e9"
    },
    "executable": [
     "scripts/trazo"
@@ -375,7 +375,7 @@
     "tables/specs/_shared.json": "07b7bf27875e0e4c2b73f921287628fe974c33cccd7ed3476a11e61c672d98ec",
     "tables/specs/summary.json": "0467eccc273174200366492b575f0802b7c558e3b451866283ba06abbbff023f",
     "templates/reference_universal.docx": "baa7c39ee614db6970ab40ca33436fd1aa85edc72a531c60aa52766a50f41eab",
-    "trazo.toml": "e554dcfe9b79ab929d724d179dcf2010d41a663a0e1e518fa74b7068bfad35b4"
+    "trazo.toml": "81fce357031a14a1d7bff731df4f8668cb83a03775bcb4efc2b8787ff48768e3"
    },
    "executable": [
     "scripts/trazo"
@@ -492,7 +492,7 @@
     "tables/scripts/generate_tables.py": "a7459504c7318fbc91fab2e632ad21e02ae6fb850fccd2f80a6c09a281a7e6b8",
     "tables/specs/_shared.json": "07b7bf27875e0e4c2b73f921287628fe974c33cccd7ed3476a11e61c672d98ec",
     "templates/reference_universal.docx": "baa7c39ee614db6970ab40ca33436fd1aa85edc72a531c60aa52766a50f41eab",
-    "trazo.toml": "2b4b54e44b934ab1eb0551a98e5b38d9d9d0a384eee036a99c3d60ece7ce33a2"
+    "trazo.toml": "fe076a04927ae3299add3462ecbc4addc8eef885ca39a3d5c6543cf136a871c6"
    },
    "executable": [
     "scripts/trazo"
