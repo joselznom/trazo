@@ -12,7 +12,6 @@ pid Popen sees is the venv launcher's, not the interpreter's."""
 
 from __future__ import annotations
 
-import functools
 import json
 import os
 import secrets
@@ -169,12 +168,10 @@ class Previews:
 
 
 PREVIEW_ID_ENV = "TRAZO_PREVIEW_ID"
-RESTART_PORT: list[int] = []  # Windows: the port restart() hands to the next preview
-STDIN_CLOSED = threading.Event()  # set by serve_child's watch_stdin
 
 
 def started_by(child: subprocess.Popen, info: dict[str, Any]) -> bool:
-    """Whether preview.json's preview is `child`, also after a restart in place."""
+    """Whether preview.json's preview is `child`."""
     return bool(info.get("id")) and info.get("id") == getattr(child, "preview_id", None)
 
 
@@ -191,22 +188,6 @@ def kill_tree(child: subprocess.Popen) -> None:
         child.kill()
 
 
-def restart(port: int) -> None:
-    """Run this preview again as the installed trazo (trazo.preview_updates):
-    the same pid, so preview.json and the MCP server's Previews stay right, and
-    the same stdin pipe; the listening socket is not inherited, so the port is
-    free to bind again. Windows has no exec: there this preview stops serving
-    first, then serve_child runs the new one, with $TRAZO_PREVIEW_ID, and
-    waits for it, closing its stdin when this one's closes."""
-    print("[preview] restarting as the installed trazo", flush=True)
-    sys.stderr.flush()
-    if os.name == "nt":
-        RESTART_PORT.append(port)
-        stop_serving()
-        return
-    os.execv(sys.executable, trazo_argv("mcp", "--serve", str(port)))
-
-
 def stop_serving() -> None:
     """End this preview's server.serve() from another thread: SIGTERM, which
     serve handles; on Windows, where os.kill would end the process at once
@@ -218,36 +199,20 @@ def stop_serving() -> None:
         os.kill(os.getpid(), signal.SIGTERM)
 
 
-def relay(argv: list[str]) -> int:
-    """Windows: run the new preview with the log as its output and a stdin of
-    its own, closed when this process's stdin closes; its exit code. Not this
-    stdin: watch_stdin's read holds the pipe, and Windows serialises every
-    call on a synchronous pipe, so the new interpreter would hang on it."""
-    if STDIN_CLOSED.is_set():  # the MCP server is gone: nothing to restart for
-        return 0
-    child = subprocess.Popen(argv, stdin=subprocess.PIPE, stdout=sys.stdout, stderr=sys.stderr)
-    while child.poll() is None and not STDIN_CLOSED.wait(0.5):
-        pass
-    child.stdin.close()
-    return child.wait()
-
-
 def serve_child(port: int) -> None:
     """The preview, run by preview_start in the project folder (see the
     module docstring). It stops on SIGTERM, which server.serve handles, or
     when its stdin closes."""
-    from . import preview_updates, server
+    from . import server
     from .project import PROJECT
     path = info_path(PROJECT)
 
     def record(bound: int) -> None:
         write_json(path, {"url": f"http://127.0.0.1:{bound}", "port": bound, "pid": os.getpid(),
                           "id": os.environ.get(PREVIEW_ID_ENV, ""), "project": str(PROJECT.root)}, indent=2)
-        preview_updates.RESTART = functools.partial(restart, bound)
 
     def watch_stdin():
         sys.stdin.buffer.read()
-        STDIN_CLOSED.set()
         stop_serving()
     threading.Thread(target=watch_stdin, daemon=True).start()
     try:
@@ -260,6 +225,3 @@ def serve_child(port: int) -> None:
     finally:
         if (read_info(path) or {}).get("pid") == os.getpid():
             path.unlink(missing_ok=True)
-    if RESTART_PORT:  # Windows: restart() stopped serving to free the port
-        print("[preview] stopped; starting the installed trazo", flush=True)
-        sys.exit(relay(trazo_argv("mcp", "--serve", str(RESTART_PORT[0]))))

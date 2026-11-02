@@ -373,7 +373,7 @@ def main(argv=None) -> int:
     parser.add_argument("--plan", action="store_true", help="print what would be downloaded and where; change nothing")
     parser.add_argument("--offline", action="store_true",
                         help="download nothing: exit 3 when Pandoc must be downloaded, "
-                             "and skip Chrome, which is optional (the preview's update)")
+                             "and skip Chrome, which is optional")
     parser.add_argument("--paper", metavar="FOLDER",
                         help="the chat's paper: say when its template is older than this trazo's")
     args = parser.parse_args(argv)

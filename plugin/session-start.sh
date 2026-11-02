@@ -1,7 +1,7 @@
 #!/bin/sh
 # SessionStart hook (hooks/hooks.json): tell the agent when trazo is not
 # set up, or when the installed trazo is not this plugin's version (older:
-# run setup; newer: ask for a plugin update, since setup would downgrade).
+# run setup; newer: update the plugin, since setup would downgrade).
 # Offline, starts no Python, prints nothing when all is well, always exits 0.
 # Set up means: the data folder's venv has trazo (its version is the name
 # of its one trazo-VERSION.dist-info folder; more than one is broken) and
@@ -60,7 +60,7 @@ case $installed in *[!A-Za-z0-9.+_-]*) installed=unknown ;; esac
 
 if newer "$installed" "$plugin"; then
     # Both apps share the install; the other app's newer plugin installed it.
-    context="trazo $installed is installed, newer than this plugin ($plugin): tell the user to update the trazo plugin in this app. Do not run the trazo:setup skill, which would install the older trazo. This matters when the user asks for trazo or paper work."
+    context="trazo $installed is installed, newer than this plugin ($plugin): when the user asks for trazo or paper work, run the trazo:update skill to update the trazo plugin in this app. Do not run the trazo:setup skill, which would install the older trazo."
 elif [ -z "$installed" ] || [ "$installed" = unknown ] || [ ! -s "$data/machine.json" ]; then
     context="The trazo plugin is not set up on this computer: its MCP tools are unavailable until the trazo:setup skill runs. When the user asks for trazo or paper work, run that skill; that request is the go-ahead."
 elif [ "$installed" != "$plugin" ]; then

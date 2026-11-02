@@ -29,7 +29,7 @@ import time
 from pathlib import Path
 from typing import Any
 
-from . import __version__, machine, mcp_app
+from . import __version__, machine, mcp_app, updates
 from .mcp_calls import Calls, ToolError, load
 from .mcp_preview import Previews, serve_child
 from .mcp_tools import INSTRUCTIONS, TOOLS
@@ -45,8 +45,10 @@ def setup_status(args):
     """The setup report. Stricter than plugin/session-start.sh, which checks
     only the install and its version: `next` is "setup" also without uv or
     Pandoc (unless the project sets commands.pandoc) or machine.json. When
-    the install is newer than the plugin, `next` is "plugin": setup would
-    install the older trazo."""
+    the install or the latest release (trazo.updates, asked every time) is
+    newer than the plugin, `next` is "plugin": setup would install the older
+    trazo. Once the rest is current, "paper" when the project's template is
+    older than the installed trazo's."""
     project = load(args, required=False) or Project(Path.cwd(), copy.deepcopy(DEFAULTS), False)
     folder = machine.data_dir()
     installed = machine.installed_version()
@@ -61,19 +63,23 @@ def setup_status(args):
     else:
         chrome, chrome_where = machine.find_chrome()
     data = machine.read()
-    have, ship = machine.release_key(installed), machine.release_key(plugin)
-    if have and ship and have > ship:
-        # Both apps share the install: a newer one came from the other app's plugin.
+    latest = updates.latest_release(root) if root else ""
+    have, ship, out = machine.release_key(installed), machine.release_key(plugin), machine.release_key(latest)
+    paper = updates.paper_status(project.root) if project.found else None
+    # Both apps share the install: a newer one came from the other app's plugin.
+    if ship and ((have and have > ship) or (out and out > ship)):
         next_step = "plugin"
     elif not installed or not data or not uv or (not pandoc and pandoc_where != "project setting"):
         next_step = "setup"
     elif plugin and installed != plugin:
         next_step = "update"
+    elif paper and paper["behind"]:
+        next_step = "paper"
     else:
         next_step = "ok"
     return {
         "trazo": {"version": __version__, "python": sys.executable},
-        "plugin": {"root": root or None, "version": plugin or None},
+        "plugin": {"root": root or None, "version": plugin or None, "latest": latest or None},
         "install": {"folder": str(folder), "installed": bool(installed), "version": installed or None,
                     "matches_plugin": installed == plugin if installed and plugin else None},
         "uv": {"found": bool(uv), "path": uv or None, "where": uv_where or None},
@@ -81,6 +87,7 @@ def setup_status(args):
                    "where": (pandoc_where or "PATH") if pandoc else None},
         "chrome": {"found": bool(chrome), "path": chrome or None, "where": chrome_where if chrome else None},
         "machine": {"written": data.get("written"), "trazo": data.get("trazo")} if data else None,
+        "paper": paper,
         "next": next_step,
     }
 
@@ -180,6 +187,7 @@ class Server:
         self.ui = False  # the client draws MCP Apps views
         self.tools = {"setup_status": setup_status, "doctor": doctor_report, "build": build, "check": check,
                       "paper_create": paper_create, "paper_update": paper_update,
+                      "plugin_update": updates.plugin_update,
                       "preview_start": self.start_preview, "preview_stop": self.previews.stop,
                       "preview_request": self.views.request, "preview_panel": self.views.panel}
 

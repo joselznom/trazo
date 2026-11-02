@@ -142,13 +142,11 @@ class CatalogTests(unittest.TestCase):
             if match:
                 self.assertIn(f"`{found.id}`", bullets[int(match[1]) - 1], found.source)
 
-    def test_the_viewer_assets_select_the_preview_and_update_scenarios(self):
+    def test_the_viewer_assets_select_the_preview_scenarios(self):
         entries = registry.load_catalog()
-        for changed in ("packages/trazo/src/trazo/assets/preview/preview.js",
-                        "packages/trazo/src/trazo/assets/preview/preview-updates.js"):
-            ids = [e.id for e in registry.select(entries, changed=[changed])]
-            for wanted in ("n1-preview-update", "n1-port-busy", "n1-two-sessions-share-preview"):
-                self.assertIn(wanted, ids, changed)
+        ids = [e.id for e in registry.select(entries, changed=["packages/trazo/src/trazo/assets/preview/preview.js"])]
+        for wanted in ("n1-port-busy", "n1-two-sessions-share-preview"):
+            self.assertIn(wanted, ids)
 
     def test_every_area_still_matches_a_file_of_the_repository(self):
         # A moved or renamed path would otherwise stop selecting its scenarios without a sign.

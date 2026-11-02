@@ -158,17 +158,6 @@ runs `claude /login`, `claude logout`, `claude setup-token`, `codex login` or
   keychain is not read: the scenario skips. A token about to expire skips too,
   so Codex never refreshes inside the sandbox and leaves the real login stale.
 
-## A flaky update until the fix is released
-
-`n1-preview-update` updates from the last release (a tag), whose preview still runs that release's
-viewer. Before the fix, the viewer reloaded itself when the paper's rebuild changed the build
-version, and a reload served while the old server restarted (`os.execv`, 0.5 s after the reply)
-left a page with no scripts. The viewer now skips that reload while an update runs
-(`updateBusy` in `preview-updates.js`), but the old page of this scenario is still the last
-release's, so the scenario fails about 1 run in 30 (more under load) until a tag includes the
-fix. The failure message prints the page's state (`loads`, `loadErrors`, `viewerLoaded`).
-To check the fix before then, run the scenario with `ctx.last_release("<commit with the fix>")`.
-
 ## Safety
 
 `guard.py` runs when a sandbox is made and before every spawn. It refuses

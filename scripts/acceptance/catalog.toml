@@ -72,12 +72,6 @@ title = "With a newer trazo installed than the plugin, the hook and setup_status
 source = "docs/plugin.md check 8"
 
 [[scenario]]
-id = "n1-preview-update"
-level = "n1"
-title = "With the plugin newer than the install, the preview shows the version pill; Update reinstalls, updates the paper and reloads on the same port"
-source = "docs/plugin.md check 9"
-
-[[scenario]]
 id = "n1-two-sessions-share-preview"
 level = "n1"
 title = "Two sessions on one folder: the second preview_start reuses the first preview"
@@ -126,8 +120,8 @@ source = "README.md (terminal install)"
 [[scenario]]
 id = "n2-update-claude"
 level = "n2"
-title = "Plugin update from the last release to HEAD with the claude CLI"
-source = "new"
+title = "Plugin update from the last release to HEAD with trazo's plugin_update and the claude CLI"
+source = "docs/plugin.md check 9"
 
 [[scenario]]
 id = "n2-update-codex"

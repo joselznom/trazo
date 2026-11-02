@@ -52,11 +52,11 @@ module = [
     "trazo.page_bundle",
     "trazo.pandoc_options",
     "trazo.preview_inputs",
-    "trazo.preview_updates",
     "trazo.resources",
     "trazo.review_history",
     "trazo.review_storage",
     "trazo.svg_export",
+    "trazo.updates",
     "trazo.uv_sync",
 ]
 # The per-module parts of --strict (`strict` itself only works globally).

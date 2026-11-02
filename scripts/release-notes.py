@@ -19,9 +19,9 @@ ROOT = Path(__file__).resolve().parent.parent
 REPO = "https://github.com/joselznom/trazo"
 TAG = re.compile(r"v(\d+)\.(\d+)\.(\d+)")
 # Same steps as the README's "Update" section, for users who read only the release page.
-HOW_TO_UPDATE = ("**How to update.** Update trazo in the app's plugin browser (the ChatGPT app also updates it "
-                 "when it starts). The next time a paper's preview is open, click the version pill in its top bar, "
-                 "then **Update**.")
+HOW_TO_UPDATE = ("**How to update.** Ask the agent to *\"update trazo\"*, or just keep working: it checks for "
+                 "a new version when you ask it for trazo or paper work, installs the plugin, and finishes in a "
+                 "new chat with trazo and your paper.")
 
 
 def section(changelog: str, tag: str) -> str:

@@ -14,13 +14,14 @@ pages: use them to show the URL, never to start or stop the preview.
 1. Find the paper: the chat's folder, or the folder the user named, when
    it has `trazo.toml`. Otherwise ask which paper; if there is none,
    say so and stop.
-2. When trazo's `preview_start` is missing, this chat runs the
-   stand-in server. Call trazo's `setup_status` and follow its `next`:
-   `restart` means setup already finished; `setup` or `update`, follow
-   the `trazo:setup` skill. Either way, end by telling the user to
-   start a new chat and ask for the preview there (in the Claude app,
-   `/trazo:open`), and stop: only a new chat loads the trazo
-   tools.
+2. Call trazo's `setup_status` with the paper folder's absolute path as
+   `project`. When trazo's `preview_start` is missing, this chat runs the
+   stand-in server: `restart` means setup already finished; `setup` or
+   `update`, follow the `trazo:setup` skill. Either way, end by telling
+   the user to start a new chat and ask for the preview there (in the
+   Claude app, `/trazo:open`), and stop: only a new chat loads the trazo
+   tools. Otherwise, when `next` is not "ok", follow the `trazo:update`
+   skill, then go on.
 3. Call trazo's `preview_start` with the paper folder's absolute path
    as `project`. It starts the preview, or returns the running one
    (`reused: true`, also when another chat started it).

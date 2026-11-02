@@ -21,10 +21,9 @@ calls; your messages carry only the plain status.
    whose Perl lacks the modules of the stand-in server), go on with step
    2 with an empty `plugin.root`. Keep its `plugin.root`. Then follow its
    `next`:
-   - "plugin": the installed trazo is newer than this plugin (the other
-     app's plugin installed it). Tell the user to update the trazo plugin
-     in this app's plugin settings, and stop; setup would install the
-     older trazo.
+   - "plugin" or "paper": a newer plugin is out, or the paper is older
+     than trazo. Follow the `trazo:update` skill instead; setup would
+     install the older trazo.
    - "restart": setup is done; tell the user to start a new chat, and stop.
    - "ok": trazo is set up. When the user asked to repair it, or
      `chrome.found` is false and they asked to set trazo up or their task
@@ -88,10 +87,9 @@ calls; your messages carry only the plain status.
      stay off until the user installs Google Chrome or Chromium with the
      system's package manager, which brings them; say so in plain words.
    - A `paper: older template` line: the paper was made with an earlier
-     version of trazo. Suggest updating it in the new chat, in plain
-     words about what it brings (the latest improvements to its tools and
-     instructions; their own writing stays as it is), and leave the tool,
-     script and version names out. Update it only when they ask.
+     version of trazo. Tell the user the new chat also brings it up to
+     date (the `trazo:update` skill does it there), with their writing
+     kept as it is.
    - A `quarantine:` line other than `none` (macOS), or no Pandoc
      version: the system blocked a downloaded tool. Say so in plain words
      instead of "ready", and stop; the quarantine attribute stays as it is.

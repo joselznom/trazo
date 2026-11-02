@@ -1,6 +1,7 @@
 """setup_status in process, against fake data folders and a fake plugin
 root (test_mcp.py calls it through the server)."""
 
+import json
 import os
 import shutil
 import unittest
@@ -10,7 +11,7 @@ import _support  # noqa: F401  (sets TRAZO_ROOT before trazo is imported)
 from test_machine import ToolFolderCase, fake_tool
 
 import trazo
-from trazo import machine, mcp
+from trazo import machine, manifest, mcp, new, updates, variants
 from trazo.project import DEFAULTS, Project, merge
 
 
@@ -42,7 +43,7 @@ class SetupStatusTests(ToolFolderCase):
         status = mcp.setup_status({})
         self.assertEqual(status["install"], {"folder": str(self.data), "installed": False, "version": None,
                                              "matches_plugin": None})
-        self.assertEqual(status["plugin"], {"root": str(self.plugin), "version": "0.5.0"})
+        self.assertEqual(status["plugin"], {"root": str(self.plugin), "version": "0.5.0", "latest": None})
         self.assertEqual(status["uv"], {"found": False, "path": None, "where": None})
         self.assertFalse(status["pandoc"]["found"])
         self.assertEqual(status["chrome"], {"found": False, "path": None, "where": None})
@@ -95,6 +96,46 @@ class SetupStatusTests(ToolFolderCase):
         self.install("0.5.0rc1")
         self.assertEqual(mcp.setup_status({})["next"], "update")
 
+    def set_up(self, version="0.5.0"):
+        self.install(version)
+        (self.data / "uv").mkdir(exist_ok=True)
+        fake_tool(self.data / "uv", "uv", "uv 0.13.5")
+        self.install_pandoc()
+        machine.write({})
+
+    def test_a_newer_release_says_plugin(self):
+        self.set_up()
+        for latest, plugin_next in (("0.6.0", "plugin"), ("0.5.0", "ok"), ("", "ok")):
+            with patch.object(updates, "latest_release", return_value=latest) as asked:
+                status = mcp.setup_status({})
+            asked.assert_called_once_with(str(self.plugin))
+            self.assertEqual(status["plugin"], {"root": str(self.plugin), "version": "0.5.0", "latest": latest or None})
+            self.assertEqual(status["next"], plugin_next, latest)
+        # Before setup too: setup from this plugin would install the older trazo.
+        shutil.rmtree(self.data / "venv")
+        with patch.object(updates, "latest_release", return_value="0.6.0"):
+            self.assertEqual(mcp.setup_status({})["next"], "plugin")
+
+    def test_an_older_paper_says_paper(self):
+        self.set_up()
+        folder = self.folder / "paper"
+        new.create(folder, kind="article", example=True, title="T")
+        project = Project(folder, merge(DEFAULTS, {}), True)
+        current = variants.Store().template
+        with patch.object(mcp, "load", return_value=project):
+            status = mcp.setup_status({})
+            self.assertEqual(status["paper"], {"template": current, "current": current, "behind": False})
+            self.assertEqual(status["next"], "ok")
+            data = json.loads((folder / manifest.PATH).read_text())
+            (folder / manifest.PATH).write_text(json.dumps({**data, "template": "v0.1.0"}))
+            status = mcp.setup_status({})
+            self.assertEqual(status["paper"], {"template": "v0.1.0", "current": current, "behind": True})
+            self.assertEqual(status["next"], "paper")
+            # Setup and the plugin come first: the paper updates to what the new trazo ships.
+            self.install("0.4.0")
+            self.assertEqual(mcp.setup_status({})["next"], "update")
+        self.assertIsNone(mcp.setup_status({})["paper"])  # no paper
+
     def test_release_key(self):
         self.assertEqual(machine.release_key("0.10.1"), (0, 10, 1))
         self.assertLess(machine.release_key("0.9.9"), machine.release_key("0.10"))
@@ -136,7 +177,7 @@ class SetupStatusTests(ToolFolderCase):
         machine.write({})
         with patch.dict(os.environ, {"TRAZO_PLUGIN_ROOT": ""}):
             status = mcp.setup_status({})
-        self.assertEqual(status["plugin"], {"root": None, "version": None})
+        self.assertEqual(status["plugin"], {"root": None, "version": None, "latest": None})
         self.assertIsNone(status["install"]["matches_plugin"])
         self.assertEqual(status["pandoc"]["where"], "PATH")
         self.assertEqual(status["next"], "ok")
