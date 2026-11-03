@@ -26,7 +26,7 @@ Internal changes (tests, CI, refactoring) stay out.
   or use **Edits** above the page to step through them or take them all at
   once. Resolve on a comment the agent answered accepts its edits, and the
   new Reject undoes them and reopens the comment. Your own saves from the
-  preview are accepted as you make them. Works without git.
+  preview are accepted as you make them. Works without git (#16).
 
 ### Changed
 
@@ -41,7 +41,7 @@ Internal changes (tests, CI, refactoring) stay out.
 ### Removed
 
 - The preview's Diff tab, which compared a file with the last git commit:
-  the marks in the text replace it (`git diff` still shows it).
+  the marks in the text replace it (`git diff` still shows it) (#16).
 
 ## v1.2.0 (2026-11-02)
 
