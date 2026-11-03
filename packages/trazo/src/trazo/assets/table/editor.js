@@ -1064,15 +1064,13 @@
   }
   function commentCard(c) {
     const mode = cedit && cedit.id === c.id ? cedit.mode : null;
-    const trash = h("button", { type: "button", class: "te-icon te-del pk-del", "aria-label": "Delete comment", title: "Delete",
-      html: TRASH, onclick: (e) => { e.stopPropagation(); deletion.ask([c.id], c.id); } });
     if (c.status === "done" && openDone !== c.id && !mode) {
       return h("div", { class: `te-card done compact pk-row${deletion.ticked(c.id) ? " selected" : ""}`,
         title: `${c.resolved ? `Resolved ${c.resolved}. ` : ""}Click to show the thread`,
-        onclick: (e) => { if (!e.target.closest("input, button, .pk-confirm")) { openDone = c.id; renderPanel(); } } },
+        onclick: () => { openDone = c.id; renderPanel(); } },
       deletion.tick(c.id), h("span", { class: "te-cok", "aria-hidden": "true", text: "✓" }),
       h("span", { class: "te-ctext", text: c.comment.split("\n")[0] }), h("span", { class: "te-cwhere", text: targetText(c.target) }),
-      trash, deletion.box(c.id));
+      deletion.trash(c.id, "te-icon te-del", TRASH), deletion.box(c.id));
     }
     const key = `${c.id}:${mode}`;
     const close = () => { delete cdrafts[key]; cedit = null; renderPanel(); };
@@ -1093,7 +1091,7 @@
     const acts = h("div", { class: "te-cacts" });
     const btn = (text, onclick, cls, title) => acts.append(h("button", { type: "button", class: `pv-btn sm${cls ? " " + cls : ""}`, text, title, onclick }));
     const spacer = () => acts.append(h("span", { class: "te-grow" }));
-    const del = () => acts.append(trash);
+    const del = () => acts.append(deletion.trash(c.id, "te-icon te-del", TRASH));
     const resolve = () => commentOp({ op: "update", id: c.id, status: "done" }, "Comment resolved");
     let text = h("p", { text: c.comment }), reply = null;
     if (mode === "edit") {
@@ -1121,8 +1119,9 @@
       spacer();
       del();
     }
-    return h("div", { class: `te-card pk-row ${c.status}` },
-      h("div", { class: "te-meta" }, h("span", { class: `te-state ${c.status}`, text: STATE_NAME[c.status] || c.status,
+    const done = c.status === "done";
+    return h("div", { class: `te-card pk-row ${c.status}${done && deletion.ticked(c.id) ? " selected" : ""}` },
+      h("div", { class: "te-meta" }, done ? deletion.tick(c.id) : null, h("span", { class: `te-state ${c.status}`, text: STATE_NAME[c.status] || c.status,
         title: c.status === "done" && c.resolved ? `Resolved ${c.resolved}` : null }),
       h("button", { type: "button", class: "te-target", text: targetText(c.target), title: "Select the target",
         onclick: () => selectTarget(c.target) }), h("span", { class: "te-grow" }), h("span", { text: c.created || "" })),

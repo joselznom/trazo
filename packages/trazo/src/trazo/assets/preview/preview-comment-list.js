@@ -33,13 +33,6 @@
   // are not archived, and the underlines.
   let inText = [];
 
-  function trashButton(c) {
-    const b = h("button", { type: "button", "data-op": "delete", class: "pv-del pk-del", "aria-label": "Delete comment", title: "Delete" });
-    b.innerHTML = ICONS.trash;
-    b.addEventListener("click", (e) => { e.stopPropagation(); deletion.ask([c.id], c.id); });
-    return b;
-  }
-
   function card(c, hit, entry) {
     const el = document.createElement("div");
     const live = c.status === "open" || c.status === "review";
@@ -53,19 +46,21 @@
       el.title = `${c.resolved ? `Resolved ${c.resolved}. ` : ""}Click to show the thread`;
       el.append(deletion.tick(c.id), h("span", { class: "pv-ok", text: "✓", "aria-hidden": "true" }),
         h("span", { class: "pv-ctext", text: c.comment.split("\n")[0] }), h("span", { class: "pv-cwhere", text: prefix + place }),
-        trashButton(c), deletion.box(c.id) || "");
-      el.addEventListener("click", (e) => {
-        if (e.target.closest("input, button, .pk-confirm")) return;
+        deletion.trash(c.id, "pv-del", ICONS.trash), deletion.box(c.id) || "");
+      el.addEventListener("click", () => {
         openDone = navId = c.id;
         renderComments();
       });
       return el;
     }
-    el.className = `pv-card pk-row ${c.status}${lost ? " lost" : ""}${navId === c.id ? " current" : ""}`;
+    const ticked = c.status === "done" && deletion.ticked(c.id);
+    el.className = `pv-card pk-row ${c.status}${lost ? " lost" : ""}${navId === c.id ? " current" : ""}${ticked ? " selected" : ""}`;
     el.innerHTML =
       `<div class="pv-card-head"><span class="pv-dot" aria-hidden="true"></span><span class="pv-where"></span><span class="pv-state"></span></div>` +
       (c.quote ? `<blockquote></blockquote>` : "") +
       `<div class="pv-text"></div><div class="pv-thread"></div><div class="pv-actions"></div>`;
+    // An open resolved card keeps its tick (see the one-line form above).
+    if (c.status === "done") $(".pv-card-head", el).prepend(deletion.tick(c.id));
     $(".pv-where", el).textContent = `${prefix}${place}${lost ? " · text changed" : ""}` +
       (live && hit && hit.changed ? " · target rewritten" : "") +
       (live && hit && hit.moved ? ` · moved from ${c.section}` : "");
@@ -84,7 +79,7 @@
       actions.append(h("button", { type: "button", "data-op": op, class: cls || false, text: label, title: title || false }));
     };
     const spacer = () => actions.append(h("span", { class: "pv-sp" }));
-    const trash = () => actions.append(trashButton(c));
+    const trash = () => actions.append(deletion.trash(c.id, "pv-del", ICONS.trash));
     const key = `${c.id}:${editing ? editing.mode : ""}`;
     const field = (initial, placeholder) => {
       const area = document.createElement("textarea");
@@ -170,7 +165,7 @@
       }
       if (op === "show") { showResolved(c, hit); return; }
       if (op === "reopen") { openDone = null; send({ op: "update", id: c.id, status: "open" }, "Comment reopened for Claude"); return; }
-      if (e.target.closest("textarea, button, .pk-confirm")) return;
+      if (e.target.closest("textarea, button")) return;
       navId = c.id;
       renderComments();
       if (!archived(c)) showCommentTarget(c, hit);

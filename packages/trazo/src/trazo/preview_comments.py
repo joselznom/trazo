@@ -96,7 +96,7 @@ def print_comments(show_all):
     for c in map(upgraded, load_comments()):
         if c.get("kind") == "underline":  # the author's reading marks
             continue
-        if c.get("status") == "deleted" or (not show_all and c.get("status") != "open"):
+        if not show_all and c.get("status") != "open":
             continue
         print(f"[{c['id']}] {c.get('status')} | {c.get('doc', '')} | "
               f"{c.get('section', '')} | {c.get('para', '')}")

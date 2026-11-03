@@ -226,23 +226,23 @@
   const STATE_LABEL = { open: "Open", review: "To check", done: "Resolved" };
 
   function card(item) {
-    const trash = () => el("button", { type: "button", class: "icon-btn small del pk-del", "aria-label": "Delete comment", title: "Delete",
-      onclick: (e) => { e.stopPropagation(); deletion.ask([item.id], item.id); } }, ic("trash", 15));
+    const trash = () => deletion.trash(item.id, "icon-btn small del", ic("trash", 15));
     if (item.status === "done" && focusId !== item.id && editing !== item.id) {
       /* A resolved comment is one line; a click shows the thread. */
       const line = el("div", { class: `ccard done compact pk-row${deletion.ticked(item.id) ? " selected" : ""}`,
         title: `${item.resolved ? `Resolved ${item.resolved}. ` : ""}Click to show the thread`,
-        onclick: (e) => { if (!e.target.closest("input, button, .pk-confirm")) { focusId = item.id; showTarget(item); } } },
+        onclick: () => { focusId = item.id; showTarget(item); } },
       deletion.tick(item.id), el("span", { class: "ok", "aria-hidden": "true" }, "✓"),
       el("span", { class: "body" }, item.comment.split("\n")[0]), el("span", { class: "where" }, where(item)), trash(), deletion.box(item.id));
       line.dataset.id = item.id;
       return line;
     }
-    const node = el("div", { class: `ccard pk-row ${item.status}${focusId === item.id ? " on" : ""}` });
+    const done = item.status === "done";
+    const node = el("div", { class: `ccard pk-row ${item.status}${focusId === item.id ? " on" : ""}${done && deletion.ticked(item.id) ? " selected" : ""}` });
     node.dataset.id = item.id;
     const state = el("span", { class: `state ${item.status}`, title: item.status === "done" && item.resolved ? `Resolved ${item.resolved}` : null },
       STATE_LABEL[item.status] || item.status);
-    node.append(el("div", { class: "meta" }, ic(item.target ? "target" : item.point ? "dot" : "file", 13),
+    node.append(el("div", { class: "meta" }, done ? deletion.tick(item.id) : null, ic(item.target ? "target" : item.point ? "dot" : "file", 13),
       el("span", { class: "where" }, where(item)), item.created ? el("span", {}, `· ${when(item.created)}`) : null, state));
     if (editing === item.id) {
       const area = el("textarea", { class: "input", "aria-label": "Edit comment", placeholder: "⌘↵ to save, Esc to cancel",
@@ -321,7 +321,7 @@
       node.append(actions, deletion.box(item.id) || "");
     }
     node.addEventListener("click", (e) => {
-      if (e.target.closest("a, textarea, button, .pk-confirm")) return;
+      if (e.target.closest("a, textarea, button")) return;
       focusId = focusId === item.id && item.status === "done" ? null : item.id;
       showTarget(item);
     });
@@ -447,7 +447,7 @@
     focus(id) {
       focusId = id;
       const item = comments.find((c) => c.id === id);
-      if (item && item.status !== "deleted") filter = item.status === "done" ? "resolved" : "active";
+      if (item) filter = item.status === "done" ? "resolved" : "active";
       openTab();
       draw();
       if (item && item.target && findTarget(item.target)) ed.select([item.target]);

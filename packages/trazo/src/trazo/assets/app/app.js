@@ -194,40 +194,50 @@
   // a trash button per comment, ticks on resolved ones, and a warning first,
   // since a deletion has no undo. `redraw` redraws the panel; `purge(body,
   // message)` sends the deletion. The panel calls `sync` before drawing.
+  // What it adds stops its clicks, so the clickable row under it ignores them.
   function commentDeletion(redraw, purge) {
     const ticked = new Set();
     let asking = null;  // {ids, at}: `at` is the card's id or "foot"
     const ask = (ids, at) => { asking = { ids, at }; redraw(); };
+    const quiet = (node) => { node.addEventListener("click", (e) => e.stopPropagation()); return node; };
     const cancel = () => { asking = null; redraw(); };
     // The warning about the deletion asked at `at`, or null. Cancel takes the
     // focus unless the reader is elsewhere; Escape cancels.
     function box(at) {
       if (!asking || asking.at !== at) return null;
-      const { ids } = asking, n = ids.length;
+      // The foot sends ids, which the server takes only when all are still resolved.
+      const { ids } = asking, n = ids.length, body = at === "foot" ? { op: "purge", ids } : { op: "purge", id: ids[0] };
       const no = el("button", { type: "button", class: "pv-btn sm", text: "Cancel", onclick: cancel });
       const node = el("div", { class: "pk-confirm", role: "alertdialog", "aria-label": "Delete comments" },
         el("b", { text: n === 1 ? "Delete this comment?" : `Delete ${n} comments?` }),
         "Deleted comments are gone for good: Undo can't bring them back.",
         el("div", { class: "pk-confirm-acts" }, no, el("button", { type: "button", class: "pv-btn sm pk-danger", text: "Delete",
-          onclick: () => { asking = null; purge(n === 1 ? { op: "purge", id: ids[0] } : { op: "purge", ids }, `${n} comment${n === 1 ? "" : "s"} deleted`); } })));
+          onclick: () => { asking = null; purge(body, `${n} comment${n === 1 ? "" : "s"} deleted`); } })));
       node.addEventListener("keydown", (e) => { if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); cancel(); } });
       requestAnimationFrame(() => {
         const a = document.activeElement;
         if (node.isConnected && (!a || a === document.body)) no.focus();
       });
-      return node;
+      return quiet(node);
     }
     const button = (text, onclick) => el("button", { type: "button", text, onclick });
     return {
-      ask, box,
+      box,
       // Keep only ticks on `done` and a warning about `shown` (comment ids).
       sync(done, shown) {
         for (const id of ticked) if (!done.includes(id)) ticked.delete(id);
         if (asking && !asking.ids.every((id) => shown.includes(id))) asking = null;
       },
       ticked: (id) => ticked.has(id),
-      tick: (id) => el("input", { type: "checkbox", class: "pk-check", "aria-label": "Select for deletion", checked: ticked.has(id),
-        onchange: (e) => { ticked[e.target.checked ? "add" : "delete"](id); if (asking && asking.at === "foot") asking = null; redraw(); } }),
+      tick: (id) => quiet(el("input", { type: "checkbox", class: "pk-check", "aria-label": "Select for deletion", checked: ticked.has(id),
+        onchange: (e) => { ticked[e.target.checked ? "add" : "delete"](id); if (asking && asking.at === "foot") asking = null; redraw(); } })),
+      // The comment's trash button, in the panel's class, with `icon` (markup or a node).
+      trash(id, cls, icon) {
+        const node = el("button", { type: "button", "data-op": "delete", class: `${cls} pk-del`, "aria-label": "Delete comment", title: "Delete",
+          onclick: (e) => { e.stopPropagation(); ask([id], id); } });
+        if (typeof icon === "string") node.innerHTML = icon; else node.append(icon);
+        return node;
+      },
       // The foot of the Resolved list (`done`: its ids), with the panel's class.
       foot(done, cls) {
         const n = ticked.size, all = button(n ? `Delete ${n}` : "Delete all resolved", () => ask(n ? [...ticked] : done, "foot"));

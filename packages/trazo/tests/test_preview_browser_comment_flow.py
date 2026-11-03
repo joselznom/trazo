@@ -108,6 +108,13 @@ class CommentFlowTests(PreviewBrowserTestCase):
         for n in (0, 1):  # a tick redraws the list
             self.evaluate(f"document.querySelectorAll('.pv-card.compact .pk-check')[{n}].click()")
         self.wait_for("document.querySelector('.pv-cfoot > span')?.textContent === '2 selected'")
+        # A ticked comment shown in full keeps its tick, which still unticks it.
+        self.evaluate("document.querySelector('.pv-card.compact.selected .pv-ctext').click()")
+        self.wait_for("document.querySelector('.pv-card.done.selected:not(.compact) .pk-check')?.checked")
+        self.evaluate("document.querySelector('.pv-card.done:not(.compact) .pk-check').click()")
+        self.wait_for("document.querySelector('.pv-cfoot > span')?.textContent === '1 selected'")
+        self.evaluate("document.querySelector('.pv-card.done:not(.compact) .pk-check').click()")
+        self.wait_for("document.querySelector('.pv-cfoot > span')?.textContent === '2 selected'")
         self.click(".pv-cfoot button", "Delete 2")
         self.wait_for("document.querySelector('.pv-cfoot .pk-confirm b')?.textContent === 'Delete 2 comments?'")
         self.click(".pk-confirm button", "Delete")

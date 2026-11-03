@@ -6,9 +6,9 @@ status, replies, created}, where <scope> is "diagram" or "table". States
 follow the preview: open (the author wrote it), review (the agent replied
 with `resolve`), done (only the author marks it; `resolved` holds the time).
 purge deletes comments for good: they leave the store and every history
-entry that holds them, so it has no undo. delete moves an underline (the
-preview's reading marks) to status "deleted", the old status in
-deleted_from, and restore brings it back. Comments left in that state by
+entry that holds them, so it has no undo. delete removes an underline (the
+preview's reading marks) by setting its status to "deleted" (the old status
+in deleted_from), so undo brings it back. Comments left in that state by
 older versions, which deleted comments the same way, read as done.
 
 Every change adds a "comments" entry {id, time, kind, <scope>, label,
@@ -20,11 +20,11 @@ and belongs to each of them. Payloads name the next undo (`undo`, its
 
 Ops of `change` (the editors' POST bodies): add {<scope>, comment,
 ...target fields}, update {id, status?, comment?}, reply {id, text, by?,
-status?}, purge {id} (any state) or {ids} (only done comments; a request
-with any other is refused whole), delete {id} or {ids} (underlines only,
-several in one undo step), restore {id} and undo {<scope>?, expect?} (the
-last comment change of that scope; 409 when the comment changed since, or
-when `expect` is not that entry's undo_id).
+status?}, purge {id} (any state) or {ids} (only resolved comments; a
+request with any other is refused whole), delete {id} or {ids} (underlines
+only, several in one undo step) and undo {<scope>?, expect?} (the last
+comment change of that scope; 409 when the comment changed since, or when
+`expect` is not that entry's undo_id).
 """
 
 from __future__ import annotations
@@ -42,7 +42,7 @@ from .review_storage import read_list, review_lock, write_atomic
 
 STATUSES = ("open", "review", "done")
 AUTHORS = ("author", "agent")
-OPS = ("add", "update", "reply", "delete", "restore", "purge", "undo")
+OPS = ("add", "update", "reply", "delete", "purge", "undo")
 
 Comment = dict[str, Any]
 
@@ -69,6 +69,11 @@ def upgraded(comment: Comment) -> Comment:
         item["status"] = "done"
         item.pop("deleted_from", None)
     return item
+
+
+def resolved(comment: Comment) -> bool:
+    """A resolved comment (not an underline), which purge {ids} takes."""
+    return comment.get("status") == "done" and comment.get("kind") != "underline"
 
 
 def text_field(request: dict[str, Any], key: str, required: bool = False) -> str:
@@ -233,12 +238,12 @@ class CommentStore:
         """Delete comments for good, with the history entries that hold them
         (the caller holds review_lock)."""
         ids = ids_field(request)
-        found = {c["id"]: upgraded(c) for c in comments if c["id"] in ids}
+        wanted = set(ids)
+        found = {c["id"]: upgraded(c) for c in comments if c["id"] in wanted}
         missing = [i for i in ids if i not in found]
         if missing:
             raise NotFound(f"no comment with id {missing[0]}")
-        if "ids" in request and any(c.get("status") != "done" or c.get("kind") == "underline"
-                                    for c in found.values()):
+        if "ids" in request and not all(map(resolved, found.values())):
             raise RequestError("only resolved comments are deleted together; nothing was deleted")
         self.save([c for c in comments if c["id"] not in found])
         self.history.save([e for e in history if e.get("kind") != "comments"
@@ -262,14 +267,8 @@ class CommentStore:
     @staticmethod
     def apply(item: Comment, op: str, request: dict[str, Any]) -> str:
         """Change one comment in place; returns the history label."""
-        deleted = item.get("status") == "deleted"
-        if op == "restore":
-            if not deleted:
-                raise RequestError("comment is not deleted")
-            item["status"] = item.pop("deleted_from", "open")
-            return "restore comment"
-        if deleted:
-            raise RequestError("comment is deleted; restore it first")
+        if item.get("status") == "deleted":
+            raise RequestError("underline is removed")
         if op == "delete":
             if item.get("kind") != "underline":
                 raise RequestError("delete removes underlines; use purge to delete a comment")
@@ -310,16 +309,14 @@ class CommentStore:
         except NotFound as exc:
             raise error(f"no {self.scope} comment with id {comment_id}") from exc
         except RequestError as exc:
-            message = ("comment is deleted; restore it in the editor first"
-                       if str(exc) == "comment is deleted; restore it first" else str(exc))
-            raise error(message) from exc
+            raise error(str(exc)) from exc
 
     def print(self, name: str | None, show_all: bool,
               where: Callable[[Comment], str] | None = None) -> None:
         """List open comments (every state with show_all), with their threads."""
         shown = 0
         for c in map(upgraded, self.load()):
-            if c.get("status") == "deleted" or (not show_all and c.get("status") != "open"):
+            if not show_all and c.get("status") != "open":
                 continue
             if name and c.get(self.scope) != name:
                 continue

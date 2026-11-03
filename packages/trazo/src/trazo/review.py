@@ -10,7 +10,7 @@ from urllib.parse import quote
 
 from .dependencies import fingerprint
 from .local_server import RequestError
-from .review_comments import thread_of
+from .review_comments import resolved, thread_of
 from .review_storage import StoreError, review_lock
 
 
@@ -59,30 +59,22 @@ def post_route(path, body):
     return (lambda: change(body())) if path == "/__review" else None
 
 
-def split_key(key):
-    scope, sep, identifier = key.partition(":")
-    if not sep:
-        raise RequestError("use scope:id from trazo review comments")
-    return scope, identifier
-
-
 def delete_resolved(keys, every):
     """Delete resolved comments for good. Each scope's are sent together, as
     ids, so its store refuses them all when one is no longer resolved."""
     if bool(keys) == every:
         raise RequestError("name the scope:id of each resolved comment, or pass --resolved alone")
-    resolved = {c["key"] for c in payload()["comments"] if c.get("status") == "done" and c.get("kind") != "underline"}
-    if every and not resolved:
+    done = {c["key"]: c for c in payload()["comments"] if resolved(c)}
+    if every and not done:
         print("no resolved comments")
         return
     # A key that is not resolved fails before any scope is deleted.
     for key in keys:
-        if key not in resolved:
+        if key not in done:
             raise RequestError(f"{key} is not a resolved comment; nothing was deleted")
     by_scope: dict[str, list[str]] = {}
-    for key in keys or sorted(resolved):
-        scope, identifier = split_key(key)
-        by_scope.setdefault(scope, []).append(identifier)
+    for key in keys or sorted(done):
+        by_scope.setdefault(done[key]["scope"], []).append(done[key]["id"])
     for scope, ids in by_scope.items():
         change({"scope": scope, "op": "purge", "ids": ids})
         for identifier in ids:
@@ -127,7 +119,9 @@ def main(argv=None):
                     for r in thread_of(c):
                         print(f"    {r.get('by')}: {r.get('text')}")
         elif args.command == "resolve":
-            scope, identifier = split_key(args.id)
+            scope, sep, identifier = args.id.partition(":")
+            if not sep:
+                raise RequestError("use scope:id from trazo review comments")
             change({"scope": scope, "op": "reply", "id": identifier, "by": "agent", "text": args.reply})
             print(f"[{args.id}] review: reply added")
         elif args.command == "delete":
