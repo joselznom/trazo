@@ -6,6 +6,10 @@ description: Use when creating or updating generated manuscript tables, editing 
 
 # Paper Table Generation
 
+- Choose the kind of table first. **From the data**: its numbers come from
+  the project's data, so they stay computed. **Typed by hand**: its content
+  is text, or numbers from outside the project's data (the literature,
+  another program, definitions). See "Tables typed by hand" below.
 - Numbers live in `tables/scripts/generate_tables.py`, which writes
   unformatted data to `tables/output/data/<name>.json` (records of strings,
   ints, floats, null or objects of numbers such as `{mean, sd, low, high}`,
@@ -74,6 +78,27 @@ spec) for those, then resolve the comment saying what changed:
 scripts/trazo table comments [LABEL]          # open ones (--all: every state)
 scripts/trazo table resolve ID "what changed" # reply; it moves to review
 ```
+
+## Tables typed by hand
+
+The cells live in `tables/specs/<label>.json`, with `body` instead of `data`
+and `rows`; there is no data and no script, and nothing is computed:
+
+```json
+{"schema_version": 1, "title": "Included studies.",
+ "columns": [{"id": "study", "header": "Study"}, {"id": "n", "header": "n", "align": "right"}],
+ "body": [{"id": "b1", "block": "Europe"},
+          {"id": "r1", "cells": {"study": "Smith 2020 [@smith2020]", "n": "120"}}]}
+```
+
+Text is published as typed. Bold, italic, `^superscript^`, `~subscript~` and
+citations work; other Markdown is literal, and a cell is one paragraph.
+`scripts/trazo table new LABEL --hand` scaffolds one. Besides the column
+operations, patch takes `cell`, `block`, `row-add`, `row-remove`, `row-move`
+and `paste` (`scripts/trazo table --help`, `trazo.table_hand`). The author
+edits these tables cell by cell in the preview: re-read the spec first.
+
+## In the manuscript
 
 - Include a table with `!include tables/output/md/<label>.md` and refer to
   it with `[@tbl:<label>]`.

@@ -30,7 +30,7 @@
     }
     // The mark of a cell or header: common symbols, or any 1 to 3 characters.
     function markRow(target, current) {
-      if (!target) return null;
+      if (!target || E.hand) return null;
       const chips = MARKS.map((m) => h("button", { type: "button", class: "te-mchip" + (current === m ? " on" : ""),
         "aria-pressed": String(current === m), text: m, title: current === m ? "Remove the mark" : `Mark with ${m}`,
         onclick: () => setMark(target, current === m ? null : m) }));
@@ -106,10 +106,16 @@
         const at = E.colAt(path);
         return at && (!at.col.columns || c.kind === "group") ? header(at.col, path) : null;
       }
-      if (el.matches("td.te-block")) return labelled(model.body.filter((b) => b.block !== undefined)[Number(el.dataset.block)]);
+      if (el.matches("td.te-block")) {
+        const item = model.body.filter((b) => b.block !== undefined)[Number(el.dataset.block)];
+        if (E.hand) return { name: "Block text", text: item.text, commit: (v) => E.handUI.setBlock(item.id, v) };
+        return labelled(item);
+      }
       if (el.matches("td[data-row]")) {
         const item = model.body.find((b) => b.row === Number(el.dataset.row));
-        return labelled(item && item.cells.find((x) => x.id === el.dataset.id));
+        const cell = item && item.cells.find((x) => x.id === el.dataset.id);
+        if (E.hand && cell) return { name: "Cell text", text: cell.raw, commit: (v) => E.handUI.setCell(item.key.row, cell.id, v) };
+        return labelled(cell);
       }
       return null;
     }
@@ -160,29 +166,31 @@
     }
 
     // ------------------------------------------------------------ the format bar
+    // The bar's alignment of the selected column.
+    function alignTools() {
+      const sel = E.sel, id = sel.kind === "cell" || sel.kind === "column" ? sel.id : null;
+      const col = id ? E.colAt(E.leafPath(id)) : null, now = col ? col.col.align || "left" : null;
+      return [["⇤", "left"], ["↔", "center"], ["⇥", "right"]].map(([text, a]) =>
+        K.icon(text, `Align ${a}`, now === a, !col, () => setAlign(`columns.${E.leafPath(id)}`, a)));
+    }
     function renderBar() {
       const bar = $("#te-bar");
       if (!bar) return;
       if (!E.st || !E.spec) { bar.replaceChildren(); return; }
+      if (E.hand) { E.handUI.renderBar(bar); return; }
       const sel = E.sel, at = E.selectedCell();
       const colId = sel.kind === "cell" || sel.kind === "column" ? sel.id : null;
-      const col = colId ? E.colAt(E.leafPath(colId)) : null;
-      const icon = (text, label, on, disabled, onclick) => h("button", { type: "button", class: "te-icon te-tool" + (on ? " on" : ""),
-        "aria-label": label, title: label, "aria-pressed": String(!!on), disabled: disabled ? "" : null, onclick }, text);
+      const { icon } = K;
       const focusMark = () => { E.tab = "props"; E.renderTabs(); E.renderPanel(); const chip = $('[data-ids="marks"] button'); if (chip) chip.focus(); };
-      const align = (a) => setAlign(`columns.${E.leafPath(colId)}`, a);
-      const now = col ? col.col.align || "left" : null;
       bar.replaceChildren(
         icon(h("b", { text: "B" }), "Bold this cell", at && isBold(at), !at, () => toggleBold(at)),
         icon("ᵃ", "Add a mark", false, !colId, focusMark),
         h("span", { class: "te-sep" }),
-        icon("⇤", "Align left", now === "left", !col, () => align("left")),
-        icon("↔", "Align center", now === "center", !col, () => align("center")),
-        icon("⇥", "Align right", now === "right", !col, () => align("right")),
+        ...alignTools(),
         h("span", { class: "te-sep" }),
         h("button", { type: "button", class: "pv-btn sm", text: "Ask the agent for a column", onclick: () => ask("column") }),
         h("button", { type: "button", class: "pv-btn sm", text: "Ask for a row", onclick: () => ask("row") }));
     }
-    return { ask, markRow, alignCtl, boldCtl, rename, startEdit, target, renderBar };
+    return { ask, markRow, alignCtl, alignTools, boldCtl, rename, startEdit, target, renderBar };
   };
 })();

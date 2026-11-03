@@ -82,7 +82,7 @@
       if (parent && !parent.pivot) acts.push(btn("Ungroup", () => ungroup(parent)));
       if (!parent && E.isLeaf(sibs[i + 1])) acts.push(btn("Group with next", () => groupWithNext(col, sibs[i + 1])));
       acts.push(btn("Delete column", () => removeColumn(path), "te-danger"));
-      out.push(h("div", { class: "te-sec te-acts" }, acts, btn("Ask the agent to change this column", () => E.ask("change-column"))));
+      out.push(h("div", { class: "te-sec te-acts" }, acts, E.hand ? null : btn("Ask the agent to change this column", () => E.ask("change-column"))));
       return out;
     }
     function ungroup(group) {

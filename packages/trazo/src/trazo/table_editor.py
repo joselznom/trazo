@@ -30,6 +30,11 @@ POST /__table/shared               {base_sha256, ops, label?, hidden?} set ops o
                                      errors. Returns the state of `label` (or {}).
 POST /__table/undo                 {label, hidden?} reverts this table's last spec (or
                                      its shared) change; 409 when the file changed since
+GET  /__table/sections             {documents: [{doc, title, sections: [{file, line, title}]}]}
+POST /__table/new                  {title, file, line, rows?} a table typed by hand: writes
+                                     its spec (rows: pasted cells, the first row the
+                                     headers) and adds its !include at the end of the
+                                     section at `line` of `file`. Returns {label}
 GET  /__table-comments?label=L     {comments, undo}
 POST /__table-comments             {op: add|update|reply|purge|undo, ...}
                                      (trazo.review_comments; add takes {table,
@@ -44,8 +49,9 @@ from collections.abc import Callable
 from typing import Any
 
 from . import table as tb
+from . import table_hand
 from .local_server import Conflict, NotFound, RequestError, Unprocessable
-from .project import ASSETS_DIR
+from .project import ASSETS_DIR, PROJECT
 
 EDITOR_PAGE = ASSETS_DIR / "table" / "editor.html"
 RECORDS_SHOWN = 50
@@ -91,7 +97,7 @@ def list_tables() -> list[dict[str, Any]]:
         spec = table.spec if isinstance(table.spec, dict) else {}
         out.append({"label": label, "title": spec.get("title", ""), "data": spec.get("data"),
                     "status": tb.status_of(table), "open_comments": counts.get(label, 0),
-                    "kind": "spec"})
+                    "kind": "hand" if table.hand else "spec"})
     return out
 
 
@@ -162,7 +168,8 @@ def table_state(label: Any, hidden: bool = False) -> dict[str, Any]:
             "shared": {"formats": shared.get("formats", {}), "maps": shared.get("maps", {}),
                        "sha256": tb.sha256_of(tb.SHARED_PATH), "file": tb.rel(tb.SHARED_PATH)},
             "data": data_payload(table), "model": tb.render_model(table, hidden),
-            "issues": table.issues, "format_usage": tb.format_usage(), "map_usage": map_usage(label),
+            "issues": table.issues, "format_usage": {} if table.hand else tb.format_usage(),
+            "map_usage": {} if table.hand else map_usage(label),
             "undo": next_undo(label)}
 
 
@@ -219,6 +226,64 @@ def undo_table(request: Any) -> dict[str, Any]:
     return {**table_state(label, bool(request.get("hidden"))), "undone": message}
 
 
+def sections() -> dict[str, Any]:
+    """Where a new table can go: every heading of the documents the preview edits."""
+    from . import preview
+    from . import submission_check as sc
+    from .preview_sources import read_source
+    documents = []
+    for doc in PROJECT.documents:
+        found: list[dict[str, Any]] = []
+        files = [p for p in PROJECT.document_files(doc)
+                 if any(p.is_relative_to(preview.ROOT / root) for root in preview.SOURCE_ROOTS)]
+        for path in files:
+            found += [{"file": tb.rel(path), "line": s["line"], "title": s["heading"]}
+                      for s in sc.sections(read_source(path)[1])]
+        if files and not found:
+            found.append({"file": tb.rel(files[-1]), "line": None, "title": "End of the document"})
+        if found:
+            documents.append({"doc": doc, "title": PROJECT.titles.get(doc, doc), "sections": found})
+    return {"documents": documents}
+
+
+def with_include(text: str, line: Any, label: str) -> str:
+    """The file's text with the table's !include at the end of the section at `line`."""
+    from .expand import INCLUDE_PREFIX
+    from .submission_check import sections as sections_of
+    end = len(text)
+    if line is not None:
+        section = next((s for s in sections_of(text) if s["line"] == line), None)
+        if section is None:
+            raise Conflict("the section changed on disk; choose it again")
+        end = section["end"]
+    tail = text[end:]
+    return (f"{text[:end].rstrip()}\n\n{INCLUDE_PREFIX}{tb.rel(tb.output_path(label))}\n"
+            + (f"\n{tail}" if tail.strip() else ""))
+
+
+def new_table(request: Any) -> dict[str, Any]:
+    from .preview_sources import change_source, get_source
+    request = body(request)
+    title, rows = request.get("title"), request.get("rows")
+    if not isinstance(title, str) or not title.strip():
+        raise RequestError("a new table needs a title")
+    if rows is not None and not table_hand.is_rows(rows):
+        raise RequestError("rows must be a list of lists of text")
+    source = get_source(request.get("file"))
+    label = table_hand.free_label(title)
+    text = with_include(source["text"], request.get("line"), label)
+    spec = table_hand.new_spec(" ".join(title.split()), rows)
+    problems = tb.Checker().spec(spec)
+    if problems:
+        raise Unprocessable("the table cannot be created", issues=problems)
+    # Not in the table history: undoing the file would leave its !include behind.
+    with tb.review_lock():
+        tb.write_atomic(tb.spec_path(label), tb.dump_spec(spec))
+    tb.render_one(label)
+    change_source({"file": source["file"], "text": text, "base_sha256": source["sha256"]})
+    return {"label": label}
+
+
 def get_comments(query: dict[str, list[str]]) -> dict[str, Any]:
     label = query.get("label", [None])[0]
     if label is not None:
@@ -237,10 +302,10 @@ def status() -> dict[str, Any]:
             "shared": tb.sha256_of(tb.SHARED_PATH), "comments": comments}
 
 
-GET = {"/__tables": lambda q: list_tables(), "/__table": get_table,
+GET = {"/__tables": lambda q: list_tables(), "/__table": get_table, "/__table/sections": lambda q: sections(),
        "/__table-comments": get_comments, "/__table-status": lambda q: status()}
 POST = {"/__table": save_table, "/__table/preview": preview_spec, "/__table/shared": save_shared,
-        "/__table/undo": undo_table, "/__table-comments": change_comments}
+        "/__table/undo": undo_table, "/__table/new": new_table, "/__table-comments": change_comments}
 
 
 def get_route(path, query):

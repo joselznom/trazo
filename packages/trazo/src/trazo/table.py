@@ -1,5 +1,6 @@
 """Tables from typed data and a JSON spec: tables/specs/<label>.json.
 
+(A table typed by hand keeps its cells in the spec: see trazo.table_hand.)
 The project's own generator computes the numbers and writes unformatted
 data to tables/output/data/<name>.json; trazo never runs project code.
 The spec holds all presentation (columns, order, headers, grouped headers,
@@ -12,6 +13,7 @@ with the caption `Table: [<title>]{.caption-title} <legend> {#tbl:<label>}`
 folders are [paths] table_specs, table_data and table_output in trazo.toml.
 
     trazo table new LABEL --data NAME       scaffold a spec, one column per field
+    trazo table new LABEL --hand            a table typed by hand (trazo.table_hand)
     trazo table render LABEL|--all          write <table_output>/md/<label>.md
     trazo table check LABEL|--all [--json] [--outputs]
     trazo table describe LABEL              fields, values, columns, rows, the table
@@ -90,7 +92,6 @@ trazo.review_comments.
 from __future__ import annotations
 
 import hashlib
-import html
 import json
 import math
 import re
@@ -305,8 +306,9 @@ class Checker:
                 self.text_map(shared["maps"], "maps", True)
         return self.issues
 
-    def leaf(self, col: dict[str, Any], where: str) -> None:
-        if not self.keys(col, LEAF_KEYS, where, ("id", "field", "header")):
+    def leaf(self, col: dict[str, Any], where: str, allowed: set[str] = LEAF_KEYS,
+             required: tuple[str, ...] = ("id", "field", "header")) -> None:
+        if not self.keys(col, allowed, where, required):
             return
         for key in ("field", "header", "format"):
             self.string(col, key, where, empty=key == "header")
@@ -354,6 +356,8 @@ class Checker:
             self.error(where, f"{where}: duplicate column id {name!r}")
 
     def spec(self, spec: Any) -> list[Issue]:
+        if table_hand.is_hand(spec):
+            return table_hand.check(self, spec)
         if not self.keys(spec, SPEC_KEYS, "spec", ("schema_version", "data", "title", "rows",
                                                    "columns")):
             return self.issues
@@ -390,6 +394,11 @@ class Checker:
             self.text_map(spec["formats"], "formats", False)
         if "maps" in spec:
             self.text_map(spec["maps"], "maps", True)
+        self.rules(spec)
+        return self.issues
+
+    def rules(self, spec: dict[str, Any]) -> None:
+        """Check highlight, emphasis and marks."""
         for i, rule in enumerate(spec.get("highlight", []) if isinstance(
                 spec.get("highlight", []), list) else [None]):
             where = f"highlight.{i}"
@@ -415,7 +424,6 @@ class Checker:
                     self.error(where, f"{where}.mark must be 1 to 3 characters without spaces, ^ or \\")
                 if "row" in rule and (not isinstance(rule["row"], dict) or not rule["row"]):
                     self.error(where, f"{where}.row must be a non-empty object of row keys")
-        return self.issues
 
     def data(self, data: Any, name: str) -> list[Issue]:
         where = f"data {name}"
@@ -495,6 +503,8 @@ class Table:
         self.values: list[list[Any]] = []  # raw cell values
         self.bold: set[tuple[int, int]] = set()
         self.marks: dict[tuple[int, int], str] = {}  # (row, visible column) -> superscript
+        self.hand = False  # typed by hand (trazo.table_hand): no data, cells in the spec
+        self.blocks: dict[int, list[dict[str, Any]]] = {}  # hand: row index -> blocks before it
         self.caption = ""
         self.note: list[str] = []  # paragraphs below the table
         self.markdown: str | None = None
@@ -527,6 +537,9 @@ class Table:
             if problems:
                 self.issues += problems
                 return False
+            self.hand = table_hand.is_hand(spec)
+            if self.hand:
+                return True
             shared = load_shared() if shared is None else shared
         except TableError as exc:
             self.error(None, str(exc), "load")
@@ -555,7 +568,7 @@ class Table:
         return True
 
     def known(self, field: Any, where: str) -> bool:
-        if field in self.fields:
+        if self.hand or field in self.fields:
             return True
         self.error(where, f"{where}: unknown field {field!r} "
                           f"(data fields: {', '.join(self.fields)})")
@@ -646,7 +659,7 @@ class Table:
         seen: dict[tuple[str, str], str] = {}
         for leaf in self.leaves:
             name = (leaf.group[1] if leaf.group else "", leaf.header)
-            if name in seen:
+            if name in seen and not self.hand:
                 self.error(leaf.id, f"columns {seen[name]} and {leaf.id} have the same header "
                                     f"{' / '.join(n for n in name if n)!r}")
             seen.setdefault(name, leaf.id)
@@ -768,7 +781,7 @@ class Table:
         return None
 
     def emphasize(self) -> None:
-        block = self.spec["rows"].get("block")
+        block = self.spec.get("rows", {}).get("block")
         for i, rule in enumerate(self.spec.get("highlight", [])):
             where = f"highlight.{i}"
             col = self.leaf_index(rule["column"], where)
@@ -831,6 +844,8 @@ class Table:
 
     def fill_values(self, key: str, text: str) -> str | None:
         """Text with its {name} data values filled in, or None (an error)."""
+        if self.hand:
+            return text
         try:
             return text.format_map(self.data.get("values", {}))
         except KeyError as exc:
@@ -862,16 +877,19 @@ def build(label: str, spec: dict[str, Any] | None = None,
     table = Table(label)
     if not table.load(spec, shared):
         return table
-    table.rows = table.build_rows()
-    if table.errors and not table.leaves:
-        return table
-    block = table.spec["rows"].get("block")
-    if block and any(leaf.field == block and not leaf.pivot for leaf in table.leaves):
-        table.warn("rows", f"the block field {block!r} is also a visible column")
-    if not table.rows and not table.errors:
-        table.error("rows", "the table has no rows (no records, or none left after rows.filter)",
-                    "rows")
-    table.fill()
+    if table.hand:
+        table_hand.fill(table)
+    else:
+        table.rows = table.build_rows()
+        if table.errors and not table.leaves:
+            return table
+        block = table.spec["rows"].get("block")
+        if block and any(leaf.field == block and not leaf.pivot for leaf in table.leaves):
+            table.warn("rows", f"the block field {block!r} is also a visible column")
+        if not table.rows and not table.errors:
+            table.error("rows", "the table has no rows (no records, or none left after "
+                                "rows.filter)", "rows")
+        table.fill()
     table.emphasize()
     table.caption = table.make_caption()
     table.note = table.make_note()
@@ -887,9 +905,14 @@ def build(label: str, spec: dict[str, Any] | None = None,
 def body_items(table: Table) -> list[tuple[str, Any]]:
     """("block", text) and ("row", [cell text]) in order, with bold applied."""
     items: list[tuple[str, Any]] = []
-    block = table.spec["rows"].get("block")
+    block = table.spec.get("rows", {}).get("block")
     current: str | None = None
+
+    def typed_blocks(r: int) -> None:
+        items.extend(("block", f"**{b['markdown']}**" if b["markdown"] else "") for b in table.blocks.get(r, []))
+
     for r, row in enumerate(table.rows):
+        typed_blocks(r)
         if block and hkey(row["key"][block]) != current:
             current = hkey(row["key"][block])
             items.append(("block", f"**{table.mapped(block, row['key'][block])}**"))
@@ -897,6 +920,7 @@ def body_items(table: Table) -> list[tuple[str, Any]]:
                  for c, text in enumerate(table.cells[r])]
         items.append(("row", [text + (f"^{escape(m)}^" if (m := table.marks.get((r, c))) else "")
                               for c, text in enumerate(cells)]))
+    typed_blocks(len(table.rows))
     return items
 
 
@@ -1028,118 +1052,6 @@ def render_markdown(table: Table) -> str:
     return "\n".join(lines + render_grid(table) + note) + "\n"
 
 
-# -------------------------------------------------- render model (editor)
-
-
-def md_inline(text: str) -> str:
-    """The inline Markdown of a generated cell or caption as HTML: escaped text,
-    **bold**, *italic*, a caption title span and backslash escapes as literal
-    characters."""
-    kept: list[str] = []
-
-    def keep(match: re.Match[str]) -> str:
-        kept.append(match.group(1))
-        return f"\x00{len(kept) - 1}\x01"
-
-    text = re.sub(r"\\([^A-Za-z0-9\s])", keep, text)
-    text = html.escape(text, quote=False)
-    text = re.sub(r"\[(.+?)\]\{\.caption-title\}", r'<span class="caption-title">\1</span>', text)
-    text = re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", text)
-    text = re.sub(r"(?<![*\w])\*(?![\s*])(.+?)(?<![\s*])\*(?![*\w])", r"<em>\1</em>", text)
-    text = re.sub(r"\^([^\s^]+?)\^", r"<sup>\1</sup>", text)
-    return re.sub("\x00(\\d+)\x01", lambda m: html.escape(kept[int(m.group(1))]), text)
-
-
-def label_of(table: Table, field: str, value: str) -> dict[str, Any]:
-    """The map entry that names a text value from the data, for renaming it in the
-    editor; `shared` when it comes from _shared.json (not this spec's maps)."""
-    mapping = table.maps.get(field, {})
-    own = table.spec.get("maps", {}).get(field, {})
-    return {"field": field, "value": value, "text": mapping.get(value, value),
-            "shared": value in mapping and value not in own}
-
-
-def group_key(leaf: Leaf) -> tuple[str, str]:
-    """(id, kind) of the spanning header above a leaf."""
-    assert leaf.group
-    return leaf.group[0], "pivot-value" if leaf.pivot else "group"
-
-
-def render_model(table: Table, hidden: bool = False) -> dict[str, Any] | None:
-    """The table as the editor draws it: the spans of render_grid, with each
-    cell's leaf id, row key and raw value. With hidden, hidden leaves are
-    included (flagged); they never join cells or change the other columns."""
-    if not table.filled:
-        return None
-    leaves = table.all_leaves if hidden else table.leaves
-    visible = {leaf.id: i for i, leaf in enumerate(table.leaves)}
-    items = body_items(table)
-    joined = joined_cells(table, items)
-    groups = header_groups(leaves)
-
-    def head(leaf: Leaf, rowspan: int) -> dict[str, Any]:
-        return {"text_html": md_inline(leaf.header), "colspan": 1, "rowspan": rowspan,
-                "id": leaf.id, "kind": "leaf", "align": leaf.align, "hidden": leaf.hidden,
-                **({"mark": leaf.mark} if leaf.mark else {}),
-                # A single-column pivot is headed by its value's label.
-                **({"label": label_of(table, *leaf.pivot)} if leaf.pivot and not leaf.group
-                   and isinstance(leaf.pivot[1], str) else {})}
-
-    def named(cell: dict[str, Any], leaf: Leaf) -> dict[str, Any]:
-        if isinstance(cell["raw"], str) and not leaf.format:
-            cell["label"] = label_of(table, leaf.field, cell["raw"])
-        return cell
-
-    top: list[dict[str, Any]] = []
-    bottom: list[dict[str, Any]] = []
-    for i, leaf in enumerate(leaves):
-        span = next((g for g in groups if g[0] <= i < g[1]), None)
-        if span is None:
-            top.append(head(leaf, 2 if groups else 1))
-            continue
-        if span[0] == i:
-            key, kind = group_key(leaf)
-            top.append({"text_html": md_inline(span[2]), "colspan": span[1] - span[0],
-                        "rowspan": 1, "id": key, "kind": kind, "align": "center",
-                        "hidden": all(x.hidden for x in leaves[span[0]:span[1]])})
-            if leaf.pivot and isinstance(leaf.pivot[1], str):
-                top[-1]["label"] = label_of(table, *leaf.pivot)
-        bottom.append(head(leaf, 1))
-    body: list[dict[str, Any]] = []
-    r = -1
-    for i, (kind, cells) in enumerate(items):
-        if kind == "block":
-            value = table.rows[r + 1]["key"][table.spec["rows"]["block"]]
-            body.append({"block": md_inline(cells),
-                         **({"label": label_of(table, table.spec["rows"]["block"], value)}
-                            if isinstance(value, str) else {})})
-            continue
-        r += 1
-        out = []
-        for leaf in leaves:
-            if leaf.hidden:
-                text, raw = table.hidden_cells[leaf.id][r]
-                out.append(named({"id": leaf.id, "text_html": md_inline(text), "raw": raw,
-                                  "rowspan": 1, "bold": False, "align": leaf.align,
-                                  "hidden": True}, leaf))
-                continue
-            c = visible[leaf.id]
-            if joined[i][c]:
-                continue
-            span = 1
-            while i + span < len(items) and joined[i + span][c]:
-                span += 1
-            out.append(named({"id": leaf.id, "text_html": md_inline(cells[c]),
-                              "raw": table.values[r][c], "rowspan": span,
-                              "bold": (r, c) in table.bold, "align": leaf.align, "hidden": False,
-                              **({"mark": table.marks[r, c]} if (r, c) in table.marks else {})},
-                             leaf))
-        body.append({"row": r, "key": table.rows[r]["key"], "cells": out})
-    return {"header": [top, bottom] if groups else [top], "body": body,
-            "caption_html": md_inline(table.caption),
-            "note_html": "".join(f"<p>{md_inline(p)}</p>" for p in table.note)}
-
-
 def stale_output(table: Table) -> list[Issue]:
     path = output_path(table.label)
     if table.markdown is None:
@@ -1248,6 +1160,8 @@ def apply_op(spec: dict[str, Any], op: dict[str, Any]) -> str:
         column = str(op.get("column"))
         siblings, at = find_column(columns, column)
         siblings.pop(at)
+        if table_hand.is_hand(spec):
+            table_hand.prune(spec)
         return f"remove {column}"
     if kind == "move":
         column = str(op.get("column"))
@@ -1264,6 +1178,8 @@ def apply_op(spec: dict[str, Any], op: dict[str, Any]) -> str:
                 raise TableError(f"move: {before!r} is not a sibling of {column!r}")
             siblings.insert(match[0], item)
         return f"move {column}"
+    if kind in table_hand.OPS:
+        return table_hand.apply_op(spec, op)
     raise TableError(f"unknown op {kind!r} (use set, add, remove or move)")
 
 
@@ -1487,6 +1403,11 @@ def status_of(table: Table) -> str:
     if table.errors or stale_output(table):
         return "stale"
     return "ok"
+
+
+# Importing here: both modules read this one's names. Callers keep table.render_model.
+from . import table_hand  # noqa: E402
+from .table_model import md_inline, render_model  # noqa: E402, F401
 
 
 def main(argv: list[str] | None = None) -> int:

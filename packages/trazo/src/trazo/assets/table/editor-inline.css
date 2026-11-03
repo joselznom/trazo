@@ -2,9 +2,18 @@
    table only or everywhere" choice and Advanced (editor-inline.js). */
 .te-adv-only { display: none !important; }
 .te-advanced .te-adv-only { display: revert !important; }
+.te-advanced .te-adv-only.te-off { display: none !important; }
 .te-kindb { font-size: 11.5px; padding: 2px 8px; border-radius: 999px; white-space: nowrap;
   background: color-mix(in srgb, var(--pv-accent) 11%, transparent); color: var(--pv-accent); }
 .te-kindb::before { content: "🔒 "; font-size: 10px; }
+.te-kindb.hand { background: var(--pv-warn-soft); color: var(--pv-warn); }
+.te-kindb.hand::before { content: "✎ "; }
+.te-head-row { display: flex; align-items: center; justify-content: space-between; }
+.te-modal { position: fixed; inset: 0; z-index: 40; display: grid; place-items: center; background: var(--pv-scrim); }
+.te-dialog { width: min(440px, 92vw); padding: 16px; border-radius: 10px; background: var(--pv-card); border: 1px solid var(--pv-line-strong);
+  box-shadow: var(--pv-shadow-pop); display: flex; flex-direction: column; gap: 8px; font-size: 13px; }
+.te-dialog h3 { margin: 0; font-size: 15px; }
+.te-dialog textarea { min-height: 90px; }
 .te-bar { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
 .te-tool { width: 28px; height: 28px; border: 1px solid var(--pv-line); background: var(--pv-card); font-size: 13px; }
 .te-tool.on { background: var(--pv-accent-soft); color: var(--pv-accent); border-color: transparent; }

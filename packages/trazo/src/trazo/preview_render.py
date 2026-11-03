@@ -71,6 +71,16 @@ def table_spec_labels():
     return table.all_labels()
 
 
+def hand_table_labels():
+    """The tables typed by hand, which the Figures & Tables cards name as such."""
+    def typed(label):
+        try:
+            return table.table_hand.is_hand(table.read_json(table.spec_path(label), "table spec")[0])
+        except table.TableError:
+            return False
+    return [label for label in table.all_labels() if typed(label)]
+
+
 def title_prefixes(project):
     """Document name -> title prefix ("Supplementary"), for the viewer's numbers."""
     return {name: doc.get("title_prefix", "") for name, doc in project.config["documents"].items()}
@@ -100,7 +110,8 @@ def render(name, out_dir, *, for_counts=False):
             f'window.PREVIEW_NUMBER_PREFIXES = {json.dumps(preview.PROJECT.number_prefixes).replace("</", "<" + chr(92) + "/")};\n'
             f'window.PREVIEW_TITLE_PREFIXES = {json.dumps(title_prefixes(preview.PROJECT)).replace("</", "<" + chr(92) + "/")};\n'
             f'window.PREVIEW_DIAGRAMS = {json.dumps(diagram_links())};\n'
-            f'window.PREVIEW_TABLE_SPECS = {json.dumps(table_spec_labels())};</script>\n'
+            f'window.PREVIEW_TABLE_SPECS = {json.dumps(table_spec_labels())};\n'
+            f'window.PREVIEW_TABLE_HAND = {json.dumps(hand_table_labels())};</script>\n'
             '<script src="/__assets/app/app.js"></script>\n'
             f'<script src="/{preview.ASSET_URL}preview-model.js"></script>\n'
             + "".join(f'<script src="/{preview.ASSET_URL}{script}"></script>\n' for script in preview.VIEWER_SCRIPTS),

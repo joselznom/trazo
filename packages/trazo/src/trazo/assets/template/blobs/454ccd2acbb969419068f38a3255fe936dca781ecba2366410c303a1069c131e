@@ -14,6 +14,9 @@ scripts/trazo table check --all --outputs  # spec errors, stale data, out-of-dat
   grouped headers, formats, row order, block rows, merged cells and bold
   cells. `tables/specs/_shared.json` holds formats and maps used by several
   tables (and by `{{v:key|format}}` in prose).
+- Tables typed by hand keep their cells in `tables/specs/<label>.json`
+  (**+ New table** in the table editor): no data, no script, published as
+  typed. Paste a range from Excel, Word or Sheets to fill one.
 - `scripts/trazo table render` writes `tables/output/md/<label>.md`. The
   label is the cross-reference: `summary.json` renders `{#tbl:summary}`.
 - In the live preview (`scripts/trazo preview serve`, after the build
@@ -30,7 +33,7 @@ scripts/trazo table check --all --outputs  # spec errors, stale data, out-of-dat
 
 | Output | Spec | Data |
 |---|---|---|
-| `tables/output/md/summary.md` | `tables/specs/summary.json` | `tables/output/data/summary.json` |
+| `tables/output/md/label.md` | `tables/specs/label.json` | `tables/output/data/name.json` |
 
 The generator records the hash of each input it reads, so a build runs it
 again only when one of them or a

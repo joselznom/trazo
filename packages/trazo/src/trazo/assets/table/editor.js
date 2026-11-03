@@ -217,6 +217,7 @@
   }
   function stillThere() {
     if (sel.kind === "table" || !spec || !st.model) return true;
+    if (sel.kind === "block" && sel.id) return spec.body.some((b) => b.id === sel.id);
     if (sel.kind === "block") {  // its label may have a new text
       const item = st.model.body.find((b) => b.label && b.label.field === sel.label.field && b.label.value === sel.label.value);
       if (item) sel = { kind: "block", label: item.label };
@@ -350,7 +351,13 @@
     $("#te-open").href = `/${doc}.html#tbl:${label}`;
     $("#te-open").hidden = !n || !st;
     $("#te-add").disabled = !st;
-    $("#te-kindb").hidden = !st;
+    const hand = E.hand, kind = $("#te-kindb");
+    kind.hidden = !st;
+    kind.classList.toggle("hand", hand);
+    kind.textContent = hand ? "Typed by hand" : "From your data";
+    kind.title = hand ? "Typed in this editor: nothing is calculated" : "The numbers come from the project's data and script; they cannot be typed over";
+    $(".te-menu-wrap").classList.toggle("te-off", hand);
+    $('[data-tab="data"]').classList.toggle("te-off", hand);
     const issues = st ? st.issues : [];
     const errors = issues.filter((i) => i.level === "error").length, warns = issues.length - errors;
     const pill = $("#te-check"), dot = "te-dot" + (!st ? " off" : errors ? " err" : warns ? " warn" : "");
@@ -464,10 +471,10 @@
     let firstCell = true, blocks = 0;
     for (const item of st.model.body) {
       if (item.block !== undefined) {
-        const on = sel.kind === "block" && stable(sel.label) === stable(item.label);
+        const on = sel.kind === "block" && (item.id ? sel.id === item.id : stable(sel.label) === stable(item.label));
         const td = h("td", { colspan: ncols, class: "te-block" + (on ? " te-cellsel" : ""), tabindex: "0",
-          title: item.label ? "Double-click to rename" : "Block row", dataset: { block: String(blocks++) },
-          onclick: (e) => { e.stopPropagation(); if (!secondClick(e, td)) select(item.label ? { kind: "block", label: item.label } : { kind: "table" }); } });
+          title: item.label || item.id ? "Double-click to rename" : "Block row", dataset: { block: String(blocks++) },
+          onclick: (e) => { e.stopPropagation(); if (!secondClick(e, td)) select(item.id ? { kind: "block", id: item.id } : item.label ? { kind: "block", label: item.label } : { kind: "table" }); } });
         td.innerHTML = item.block;
         tbody.append(h("tr", null, td));
         continue;
@@ -477,9 +484,9 @@
         const isCell = sel.kind === "cell" && sel.id === c.id && sel.row === item.row;
         const td = h("td", { rowspan: c.rowspan > 1 ? c.rowspan : null,
           tabindex: isCell || (firstCell && sel.kind !== "cell") ? "0" : "-1",
-          class: [alignClass(c.align), c.hidden ? "te-hidden" : "", isCell ? "te-cellsel" : "", c.label ? "te-label" : "te-num",
+          class: [alignClass(c.align), c.hidden ? "te-hidden" : "", isCell ? "te-cellsel" : "", c.label || E.hand ? "te-label" : "te-num",
             sel.kind === "column" && sel.id === c.id ? "te-colsel" : ""].join(" "),
-          dataset: { id: c.id, row: String(item.row) }, title: c.label ? "Double-click to rename" : null,
+          dataset: { id: c.id, row: String(item.row) }, title: c.label ? "Double-click to rename" : E.hand ? "Double-click to type" : null,
           onclick: (e) => { e.stopPropagation(); if (!secondClick(e, td)) select({ kind: "cell", id: c.id, row: item.row }); } });
         td.innerHTML = c.text_html;
         firstCell = false;
@@ -496,8 +503,9 @@
       note.innerHTML = st.model.note_html;
     }
     page.replaceChildren(cap, h("div", { class: "te-table-scroll" }, table), ...(note ? [note] : []), h("div", { class: "te-hint" },
-      h("span", { text: "Numbers come from your data. Double-click a header or a label to rename it." }),
-      h("span", null, h("kbd", { text: "Enter" }), " rename"), h("span", null, h("kbd", { text: "Tab" }), " next"),
+      h("span", { text: E.hand ? "Double-click a cell to type. Paste a range from Excel, Word or Sheets."
+        : "Numbers come from your data. Double-click a header or a label to rename it." }),
+      h("span", null, h("kbd", { text: "Enter" }), E.hand ? " edit" : " rename"), h("span", null, h("kbd", { text: "Tab" }), " next"),
       h("span", null, "Drag ", h("kbd", { text: "⋮⋮" }), " to reorder"), h("span", null, h("kbd", { text: "C" }), " comment"),
       h("span", null, h("kbd", { text: "Esc" }), " clear")));
     initDrag(table);
@@ -613,72 +621,6 @@
   }
 
   // ---------------------------------------------------------------- toolbar
-  const menu = $("#te-add-menu");
-  function closeMenu() { menu.hidden = true; $("#te-add").setAttribute("aria-expanded", "false"); }
-  $("#te-add").addEventListener("click", (e) => {
-    e.stopPropagation();
-    if (!menu.hidden) { closeMenu(); return; }
-    if (!st) return;
-    const keys = (spec.rows || {}).keys || [];
-    const valueField = fieldNames().find((f) => /float|composite|int/.test(fieldType(f)) && !keys.includes(f)) || fieldNames()[0];
-    menu.replaceChildren(h("h6", { text: "Field from the data" }),
-      ...fieldNames().map((f) => h("button", { type: "button", role: "menuitem", onclick: () => addColumn(f) },
-        h("span", { text: f }), h("span", { class: "te-muted te-small", text: fieldType(f) }))),
-      h("h6", { text: "Group" }),
-      h("button", { type: "button", role: "menuitem", onclick: () => addGroup(valueField) }, h("span", { text: "New group (spanning header)" })),
-      h("h6", { text: "Pivot on a text field" }),
-      ...fieldNames().filter((f) => fieldType(f) === "string" && !keys.includes(f)).map((f) =>
-        h("button", { type: "button", role: "menuitem", onclick: () => addPivot(f, valueField) }, h("span", { text: `One column group per ${f}` }))));
-    menu.hidden = false;
-    $("#te-add").setAttribute("aria-expanded", "true");
-    const first = $("button", menu);
-    if (first) first.focus();
-  });
-  document.addEventListener("click", (e) => { if (!menu.hidden && !menu.contains(e.target)) closeMenu(); });
-  function leafFor(field, id) {
-    const item = { id, field, header: field };
-    const ops = [];
-    const type = fieldType(field);
-    if (/composite|float/.test(type)) {
-      const all = formats();
-      const fresh = uniqueId(id, Object.keys(all));
-      ops.push({ op: "set", path: `formats.${fresh}`, value: defaultTemplate(field) });
-      item.format = fresh;
-    }
-    if (/int|float|composite/.test(type) && !type.includes("string")) item.align = "right";
-    return { item, ops };
-  }
-  function insertBefore() {  // after the selected top-level column, else at the end
-    if (sel.kind !== "column" && sel.kind !== "group") return null;
-    const top = (sel.kind === "group" ? sel.path : leafPath(sel.id)).split(".")[0];
-    const i = spec.columns.findIndex((c) => c.id === top);
-    return i >= 0 && spec.columns[i + 1] ? spec.columns[i + 1].id : null;
-  }
-  function addColumn(field) {
-    closeMenu();
-    tab = "props";
-    const id = uniqueId(field, spec.columns.map((c) => c.id));
-    const { item, ops } = leafFor(field, id);
-    save([...ops, { op: "add", into: "columns", item, before: insertBefore() }]);
-    sel = { kind: "column", id };
-  }
-  function addGroup(field) {
-    closeMenu();
-    tab = "props";
-    const id = uniqueId("group", spec.columns.map((c) => c.id));
-    const { item, ops } = leafFor(field, uniqueId(field, []));
-    save([...ops, { op: "add", into: "columns", item: { id, header: "Group", columns: [item] }, before: insertBefore() }]);
-    sel = { kind: "group", id, path: id };
-  }
-  function addPivot(pivot, field) {
-    closeMenu();
-    tab = "props";
-    const id = uniqueId(pivot, spec.columns.map((c) => c.id));
-    const { item, ops } = leafFor(field, "value");
-    item.header = "Value";
-    save([...ops, { op: "add", into: "columns", item: { id, pivot, columns: [item] }, before: insertBefore() }]);
-    sel = { kind: "group", id, path: id };
-  }
   $("#te-hidden").addEventListener("click", async () => { showHidden = !showHidden; await loadTable(true); });
   for (const [id, fit] of [["#te-w-page", false], ["#te-w-fit", true]]) {
     $(id).addEventListener("click", () => {
@@ -725,7 +667,7 @@
       e.preventDefault();
       undo();
     } else if (e.key === "Escape") {
-      if (!menu.hidden) { closeMenu(); return; }
+      if (M.close()) return;
       if ($("#te-main").classList.contains("drawer")) { setDrawer(false); return; }
       if (typing) e.target.blur();
       select({ kind: "table" });
@@ -807,19 +749,21 @@
   // ---------------------------------------------------------------- modules
   // The other editor-*.js files read and change this editor's state through E.
   const E = {
-    h, $, $$, clone, show, stable, plain, App,
+    h, $, $$, clone, show, stable, plain, api, App,
     get st() { return st; }, get spec() { return spec; }, get label() { return label; }, get numbers() { return numbers; },
     get sel() { return sel; }, set sel(v) { sel = v; }, get tab() { return tab; }, set tab(v) { tab = v; },
     get comments() { return comments; }, set comments(v) { comments = v; },
     get composeFor() { return composeFor; }, set composeFor(v) { composeFor = v; },
-    get advanced() { return advanced; }, get editing() { return editing; }, set editing(v) { editing = v; },
+    get advanced() { return advanced && !E.hand; }, get editing() { return editing; }, set editing(v) { editing = v; },
+    get hand() { return !!spec && "body" in spec; },
     save, setPending, flush, flash, select, renderTable, renderTabs, renderPanel, loadList, loadComments,
     leafPath, colAt, isLeaf, leafIds, formats, isLocal, uniqueId, targetOf, targetText, selectedCell,
     fieldNames, fieldType, defaultTemplate, tableName, labelOthers,
     startComment: (text) => Cm.startComment(text), ask: (kind) => I.ask(kind), rename: (...a) => I.rename(...a),
     markRow: (t, m) => I.markRow(t, m), alignCtl: (c, b) => I.alignCtl(c, b), boldCtl: (at) => I.boldCtl(at),
+    alignTools: () => I.alignTools(), get handUI() { return H; },
   };
-  const K = T.controls(E), P = T.panel(E, K), Cm = T.comments(E), I = T.inline(E, K);
+  const K = T.controls(E), P = T.panel(E, K), Cm = T.comments(E), I = T.inline(E, K), H = T.hand(E, K), M = T.addMenu(E);
   function setAdvanced(on) {
     advanced = on;
     App.savePrefs({ tableAdvanced: on });
@@ -837,7 +781,7 @@
     spec = null;
     comments = { comments: [], undo: null };
     composeFor = null;
-    closeMenu();
+    M.close();
     renderAll();
     $("#te-panel").replaceChildren();
     $("#te-page").replaceChildren(h("div", { class: "te-empty", text: message }));
@@ -856,9 +800,9 @@
     clearTable("Loading…");
     setSave("Loading…");
     if (!label) {
-      const first = list.find((t) => t.kind === "spec");
+      const first = list[0];
       if (first) { App.replaceHash(first.label); return; }
-      $("#te-page").replaceChildren(h("div", { class: "te-empty", text: "No table specs in this project (tables/specs/<label>.json)." }));
+      $("#te-page").replaceChildren(h("div", { class: "te-empty", text: "No tables yet. Press + New table to make one." }));
       setSave("No table selected");
       renderTop();
       return;

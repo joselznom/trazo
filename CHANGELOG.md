@@ -18,6 +18,13 @@ Internal changes (tests, CI, refactoring) stay out.
 
 ## Unreleased
 
+### New
+
+- Tables typed by hand: **+ New table** in the table editor makes a table
+  that is not computed from your data, empty or pasted from Excel, Word or
+  Sheets, and adds it to the section you choose. Type in its cells, add rows
+  and columns, and format text; it goes to Word like any table (#16).
+
 ### Changed
 
 - Deleting a review comment now removes it for good, after a warning, in

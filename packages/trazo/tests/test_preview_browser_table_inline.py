@@ -13,22 +13,6 @@ class TableInlineTests(PreviewBrowserTestCase):
         from trazo import table
         self.keep_files(*paths, table.HISTORY_PATH, table.output_path("results"))
 
-    def double_click(self, selector, text):
-        """A real double click: the first click redraws the table."""
-        x, y = self.evaluate(f"""(() => {{
-          const el = Array.from(document.querySelectorAll({json.dumps(selector)})).find(x => x.textContent.trim() === {json.dumps(text)});
-          const box = el.getBoundingClientRect();
-          return [box.left + box.width / 2, box.top + box.height / 2];
-        }})()""")
-        self.mouse_double_click(x, y)
-
-    def mouse_double_click(self, x, y):
-        for count in (1, 2):
-            for kind in ("mousePressed", "mouseReleased"):
-                self.chrome.call("Input.dispatchMouseEvent", {
-                    "type": kind, "x": x, "y": y, "button": "left", "clickCount": count,
-                    "buttons": 0 if kind == "mouseReleased" else 1}, self.session)
-
     def rename(self, old, new, selector="#te-page td"):
         self.double_click(selector, old)
         self.wait_for("document.querySelector('.te-cellin')")
