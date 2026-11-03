@@ -35,6 +35,11 @@ POST /__table/new                  {title, file, line, rows?} a table typed by h
                                      its spec (rows: pasted cells, the first row the
                                      headers) and adds its !include at the end of the
                                      section at `line` of `file`. Returns {label}
+POST /__table/convert              {op: check|convert|undo, doc, id} Make editable
+                                     (trazo.table_convert): check says {ok}, or 400 with
+                                     the reason; convert returns {label, markdown}; undo
+                                     takes those and puts the Markdown back in place of
+                                     the !include, refused (409) once the table was edited
 GET  /__table-comments?label=L     {comments, undo}
 POST /__table-comments             {op: add|update|reply|purge|undo, ...}
                                      (trazo.review_comments; add takes {table,
@@ -248,7 +253,6 @@ def sections() -> dict[str, Any]:
 
 def with_include(text: str, line: Any, label: str) -> str:
     """The file's text with the table's !include at the end of the section at `line`."""
-    from .expand import INCLUDE_PREFIX
     from .submission_check import sections as sections_of
     end = len(text)
     if line is not None:
@@ -257,12 +261,26 @@ def with_include(text: str, line: Any, label: str) -> str:
             raise Conflict("the section changed on disk; choose it again")
         end = section["end"]
     tail = text[end:]
-    return (f"{text[:end].rstrip()}\n\n{INCLUDE_PREFIX}{tb.rel(tb.output_path(label))}\n"
-            + (f"\n{tail}" if tail.strip() else ""))
+    return f"{text[:end].rstrip()}\n\n{table_hand.include_line(label)}\n" + (f"\n{tail}" if tail.strip() else "")
+
+
+def publish(label: str, spec: dict[str, Any], source: dict[str, Any], text: str) -> None:
+    """Write a new table typed by hand and the document text that shows it. Not in the
+    table history: undoing the file would leave its !include behind."""
+    from .preview_sources import change_source
+    with tb.review_lock():
+        tb.write_atomic(tb.spec_path(label), tb.dump_spec(spec))
+    tb.render_one(label)
+    try:
+        change_source({"file": source["file"], "text": text, "base_sha256": source["sha256"]})
+    except Exception:  # the document changed: no table without its line
+        tb.spec_path(label).unlink()
+        tb.output_path(label).unlink(missing_ok=True)
+        raise
 
 
 def new_table(request: Any) -> dict[str, Any]:
-    from .preview_sources import change_source, get_source
+    from .preview_sources import get_source
     request = body(request)
     title, rows = request.get("title"), request.get("rows")
     if not isinstance(title, str) or not title.strip():
@@ -276,12 +294,46 @@ def new_table(request: Any) -> dict[str, Any]:
     problems = tb.Checker().spec(spec)
     if problems:
         raise Unprocessable("the table cannot be created", issues=problems)
-    # Not in the table history: undoing the file would leave its !include behind.
-    with tb.review_lock():
-        tb.write_atomic(tb.spec_path(label), tb.dump_spec(spec))
-    tb.render_one(label)
-    change_source({"file": source["file"], "text": text, "base_sha256": source["sha256"]})
+    publish(label, spec, source, text)
     return {"label": label}
+
+
+def convert_table(request: Any) -> dict[str, Any]:
+    from . import table_convert
+    from .preview_sources import change_source, get_source
+    request = body(request)
+    op, doc = request.get("op"), request.get("doc")
+    if op in ("check", "convert"):
+        found = table_convert.plan(doc, request.get("id"))
+        if op == "check":
+            return {"ok": True}
+        publish(found["label"], found["spec"], found["source"], found["text"])
+        return {"label": found["label"], "markdown": found["markdown"]}
+    if op != "undo":
+        raise RequestError("op must be check, convert or undo")
+    label, markdown = spec_file(request.get("label")), request.get("markdown")
+    if not isinstance(markdown, str) or not markdown.strip():
+        raise RequestError("undo needs the table's markdown")
+    if next_undo(label):
+        raise tb.TableConflict("this table was edited after it became editable")
+    # An ordinary save of the file, so what was saved since the conversion stays.
+    source = get_source(file_including(doc, label))
+    lines = source["text"].split("\n")
+    lines[lines.index(table_hand.include_line(label))] = markdown
+    change_source({"file": source["file"], "text": "\n".join(lines), "base_sha256": source["sha256"]})
+    tb.spec_path(label).unlink()
+    tb.output_path(label).unlink(missing_ok=True)
+    return {}
+
+
+def file_including(doc: Any, label: str) -> str:
+    """The document file with the table's !include."""
+    from .expand import include_lines
+    wanted = table_hand.include_line(label)
+    for path in PROJECT.document_files(doc):
+        if any(line == wanted for line, _ in include_lines(path.read_text(encoding="utf-8"))):
+            return tb.rel(path)
+    raise NotFound(f"no document includes {label}")
 
 
 def get_comments(query: dict[str, list[str]]) -> dict[str, Any]:
@@ -305,7 +357,8 @@ def status() -> dict[str, Any]:
 GET = {"/__tables": lambda q: list_tables(), "/__table": get_table, "/__table/sections": lambda q: sections(),
        "/__table-comments": get_comments, "/__table-status": lambda q: status()}
 POST = {"/__table": save_table, "/__table/preview": preview_spec, "/__table/shared": save_shared,
-        "/__table/undo": undo_table, "/__table/new": new_table, "/__table-comments": change_comments}
+        "/__table/undo": undo_table, "/__table/new": new_table, "/__table/convert": lambda r: errors_to_http(lambda: convert_table(r)),
+        "/__table-comments": change_comments}
 
 
 def get_route(path, query):

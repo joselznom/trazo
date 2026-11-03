@@ -93,8 +93,32 @@
       if (item) E.select({ kind: "cell", id: leaf, row: item.row });
     }
 
+    // ------------------------------------------------------------ after Make editable
+    // The preview leaves a note when it converts a Markdown table: offer to undo it.
+    // From the bar, which is drawn after the route clears the banner.
+    function offerUndo() {
+      let made = null;
+      try {
+        made = JSON.parse(sessionStorage.getItem("trazo.converted"));
+        if (!made || made.label !== E.label) return;
+        sessionStorage.removeItem("trazo.converted");
+      } catch (e) { return; }
+      const notice = $("#te-banner");
+      const undo = async () => {
+        const r = await E.api("/__table/convert", { op: "undo", ...made });
+        if (r.ok) location.href = E.App.returnUrl || `/${made.doc}.html`;
+        else E.flash(r.data.error || "Not undone");
+      };
+      notice.className = "te-banner";
+      notice.replaceChildren(h("div", { class: "te-grow", text: "This table is now editable here. Its Markdown left the text." }),
+        h("button", { type: "button", class: "pv-btn sm", text: "Undo", onclick: undo }),
+        h("button", { type: "button", class: "te-icon", "aria-label": "Dismiss", text: "✕", onclick: () => { notice.hidden = true; } }));
+      notice.hidden = false;
+    }
+
     // ------------------------------------------------------------ the format bar
     function renderBar(bar) {
+      offerUndo();
       const at = E.selectedCell(), rowId = selectedRow();
       const btn = (text, onclick, disabled) => h("button", { type: "button", class: "pv-btn sm", text, disabled: disabled ? "" : null, onclick });
       bar.replaceChildren(

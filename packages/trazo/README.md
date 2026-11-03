@@ -255,6 +255,14 @@ Word or Sheets fills from the selected cell and grows the table; a new
 column of numbers is aligned right. Text is published as typed: nothing is
 calculated.
 
+A Markdown table with a caption offers **Make editable** (on its card and
+under it in the article): once confirmed, it becomes a table typed by hand
+and the text keeps a line that includes it. Caption, note and cross-references
+stay. The table editor then offers **Undo** until the first edit. A table
+that would lose something (merged cells, a link, an equation, code, a value
+such as `{{v:key}}`) says why and keeps **Edit source**; see
+`src/trazo/table_convert.py`.
+
 The diagram editor is also part of the preview, at `/diagrams#<name>`
 (**Edit diagram** on a figure, **All diagrams** in Figures & Tables). It
 needs Google Chrome or Chromium for checks and exports; its endpoints are

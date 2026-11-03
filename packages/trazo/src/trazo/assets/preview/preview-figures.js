@@ -247,6 +247,7 @@
     }
     if (it.kind === "table" && it.hasCaption) {
       acts.append(h("button", { type: "button", class: "pv-btn sm", "data-a": "edit-caption", text: "Edit caption" }));
+      if (!TABLE_SPECS.includes(tlabel)) acts.append(h("button", { type: "button", class: "pv-btn sm", "data-a": "make-editable", text: "Make editable" }));
     }
     if (it.kind === "figure") {
       const button = h("button", { type: "button", class: "pv-btn sm", text: it.composite ? "Edit source" : "Edit caption" });
@@ -306,6 +307,7 @@
     if (a === "zoom") openLb(figsShown.indexOf(it), btn);
     else if (a === "go") goToFigure(it);
     else if (a === "edit-caption") editTableCaption(it);
+    else if (a === "make-editable") makeEditable(it.doc, it.id, btn.parentElement);
     else if (a === "cited") {
       const list = $(".pv-cited", card), open = btn.getAttribute("aria-expanded") !== "true";
       btn.setAttribute("aria-expanded", String(open));
