@@ -26,7 +26,7 @@ Internal changes (tests, CI, refactoring) stay out.
   several comments and delete them together, or delete every resolved one.
   The Deleted list is gone: comments left in it show as resolved, so you
   can delete them too. The agent can delete resolved comments when you ask
-  it to (`trazo review delete`).
+  it to (`trazo review delete`) (#14).
 
 ## v1.2.0 (2026-11-02)
 
