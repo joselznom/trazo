@@ -115,11 +115,12 @@ def data_payload(table: tb.Table) -> dict[str, Any]:
 
 def shown_fields(spec: dict[str, Any]) -> set[str]:
     """The fields a spec shows: row keys, column fields and pivots."""
-    rows = spec.get("rows") if isinstance(spec.get("rows"), dict) else {}
-    fields = {k for k in rows.get("keys", []) if isinstance(k, str)}
-    for col in spec.get("columns") if isinstance(spec.get("columns"), list) else []:
-        children = col.get("columns") if isinstance(col, dict) and isinstance(col.get("columns"), list) else []
-        for item in [col, *children]:
+    rows, columns = spec.get("rows"), spec.get("columns")
+    keys = rows.get("keys", []) if isinstance(rows, dict) else []
+    fields = {k for k in keys if isinstance(k, str)}
+    for col in columns if isinstance(columns, list) else []:
+        children = col.get("columns") if isinstance(col, dict) else None
+        for item in [col, *(children if isinstance(children, list) else [])]:
             if isinstance(item, dict):
                 fields |= {item[k] for k in ("field", "pivot") if isinstance(item.get(k), str)}
     return fields
@@ -137,9 +138,9 @@ def map_usage(label: str) -> dict[str, list[dict[str, Any]]]:
             continue
         if not isinstance(spec, dict):
             continue
-        maps = spec.get("maps") if isinstance(spec.get("maps"), dict) else {}
+        maps = spec.get("maps")
         for field in sorted(shown_fields(spec)):
-            own = maps.get(field)
+            own = maps.get(field) if isinstance(maps, dict) else None
             usage.setdefault(field, []).append({"label": other, "own": sorted(own) if isinstance(own, dict) else []})
     return usage
 
