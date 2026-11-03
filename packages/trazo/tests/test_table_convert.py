@@ -30,13 +30,17 @@ After.
 """
 
 
+def write_doc(text):
+    DOC.write_bytes(text.encode("utf-8"))  # "\n" on Windows too: captions are found by line
+
+
 class ConvertTests(Restore):
     def setUp(self):
         super().setUp()
         self.addCleanup(DOC.write_bytes, DOC.read_bytes())
 
     def plan(self, text=TABLE, identifier="tbl:outcomes"):
-        DOC.write_text(text, encoding="utf-8")
+        write_doc(text)
         return table_convert.plan("manuscript", identifier)
 
     def refused(self, text, reason):
@@ -105,7 +109,7 @@ Table: Grid. {#tbl:outcomes}
             self.plan(TABLE.replace("tbl:outcomes", "tbl:Out.comes"), "tbl:Out.comes")
 
     def test_convert_and_undo_through_the_editor(self):
-        DOC.write_text(TABLE, encoding="utf-8")
+        write_doc(TABLE)
         request = {"doc": "manuscript", "id": "tbl:outcomes"}
         self.assertEqual(table_editor.convert_table({**request, "op": "check"}), {"ok": True})
         made = table_editor.convert_table({**request, "op": "convert"})
@@ -119,7 +123,7 @@ Table: Grid. {#tbl:outcomes}
         self.assertFalse((SPECS / "outcomes.json").exists())
 
     def test_undo_is_refused_after_the_table_was_edited(self):
-        DOC.write_text(TABLE, encoding="utf-8")
+        write_doc(TABLE)
         request = {"doc": "manuscript", "id": "tbl:outcomes"}
         made = table_editor.convert_table({**request, "op": "convert"})
         table.patch("outcomes", [{"op": "cell", "row": "r1", "column": "c1", "text": "Changed"}])
@@ -128,7 +132,7 @@ Table: Grid. {#tbl:outcomes}
         self.assertTrue((SPECS / "outcomes.json").exists())
 
     def test_undo_keeps_text_saved_after_the_conversion(self):
-        DOC.write_text(TABLE, encoding="utf-8")
+        write_doc(TABLE)
         made = table_editor.convert_table({"op": "convert", "doc": "manuscript", "id": "tbl:outcomes"})
         state = get_source("manuscript/main/01_introduction.md")
         change_source({"file": state["file"], "text": state["text"] + "\nNew prose.\n", "base_sha256": state["sha256"]})
@@ -137,9 +141,9 @@ Table: Grid. {#tbl:outcomes}
         self.assertFalse((SPECS / "outcomes.json").exists())
 
     def test_undo_needs_the_line_that_includes_the_table(self):
-        DOC.write_text(TABLE, encoding="utf-8")
+        write_doc(TABLE)
         made = table_editor.convert_table({"op": "convert", "doc": "manuscript", "id": "tbl:outcomes"})
-        DOC.write_text("# One\n", encoding="utf-8")
+        write_doc("# One\n")
         with self.assertRaises(NotFound):
             table_editor.convert_table({"op": "undo", "doc": "manuscript", **made})
         self.assertTrue((SPECS / "outcomes.json").exists())
@@ -171,14 +175,14 @@ Table: Grid. {#tbl:outcomes}
         self.assertEqual(spec["legend"], "By group.")
 
     def test_a_check_says_why_not(self):
-        DOC.write_text(TABLE.replace("**12**", "`code`"), encoding="utf-8")
+        write_doc(TABLE.replace("**12**", "`code`"))
         with self.assertRaisesRegex(table_convert.CannotConvert, "a cell has code"):
             table_editor.convert_table({"op": "check", "doc": "manuscript", "id": "tbl:outcomes"})
 
     def test_a_document_that_changed_leaves_no_table_behind(self):
-        DOC.write_text(TABLE, encoding="utf-8")
+        write_doc(TABLE)
         found = table_convert.plan("manuscript", "tbl:outcomes")
-        DOC.write_text(TABLE + "\nMore.\n", encoding="utf-8")
+        write_doc(TABLE + "\nMore.\n")
         with self.assertRaises(Exception):
             table_editor.publish(found["label"], found["spec"], found["source"], found["text"])
         self.assertFalse((SPECS / "outcomes.json").exists())

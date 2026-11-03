@@ -172,7 +172,7 @@ class MakeEditableTests(PreviewBrowserTestCase):
         doc = _support.ROOT / "manuscript/main/01_introduction.md"
         made = table.spec_path("outcomes")
         self.keep_files(doc, made, table.output_path("outcomes"), table.HISTORY_PATH)
-        doc.write_text(text, encoding="utf-8")
+        doc.write_bytes(text.encode("utf-8"))  # "\n" on Windows too: captions are found by line
         page = preview.OUT_DIR / "manuscript.html"
         page.write_text(page.read_text().replace('</section><script>',
             '<table id="tbl:outcomes"><caption>Table 1. Outcomes.</caption><tbody><tr><td>1</td></tr></tbody></table>'
