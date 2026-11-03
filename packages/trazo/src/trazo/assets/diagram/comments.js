@@ -2,7 +2,7 @@
  * (the author wrote it), review (the agent replied with `trazo diagram
  * resolve`; "To check"), done (only the author resolves it). Active lists
  * open and to-check comments in pin order, Resolved the last resolved first.
- * Each change shows a notice with Undo. The server stores them in
+ * Each change but a deletion (see app.js) shows a notice with Undo. The server stores them in
  * notes/review/diagram_comments.json. A comment is pinned to an element id,
  * a point in millimetres, both, or the whole diagram.
  */
@@ -20,7 +20,7 @@
   let stamp = null;
   let pin = {};
   let draft = "";
-  let showTrash = false;
+  const deletion = Trazo.commentDeletion(() => draw(), (body, message) => send(body, message));
   let focusId = null;
   let editing = null;
   let replying = null;
@@ -113,7 +113,7 @@
     if (message) {
       /* Undo exactly this change: the server refuses if another one came since. */
       const mine = undoId;
-      ed.toast(message, "check", undoLabel && body.op !== "undo" ? { label: "Undo", run: () => {
+      ed.toast(message, "check", undoLabel && !["undo", "purge"].includes(body.op) ? { label: "Undo", run: () => {
         if (S.name === diagram && undoId === mine) undoComment(mine);
         else ed.toast("Not undone: the comments changed since", "info");
       } } : null);
@@ -163,17 +163,16 @@
 
   const isLive = (c) => c.status === "open" || c.status === "review";
   const resolvedAt = (c) => c.resolved || c.created || "";
-  const plural = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
 
   function draw() {
     const root = $("#comments");
     if (!root) return;
-    /* Active: open and to check, in pin order. Resolved: the last resolved
-     * first. Deleted: the trash, under Resolved. */
+    /* Active: open and to check, in pin order. Resolved: the last resolved first. */
     const live = comments.filter(isLive);
     const review = live.filter((c) => c.status === "review").length;
     const done = comments.filter((c) => c.status === "done").sort((a, b) => resolvedAt(b).localeCompare(resolvedAt(a)));
-    const trash = comments.filter((c) => c.status === "deleted");
+    const ids = (list) => list.map((c) => c.id);
+    deletion.sync(ids(done), ids(filter === "active" ? live : done));
     ed.setTabBadge("comments", live.length, review ? "accent" : "");
     const scroll = root.scrollTop;
     if (!S.name) {
@@ -213,18 +212,7 @@
     } else {
       if (!done.length) empty("check", "No resolved comments");
       for (const item of done) root.append(card(item));
-      const foot = el("div", { class: "cfoot" });
-      if (done.length) {
-        foot.append(el("button", { type: "button", title: "Move them to Deleted (Undo brings them back)",
-          onclick: () => send({ op: "delete", ids: done.map((c) => c.id) }, `${plural(done.length, "resolved comment")} deleted`) },
-        "Delete all resolved"));
-      }
-      if (trash.length) {
-        foot.append(el("button", { type: "button", class: "trash-toggle", "aria-expanded": String(showTrash),
-          onclick: () => { showTrash = !showTrash; draw(); } }, ic(showTrash ? "chevronDown" : "chevron"), ic("trash"), `Deleted (${trash.length})`));
-      }
-      if (foot.childNodes.length) root.append(foot);
-      if (showTrash) for (const item of trash) root.append(card(item));
+      if (done.length) root.append(deletion.foot(ids(done), "cfoot"));
     }
     root.scrollTop = scroll;
     if (focusId) {
@@ -235,24 +223,26 @@
     if (replyArea) replyArea.focus();
   }
 
-  const STATE_LABEL = { open: "Open", review: "To check", done: "Resolved", deleted: "Deleted" };
+  const STATE_LABEL = { open: "Open", review: "To check", done: "Resolved" };
 
   function card(item) {
+    const trash = () => deletion.trash(item.id, "icon-btn small del", ic("trash", 15));
     if (item.status === "done" && focusId !== item.id && editing !== item.id) {
       /* A resolved comment is one line; a click shows the thread. */
-      const line = el("div", { class: "ccard done compact",
+      const line = el("div", { class: `ccard done compact pk-row${deletion.ticked(item.id) ? " selected" : ""}`,
         title: `${item.resolved ? `Resolved ${item.resolved}. ` : ""}Click to show the thread`,
         onclick: () => { focusId = item.id; showTarget(item); } },
-      el("span", { class: "ok", "aria-hidden": "true" }, "✓"), el("span", { class: "body" }, item.comment.split("\n")[0]),
-      el("span", { class: "where" }, where(item)));
+      deletion.tick(item.id), el("span", { class: "ok", "aria-hidden": "true" }, "✓"),
+      el("span", { class: "body" }, item.comment.split("\n")[0]), el("span", { class: "where" }, where(item)), trash(), deletion.box(item.id));
       line.dataset.id = item.id;
       return line;
     }
-    const node = el("div", { class: `ccard ${item.status}${focusId === item.id ? " on" : ""}` });
+    const done = item.status === "done";
+    const node = el("div", { class: `ccard pk-row ${item.status}${focusId === item.id ? " on" : ""}${done && deletion.ticked(item.id) ? " selected" : ""}` });
     node.dataset.id = item.id;
     const state = el("span", { class: `state ${item.status}`, title: item.status === "done" && item.resolved ? `Resolved ${item.resolved}` : null },
       STATE_LABEL[item.status] || item.status);
-    node.append(el("div", { class: "meta" }, ic(item.target ? "target" : item.point ? "dot" : "file", 13),
+    node.append(el("div", { class: "meta" }, done ? deletion.tick(item.id) : null, ic(item.target ? "target" : item.point ? "dot" : "file", 13),
       el("span", { class: "where" }, where(item)), item.created ? el("span", {}, `· ${when(item.created)}`) : null, state));
     if (editing === item.id) {
       const area = el("textarea", { class: "input", "aria-label": "Edit comment", placeholder: "⌘↵ to save, Esc to cancel",
@@ -311,29 +301,24 @@
       const actions = el("div", { class: "actions" });
       const btn = (label, fn, cls, title) => actions.append(el("button", { type: "button", class: `btn small ${cls}`, title, onclick: fn }, label));
       const spacer = () => actions.append(el("span", { class: "sp" }));
-      const trash = () => actions.append(el("button", { type: "button", class: "icon-btn small del", "aria-label": "Delete comment",
-        title: "Delete (Undo brings it back)", onclick: () => send({ op: "delete", id: item.id }, "Comment deleted") }, ic("trash", 15)));
       const resolve = () => send({ op: "update", id: item.id, status: "done" }, "Comment resolved");
-      if (item.status === "deleted") {
-        spacer();
-        btn("Restore", () => send({ op: "restore", id: item.id }, "Comment restored"), "");
-      } else if (item.status === "open") {
+      if (item.status === "open") {
         btn("Edit", () => { editing = item.id; draw(); }, "ghost");
         spacer();
         btn("✓ Resolve", resolve, "", "You handled it; it leaves the agent's list");
-        trash();
+        actions.append(trash());
       } else if (item.status === "review") {
         btn("Reply", () => { replying = item.id; replyDraft = ""; draw(); }, "ghost", "Ask the agent for more; reopens the comment");
         spacer();
         btn("✓ Resolve", resolve, "primary", "The agent's change is fine");
-        trash();
+        actions.append(trash());
       } else {
         btn("Reopen", () => send({ op: "update", id: item.id, status: "open" }, "Comment reopened for the agent"), "ghost",
           "Send it back to the agent");
         spacer();
-        trash();
+        actions.append(trash());
       }
-      node.append(actions);
+      node.append(actions, deletion.box(item.id) || "");
     }
     node.addEventListener("click", (e) => {
       if (e.target.closest("a, textarea, button")) return;
@@ -405,7 +390,7 @@
     const r = 9 / z;
     let n = 0;
     for (const item of comments) {
-      if (item.status === "deleted" || item.status === "done") continue;
+      if (item.status === "done") continue;
       n += 1;
       let x = null;
       let y = null;
@@ -462,7 +447,7 @@
     focus(id) {
       focusId = id;
       const item = comments.find((c) => c.id === id);
-      if (item && item.status !== "deleted") filter = item.status === "done" ? "resolved" : "active";
+      if (item) filter = item.status === "done" ? "resolved" : "active";
       openTab();
       draw();
       if (item && item.target && findTarget(item.target)) ed.select([item.target]);

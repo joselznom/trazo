@@ -5,7 +5,7 @@ there when it runs (preview.NAME), so patching them on trazo.preview reaches it.
 """
 
 from .local_server import RequestError as CommentError
-from .review_comments import CommentStore, text_field, thread_of
+from .review_comments import CommentStore, text_field, thread_of, upgraded
 from .review_history import History
 from .review_storage import read_list
 
@@ -93,10 +93,10 @@ def comments_stamp():
 
 
 def print_comments(show_all):
-    for c in load_comments():
+    for c in map(upgraded, load_comments()):
         if c.get("kind") == "underline":  # the author's reading marks
             continue
-        if c.get("status") == "deleted" or (not show_all and c.get("status") != "open"):
+        if not show_all and c.get("status") != "open":
             continue
         print(f"[{c['id']}] {c.get('status')} | {c.get('doc', '')} | "
               f"{c.get('section', '')} | {c.get('para', '')}")

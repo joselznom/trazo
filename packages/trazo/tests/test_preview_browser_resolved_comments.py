@@ -137,7 +137,7 @@ class ResolvedCommentTests(PreviewBrowserTestCase):
         # Show in text is offered only where there is a quote.
         ops = lambda text: self.evaluate(
             f"document.querySelector('.pv-card[data-id=\"{ids[text]}\"]').click() || "
-            "Array.from(document.querySelectorAll('.pv-card.done [data-op]'), b => b.dataset.op)")
+            "Array.from(document.querySelectorAll('.pv-card.done:not(.compact) [data-op]'), b => b.dataset.op)")
         self.assertEqual(ops("General"), ["reopen", "delete"])
         self.assertEqual(ops("In a paragraph"), ["show", "reopen", "delete"])
         # The gallery lists the resolved comments on captions and notes, whatever their old labels said.

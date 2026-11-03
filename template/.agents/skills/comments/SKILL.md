@@ -19,7 +19,11 @@ scripts/trazo review resolve SCOPE:ID "reply"
 - Edit the Markdown source (for tables, the spec through
   `scripts/trazo table patch`),
   then `resolve` each comment with a short reply saying what changed.
-  Every comment change is undoable (`scripts/trazo review undo SCOPE [NAME]`).
+  Every comment change is undoable (`scripts/trazo review undo SCOPE [NAME]`)
+  except a deletion.
+- Delete resolved comments only when the user asks:
+  `scripts/trazo review delete SCOPE:ID...`, or `--resolved` for all of
+  them. A deletion is for good, and it refuses open and to-check comments.
 - The author may edit the same files in the page's Source tab, a caption
   editor or the table editor; re-read a file before editing it.
 - The shared list includes document, diagram and table comments; use the

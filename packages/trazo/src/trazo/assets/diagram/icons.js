@@ -27,8 +27,6 @@
     eyeOff: '<path d="M2.5 10s2.8-5 7.5-5 7.5 5 7.5 5-2.8 5-7.5 5-7.5-5-7.5-5z" opacity=".45"/><path d="M4 16L16 4"/>',
     lock: '<rect x="4.5" y="9" width="11" height="8" rx="1.5"/><path d="M7 9V6.5a3 3 0 0 1 6 0V9"/>',
     unlock: '<rect x="4.5" y="9" width="11" height="8" rx="1.5"/><path d="M7 9V6.5a3 3 0 0 1 5.8-1"/>',
-    chevron: '<path d="M7.5 5l5 5-5 5"/>',
-    chevronDown: '<path d="M5 7.5l5 5 5-5"/>',
     close: '<path d="M5.5 5.5l9 9M14.5 5.5l-9 9"/>',
     check: '<path d="M4.5 10.5l3.5 3.5 7.5-8"/>',
     warning: '<path d="M10 3.5l7 12.5H3z" stroke-linejoin="round"/><path d="M10 8.5v3.5"/><circle cx="10" cy="14.2" r=".6" fill="currentColor"/>',
