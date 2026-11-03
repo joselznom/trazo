@@ -49,6 +49,42 @@ class ReviewTests(unittest.TestCase):
             review.main(["comments", "--all", "--json"])
         self.assertEqual(len(json.loads(out.getvalue())), 3)
 
+    def test_delete_takes_only_resolved_comments_and_lists_leave_out_the_old_trash(self):
+        def add(scope, status, **fields):
+            item = review.change({"scope": scope, "op": "add", "comment": f"{scope} {status}", **fields})["comments"][-1]
+            if status != "open":
+                review.change({"scope": scope, "op": "update", "id": item["id"], "status": status})
+            return f"{scope}:{item['id']}"
+        live = [add("document", "open", doc="manuscript"), add("diagram", "review", diagram="example")]
+        done = add("document", "done", doc="manuscript")
+        add("table", "done", table="results")
+        trashed = preview.load_comments() + [{"id": "old", "doc": "manuscript", "comment": "old trash",
+                                              "status": "deleted", "deleted_from": "open", "replies": []}]
+        preview.PreviewComments().save(trashed)
+
+        def run(*argv):
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out), contextlib.redirect_stderr(out):
+                try:
+                    code = review.main(list(argv))
+                except SystemExit as exc:
+                    code = exc.code
+            return code, out.getvalue()
+        listed = json.loads(run("comments", "--all", "--json")[1])
+        self.assertEqual(sorted(c["status"] for c in listed), ["done", "done", "done", "open", "review"])
+        # A comment still open or to check is refused, and nothing is deleted.
+        for argv in (("delete", live[0]), ("delete", done, live[1]), ("delete",), ("delete", "--resolved", done)):
+            with self.subTest(argv=argv):
+                self.assertEqual(run(*argv)[0], 1)
+        self.assertEqual(len(review.payload()["comments"]), 5)
+        self.assertEqual(run("delete", done), (0, f"[{done}] deleted\n"))
+        code, out = run("delete", "--resolved")
+        self.assertEqual(code, 0)
+        self.assertIn("[document:old] deleted", out)
+        self.assertEqual(out.count("] deleted"), 2)
+        self.assertEqual(sorted(c["key"] for c in review.payload()["comments"]), sorted(live))
+        self.assertEqual(run("delete", "--resolved"), (0, "no resolved comments\n"))
+
     def test_listing_shows_the_selected_text_and_each_target(self):
         quote = 'The first "AI" claim.\nAcadem'
         preview.change_comments({"op": "add", "doc": "manuscript", "comment": "Shorten this",

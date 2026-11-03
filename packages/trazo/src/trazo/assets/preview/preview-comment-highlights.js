@@ -51,16 +51,16 @@
     }
 
     // Active: open and to check, in document order (also the j / k order).
-    // Resolved: the last resolved first. Deleted: the trash, under Resolved.
+    // Resolved: the last resolved first.
     nav = notes.filter((x) => x.c.status === "open" || x.c.status === "review").sort(docOrder);
     const when = (c) => c.resolved || c.created || "";
     const done = notes.filter((x) => x.c.status === "done").sort((a, b) => when(b.c).localeCompare(when(a.c)));
-    const trash = notes.filter((x) => x.c.status === "deleted");
-    const shown = cfilter === "active" ? nav : done.concat(showTrash ? trash : []);
+    const shown = cfilter === "active" ? nav : done;
     for (const key of Object.keys(drafts)) {
-      const c = comments.find((x) => x.id === key.split(":")[0]);
-      if (!c || c.status === "deleted") delete drafts[key];
+      if (!comments.some((x) => x.id === key.split(":")[0])) delete drafts[key];
     }
+    const ids = (list) => list.map((x) => x.c.id);
+    deletion.sync(ids(done), ids(shown));
     // An inline editor only exists for a card that is on screen; a draft
     // for a card in another view comes back when that card is shown again.
     if (editing && !shown.some((x) => x.c.id === editing.id)) editing = null;
@@ -96,22 +96,7 @@
     } else {
       if (!done.length) empty("No resolved comments");
       for (const x of done) panel.append(card(x.c, x.hit, x));
-      const foot = h("div", { class: "pv-cfoot" });
-      if (done.length) {
-        const clear = h("button", { type: "button", text: "Delete all resolved",
-          title: "Move them to Deleted (Undo or ⌘Z brings them back)" });
-        clear.addEventListener("click", () => send({ op: "delete", ids: done.map((x) => x.c.id) },
-          `${plural(done.length, "resolved comment")} deleted`));
-        foot.append(clear);
-      }
-      if (trash.length) {
-        const link = h("button", { type: "button", class: "pv-trash", "aria-expanded": String(showTrash),
-          text: `${showTrash ? "▾" : "▸"} Deleted (${trash.length})` });
-        link.addEventListener("click", () => { showTrash = !showTrash; renderComments(); });
-        foot.append(link);
-      }
-      if (foot.childNodes.length) panel.append(foot);
-      if (showTrash) for (const x of trash) panel.append(card(x.c, null, x));
+      if (done.length) panel.append(deletion.foot(ids(done), "pv-cfoot"));
     }
     if (!inFigs) renderIndex();
   }
@@ -159,7 +144,7 @@
     if (message) {
       // Undo exactly this change: the server refuses if another one came since.
       const mine = undoId;
-      toast(message, undoLabel && body.op !== "undo" ? { label: "Undo", run: () => {
+      toast(message, undoLabel && body.op !== "undo" && body.op !== "purge" ? { label: "Undo", run: () => {
         if (undoId === mine && commentScope() === scope) send({ op: "undo", ...(mine ? { expect: mine } : {}) }, "Undone");
         else toast("Not undone: the comments changed since. ⌘Z undoes the latest change.");
       } } : null);

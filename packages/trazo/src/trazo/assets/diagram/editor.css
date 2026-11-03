@@ -344,8 +344,6 @@ textarea.input { height: auto; min-height: 64px; padding: 8px 9px; resize: verti
 .ccard.on { border-color: var(--sel); box-shadow: 0 0 0 3px var(--sel-soft); }
 .ccard.done { background: var(--surface-2); }
 .ccard.done .body { color: var(--text-2); }
-.ccard.deleted { opacity: .65; }
-.ccard.deleted .body { text-decoration: line-through; }
 /* A resolved comment is one line until clicked. */
 .ccard.compact { display: flex; align-items: center; gap: 8px; margin: 2px 10px; padding: 6px 8px; border-color: transparent;
   background: transparent; cursor: pointer; font-size: 12.5px; }
@@ -361,7 +359,6 @@ textarea.input { height: auto; min-height: 64px; padding: 8px 9px; resize: verti
 .state.open { background: var(--sel-soft); color: var(--sel); }
 .state.review { background: var(--accent-soft); color: var(--accent); }
 .state.done { background: var(--ok-soft); color: var(--ok); }
-.state.deleted { background: var(--surface-3); color: var(--text-3); }
 .ccard .body { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.45; }
 .ccard .thread { margin: 8px 0 0; padding: 0 0 0 10px; border-left: 2px solid var(--border); display: grid; gap: 6px; }
 .ccard .reply { font-size: 12.5px; line-height: 1.45; white-space: pre-wrap; overflow-wrap: anywhere; }
@@ -370,15 +367,14 @@ textarea.input { height: auto; min-height: 64px; padding: 8px 9px; resize: verti
 .ccard .actions { display: flex; align-items: center; gap: 4px; margin-top: 8px; }
 .ccard .actions .sp { flex: 1; }
 .ccard .actions .btn { height: 24px; padding: 0 8px; font-size: 12px; }
-.ccard .actions .del { width: 26px; height: 24px; color: var(--text-3); }
-.ccard .actions .del:hover { color: var(--err); }
+.ccard .del { flex: none; width: 26px; height: 24px; color: var(--text-3); }
+.ccard .del:hover { color: var(--err); }
 .ccard .reply-box { margin-top: 8px; }
 .ccard .reply-box .foot { display: flex; justify-content: flex-end; gap: 6px; margin-top: 6px; }
 .cfoot { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin: 12px 14px 8px; padding-top: 8px;
   border-top: 1px solid var(--border); }
 .cfoot button { padding: 0; border: 0; background: none; color: var(--text-3); font-size: 12px; }
 .cfoot button:hover { color: var(--text); }
-.trash-toggle { display: flex; align-items: center; gap: 6px; margin-left: auto; }
 
 /* ---------- floating layers ---------- */
 

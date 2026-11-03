@@ -39,7 +39,7 @@ GET  /__diagrams/embeds             figures/output/svg/*.svg [{path, bytes,
 GET  /__diagrams/comments[?diagram=N]
                                     {comments, undo (label of the last comment
                                     change of that diagram)}
-POST /__diagrams/comments           {op: add|update|reply|delete|restore|undo, ...}
+POST /__diagrams/comments           {op: add|update|reply|purge|undo, ...}
 GET  /__assets/diagram/...          the editor's files; figures/fonts/...,
                                     figures/output/svg/..., figures/external/... and
                                     image files under figures/ are read-only
@@ -47,8 +47,8 @@ GET  /__assets/diagram/...          the editor's files; figures/fonts/...,
 
 Comments live in notes/review/diagram_comments.json with the preview
 states: open (author), review (the agent replied with `trazo diagram
-resolve`), done (only the author marks it); delete moves a comment to the
-trash and restore brings it back. A comment has a target element id or a
+resolve`), done (only the author marks it); purge deletes comments for
+good. A comment has a target element id or a
 point [x, y] in mm (or neither, for the whole diagram).
 
 History: every save and comment change is an entry in
@@ -454,7 +454,7 @@ def change_comments(request: Any) -> dict[str, Any]:
 
     Ops (as in the preview): add {diagram, comment, target?, point?},
     update {id, status?, comment?}, reply {id, text, by?, status?},
-    delete {id}, restore {id} and undo {diagram?} (reverts the last comment
+    purge {id} or {ids} (ids: resolved only), undo {diagram?} (the last comment
     change of that diagram, refused with 409 if the comment changed since).
     See trazo.review_comments.
     """

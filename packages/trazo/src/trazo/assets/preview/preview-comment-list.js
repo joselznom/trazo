@@ -3,7 +3,9 @@
 // trazo.preview.VIEWER_SCRIPTS; their top-level names are shared globals.
   if (!window.PreviewModel) throw new Error("preview-model.js did not load");  // see preview-page.js
   // The next undo of this view: its label and history entry id.
-  let undoLabel = null, undoId = null, showTrash = false;
+  let undoLabel = null, undoId = null;
+  // Ticks on resolved comments and the warning before a deletion (see app.js).
+  const deletion = App.commentDeletion(() => renderComments(), (body, message) => send(body, message));
   // The gallery edits every document, so Undo must use the same scope.
   const commentScope = () => view === "figures" ? null : doc;
   let commentLoadSeq = 0;
@@ -18,18 +20,25 @@
   // Active (open and to check) or Resolved comments; kept across reloads.
   let cfilter = prefs.cfilter === "resolved" ? "resolved" : "active";
   const WHO = { agent: "Claude", author: "You" };
-  const STATE_NAME = { open: "Open", review: "To check", done: "Resolved", deleted: "Deleted" };
+  const STATE_NAME = { open: "Open", review: "To check", done: "Resolved" };
   // Underlines are the author's reading marks: drawn in the text, never
   // listed or counted as comments, and left out of the agent's list.
   const isMark = (c) => c.kind === "underline";
-  // Resolved and deleted comments are an archive. A resolved one is still
-  // located (its card names the current place, and Show in text goes there)
-  // but never painted, marked, picked by a click or visited by j / k.
+  // Resolved comments and removed underlines are an archive. A resolved one
+  // is still located (its card names the current place, and Show in text
+  // goes there) but never painted, marked, picked by a click or visited by j / k.
   const archived = (c) => c.status === "deleted" || (c.status === "done" && !isMark(c));
   const locate = (a, c) => (c.status === "deleted" ? null : locateCached(a, c));
   // What the text of this page shows, set by draw(): located comments that
   // are not archived, and the underlines.
   let inText = [];
+
+  function trashButton(c) {
+    const b = h("button", { type: "button", "data-op": "delete", class: "pv-del pk-del", "aria-label": "Delete comment", title: "Delete" });
+    b.innerHTML = ICONS.trash;
+    b.addEventListener("click", (e) => { e.stopPropagation(); deletion.ask([c.id], c.id); });
+    return b;
+  }
 
   function card(c, hit, entry) {
     const el = document.createElement("div");
@@ -40,17 +49,19 @@
     const place = hit?.el.dataset.label || c.para;
     el.dataset.id = c.id;
     if (c.status === "done" && openDone !== c.id && !isEditing) {
-      el.className = "pv-card done compact";
+      el.className = `pv-card done compact pk-row${deletion.ticked(c.id) ? " selected" : ""}`;
       el.title = `${c.resolved ? `Resolved ${c.resolved}. ` : ""}Click to show the thread`;
-      el.append(h("span", { class: "pv-ok", text: "✓", "aria-hidden": "true" }),
-        h("span", { class: "pv-ctext", text: c.comment.split("\n")[0] }), h("span", { class: "pv-cwhere", text: prefix + place }));
-      el.addEventListener("click", () => {
+      el.append(deletion.tick(c.id), h("span", { class: "pv-ok", text: "✓", "aria-hidden": "true" }),
+        h("span", { class: "pv-ctext", text: c.comment.split("\n")[0] }), h("span", { class: "pv-cwhere", text: prefix + place }),
+        trashButton(c), deletion.box(c.id) || "");
+      el.addEventListener("click", (e) => {
+        if (e.target.closest("input, button, .pk-confirm")) return;
         openDone = navId = c.id;
         renderComments();
       });
       return el;
     }
-    el.className = `pv-card ${c.status}${lost ? " lost" : ""}${navId === c.id ? " current" : ""}`;
+    el.className = `pv-card pk-row ${c.status}${lost ? " lost" : ""}${navId === c.id ? " current" : ""}`;
     el.innerHTML =
       `<div class="pv-card-head"><span class="pv-dot" aria-hidden="true"></span><span class="pv-where"></span><span class="pv-state"></span></div>` +
       (c.quote ? `<blockquote></blockquote>` : "") +
@@ -73,12 +84,7 @@
       actions.append(h("button", { type: "button", "data-op": op, class: cls || false, text: label, title: title || false }));
     };
     const spacer = () => actions.append(h("span", { class: "pv-sp" }));
-    const trash = () => {
-      const b = h("button", { type: "button", "data-op": "delete", class: "pv-del", "aria-label": "Delete comment",
-        title: "Delete (Undo or ⌘Z brings it back)" });
-      b.innerHTML = ICONS.trash;
-      actions.append(b);
-    };
+    const trash = () => actions.append(trashButton(c));
     const key = `${c.id}:${editing ? editing.mode : ""}`;
     const field = (initial, placeholder) => {
       const area = document.createElement("textarea");
@@ -133,9 +139,6 @@
       spacer();
       button("cancel-edit", "Cancel");
       button("save-edit", reply ? "Send" : "Save", "pri");
-    } else if (c.status === "deleted") {
-      spacer();
-      button("restore", "Restore");
     } else if (c.status === "open") {
       button("edit", "Edit");
       spacer();
@@ -152,6 +155,7 @@
       spacer();
       trash();
     }
+    if (!isEditing) el.append(deletion.box(c.id) || "");
     el.addEventListener("click", (e) => {
       const target = e.target.closest("[data-op]");
       const op = target && target.dataset.op;
@@ -166,9 +170,7 @@
       }
       if (op === "show") { showResolved(c, hit); return; }
       if (op === "reopen") { openDone = null; send({ op: "update", id: c.id, status: "open" }, "Comment reopened for Claude"); return; }
-      if (op === "delete") { send({ op: "delete", id: c.id }, "Comment deleted"); return; }
-      if (op === "restore") { send({ op: "restore", id: c.id }, "Comment restored"); return; }
-      if (e.target.closest("textarea, button")) return;
+      if (e.target.closest("textarea, button, .pk-confirm")) return;
       navId = c.id;
       renderComments();
       if (!archived(c)) showCommentTarget(c, hit);

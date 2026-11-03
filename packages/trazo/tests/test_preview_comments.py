@@ -78,45 +78,71 @@ class CommentTests(unittest.TestCase):
         added = preview.change_comments({"op": "add", "doc": "manuscript", "quote": " \n ", "comment": "General"})
         self.assertEqual(added["comments"][0]["quote"], "")
 
-    def test_resolved_time_and_deleting_several_in_one_undo(self):
-        ids = [preview.change_comments({"op": "add", "doc": "manuscript", "comment": text})["comments"][-1]["id"]
-               for text in ("One", "Two")]
-        for cid in ids:
-            preview.change_comments({"op": "update", "id": cid, "status": "done"})
-        self.assertTrue(all(c["resolved"] for c in preview.load_comments()))
-        state = preview.change_comments({"op": "delete", "ids": ids, "doc": "manuscript"})
-        self.assertEqual(state["undo"], "delete 2 comments")
-        self.assertEqual({c["status"] for c in state["comments"]}, {"deleted"})
-        undone = preview.change_comments({"op": "undo", "doc": "manuscript"})
-        self.assertEqual({c["status"] for c in undone["comments"]}, {"done"})
-        # Reopening clears the time; a missing id changes nothing.
-        reopened = preview.change_comments({"op": "update", "id": ids[0], "status": "open"})["comments"][0]
+    def test_resolved_time_and_removing_several_underlines_in_one_undo(self):
+        cid = preview.change_comments({"op": "add", "doc": "manuscript", "comment": "One"})["comments"][-1]["id"]
+        preview.change_comments({"op": "update", "id": cid, "status": "done"})
+        self.assertTrue(preview.load_comments()[0]["resolved"])
+        # Reopening clears the time.
+        reopened = preview.change_comments({"op": "update", "id": cid, "status": "open"})["comments"][0]
         self.assertNotIn("resolved", reopened)
-        with self.assertRaises(preview.NotFound):
-            preview.change_comments({"op": "delete", "ids": [ids[1], "missing"]})
-        self.assertEqual(preview.load_comments()[1]["status"], "done")
-        for bad in ({"op": "delete", "ids": []}, {"op": "delete", "ids": [ids[0], ids[0]]},
-                    {"op": "update", "ids": ids, "status": "done"}):
-            with self.subTest(bad=bad), self.assertRaises(preview.CommentError):
-                preview.change_comments(bad)
-
-    def test_delete_over_documents_is_undoable_from_each_and_expect_guards_undo(self):
-        ids = []
-        for doc in ("manuscript", "supplementary"):
-            cid = preview.change_comments({"op": "add", "doc": doc, "comment": doc})["comments"][-1]["id"]
-            preview.change_comments({"op": "update", "id": cid, "status": "done"})
-            ids.append(cid)
+        ids = [preview.change_comments({"op": "add", "doc": doc, "kind": "underline", "comment": "Underline"})
+               ["comments"][-1]["id"] for doc in ("manuscript", "supplementary")]
         state = preview.change_comments({"op": "delete", "ids": ids})
-        self.assertEqual(state["undo"], "delete 2 comments")
+        self.assertEqual(state["undo"], "remove 2 underlines")
         # Both documents' views see the step as their next undo.
         for doc in ("manuscript", "supplementary"):
             payload = preview.comments_payload(doc)
-            self.assertEqual((payload["undo"], payload["undo_id"]), ("delete 2 comments", state["undo_id"]))
+            self.assertEqual((payload["undo"], payload["undo_id"]), ("remove 2 underlines", state["undo_id"]))
         # An undo meant for another entry is refused and keeps this one.
         with self.assertRaises(preview.Conflict):
             preview.change_comments({"op": "undo", "doc": "manuscript", "expect": "other"})
         undone = preview.change_comments({"op": "undo", "doc": "manuscript", "expect": state["undo_id"]})
-        self.assertEqual({c["status"] for c in undone["comments"]}, {"done"})
+        self.assertEqual([c["status"] for c in undone["comments"]], ["open", "open", "open"])
+        # A missing id changes nothing; delete only removes underlines (comments are purged).
+        with self.assertRaises(preview.NotFound):
+            preview.change_comments({"op": "delete", "ids": [ids[1], "missing"]})
+        for bad in ({"op": "delete", "ids": []}, {"op": "delete", "ids": [ids[0], ids[0]]},
+                    {"op": "update", "ids": ids, "status": "done"}, {"op": "delete", "id": cid}):
+            with self.subTest(bad=bad), self.assertRaises(preview.CommentError):
+                preview.change_comments(bad)
+        self.assertEqual({c["status"] for c in preview.load_comments()}, {"open"})
+
+    def test_purge_deletes_comments_and_their_history_for_good(self):
+        def add(text):
+            return preview.change_comments({"op": "add", "doc": "manuscript", "comment": text})["comments"][-1]["id"]
+        kept, first, second = add("Keep me"), add("Gone one"), add("Gone two")
+        for cid in (first, second):
+            preview.change_comments({"op": "update", "id": cid, "status": "done"})
+        # Several at once only takes resolved comments, and refuses the whole request otherwise.
+        with self.assertRaises(preview.CommentError):
+            preview.change_comments({"op": "purge", "ids": [first, kept]})
+        with self.assertRaises(preview.NotFound):
+            preview.change_comments({"op": "purge", "ids": [first, "missing"]})
+        self.assertEqual(len(preview.load_comments()), 3)
+        state = preview.change_comments({"op": "purge", "ids": [first, second], "doc": "manuscript"})
+        self.assertEqual([c["id"] for c in state["comments"]], [kept])
+        # Their text leaves the review files, history included; the rest stays undoable.
+        for path in (preview.COMMENTS_PATH, preview.HISTORY_PATH):
+            self.assertNotIn("Gone", path.read_text())
+        self.assertEqual(state["undo"], f"add comment ({kept})")
+        # One comment may be deleted in any state.
+        self.assertEqual(preview.change_comments({"op": "purge", "id": kept})["comments"], [])
+        self.assertIsNone(preview.comments_payload("manuscript")["undo"])
+
+    def test_comments_left_in_the_old_trash_read_as_resolved(self):
+        store = preview.PreviewComments()
+        store.save([{"id": "old", "doc": "manuscript", "comment": "Trashed", "status": "deleted",
+                     "deleted_from": "open", "replies": []},
+                    {"id": "mark", "doc": "manuscript", "kind": "underline", "comment": "Underline",
+                     "status": "deleted", "deleted_from": "open", "replies": []}])
+        old, mark = preview.comments_payload("manuscript")["comments"]
+        self.assertEqual((old["status"], "deleted_from" in old), ("done", False))
+        self.assertEqual(mark["status"], "deleted")  # a removed underline stays removed
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            preview.print_comments(True)
+        self.assertIn("[old] done", out.getvalue())
+        self.assertEqual(preview.change_comments({"op": "purge", "ids": ["old"]})["comments"][0]["id"], "mark")
 
     def test_underlines_are_marks_in_history_and_hidden_from_listings(self):
         mark = preview.change_comments({"op": "add", "doc": "manuscript", "para": "Methods ¶1",

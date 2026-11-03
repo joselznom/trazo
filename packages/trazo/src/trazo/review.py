@@ -59,6 +59,36 @@ def post_route(path, body):
     return (lambda: change(body())) if path == "/__review" else None
 
 
+def split_key(key):
+    scope, sep, identifier = key.partition(":")
+    if not sep:
+        raise RequestError("use scope:id from trazo review comments")
+    return scope, identifier
+
+
+def delete_resolved(keys, every):
+    """Delete resolved comments for good. Each scope's are sent together, as
+    ids, so its store refuses them all when one is no longer resolved."""
+    if bool(keys) == every:
+        raise RequestError("name the scope:id of each resolved comment, or pass --resolved alone")
+    resolved = {c["key"] for c in payload()["comments"] if c.get("status") == "done" and c.get("kind") != "underline"}
+    if every and not resolved:
+        print("no resolved comments")
+        return
+    # A key that is not resolved fails before any scope is deleted.
+    for key in keys:
+        if key not in resolved:
+            raise RequestError(f"{key} is not a resolved comment; nothing was deleted")
+    by_scope: dict[str, list[str]] = {}
+    for key in keys or sorted(resolved):
+        scope, identifier = split_key(key)
+        by_scope.setdefault(scope, []).append(identifier)
+    for scope, ids in by_scope.items():
+        change({"scope": scope, "op": "purge", "ids": ids})
+        for identifier in ids:
+            print(f"[{scope}:{identifier}] deleted")
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(prog="trazo review", description=__doc__.splitlines()[0])
     sub = parser.add_subparsers(dest="command", required=True)
@@ -68,6 +98,9 @@ def main(argv=None):
     reply = sub.add_parser("resolve")
     reply.add_argument("id", help="scope:id printed by review comments")
     reply.add_argument("reply")
+    delete = sub.add_parser("delete", help="delete resolved comments for good (no undo)")
+    delete.add_argument("ids", nargs="*", help="scope:id of resolved comments")
+    delete.add_argument("--resolved", action="store_true", help="every resolved comment")
     undo = sub.add_parser("undo")
     undo.add_argument("scope", choices=("document", "table", "diagram"))
     undo.add_argument("name", nargs="?")
@@ -94,11 +127,11 @@ def main(argv=None):
                     for r in thread_of(c):
                         print(f"    {r.get('by')}: {r.get('text')}")
         elif args.command == "resolve":
-            scope, sep, identifier = args.id.partition(":")
-            if not sep:
-                raise RequestError("use scope:id from trazo review comments")
+            scope, identifier = split_key(args.id)
             change({"scope": scope, "op": "reply", "id": identifier, "by": "agent", "text": args.reply})
             print(f"[{args.id}] review: reply added")
+        elif args.command == "delete":
+            delete_resolved(args.ids, args.resolved)
         else:
             store = store_for(args.scope)
             result = change({"scope": args.scope, "op": "undo", **({store.scope: args.name} if args.name else {})})

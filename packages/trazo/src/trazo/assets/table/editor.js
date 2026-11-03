@@ -44,7 +44,6 @@
   let tab = "props";
   let showHidden = false;
   let cfilter = "active";   // comments shown: Active (open, to check) or Resolved
-  let showTrash = false;    // the deleted comments, under Resolved
   let openDone = null;      // the resolved comment shown in full (others are one line)
   let cedit = null;         // inline editor of a card: {id, mode: "edit" | "reply"}
   let cdrafts = {};         // unsaved text by "<id>:<mode>" ("new" for the composer)
@@ -973,11 +972,11 @@
   // Comments ------------------------------------------------------------
   // Same states and panel as the preview: Active (open and to check) and
   // Resolved (one line each, the last resolved first); one action per
-  // intent; each change shows a notice with Undo.
-  const STATE_NAME = { open: "Open", review: "To check", done: "Resolved", deleted: "Deleted" };
+  // intent; each change but a deletion (see app.js) shows a notice with Undo.
+  const STATE_NAME = { open: "Open", review: "To check", done: "Resolved" };
+  const deletion = App.commentDeletion(() => renderPanel(), (body, message) => commentOp(body, message));
   const TRASH = '<svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.4" '
     + 'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 4.5h10M6.5 4.5V3h3v1.5M4.5 4.5l.6 8.5h5.8l.6-8.5"/></svg>';
-  const plural = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
   function startComment() {
     composeFor = targetOf(sel);
     tab = "comments";
@@ -1003,7 +1002,7 @@
     if (message) {
       // Undo exactly this change: the server refuses if another one came since.
       const mine = comments.undo_id;
-      flash(message, comments.undo && body.op !== "undo" ? { label: "Undo", run: () => {
+      flash(message, comments.undo && !["undo", "purge"].includes(body.op) ? { label: "Undo", run: () => {
         if (label === table && comments.undo_id === mine) undoComment(mine);
         else flash("Not undone: the comments changed since");
       } } : null);
@@ -1029,7 +1028,8 @@
     const toCheck = live.filter((c) => c.status === "review").length, waiting = live.length - toCheck;
     const when = (c) => c.resolved || c.created || "";
     const done = all.filter((c) => c.status === "done").sort((a, b) => when(b).localeCompare(when(a)));
-    const trash = all.filter((c) => c.status === "deleted");
+    const ids = (list) => list.map((c) => c.id);
+    deletion.sync(ids(done), ids(cfilter === "active" ? live : done));
     const seg = (key, text, n) => h("button", { type: "button", class: cfilter === key ? "on" : null, dataset: { filter: key },
       "aria-pressed": String(cfilter === key), onclick: () => { cfilter = key; openDone = null; renderPanel(); } },
     text, h("span", { class: "te-cn", text: String(n) }));
@@ -1058,27 +1058,21 @@
     } else {
       if (!done.length) empty("No resolved comments");
       for (const c of done) out.push(commentCard(c));
-      const foot = h("div", { class: "te-cfoot" });
-      if (done.length) {
-        foot.append(h("button", { type: "button", text: "Delete all resolved", title: "Move them to Deleted (Undo brings them back)",
-          onclick: () => commentOp({ op: "delete", ids: done.map((c) => c.id) }, `${plural(done.length, "resolved comment")} deleted`) }));
-      }
-      if (trash.length) {
-        foot.append(h("button", { type: "button", class: "te-trash", "aria-expanded": String(showTrash),
-          text: `${showTrash ? "▾" : "▸"} Deleted (${trash.length})`, onclick: () => { showTrash = !showTrash; renderPanel(); } }));
-      }
-      if (foot.childNodes.length) out.push(foot);
-      if (showTrash) for (const c of trash) out.push(commentCard(c));
+      if (done.length) out.push(deletion.foot(ids(done), "te-cfoot"));
     }
     return out;
   }
   function commentCard(c) {
     const mode = cedit && cedit.id === c.id ? cedit.mode : null;
+    const trash = h("button", { type: "button", class: "te-icon te-del pk-del", "aria-label": "Delete comment", title: "Delete",
+      html: TRASH, onclick: (e) => { e.stopPropagation(); deletion.ask([c.id], c.id); } });
     if (c.status === "done" && openDone !== c.id && !mode) {
-      return h("div", { class: "te-card done compact", title: `${c.resolved ? `Resolved ${c.resolved}. ` : ""}Click to show the thread`,
-        onclick: () => { openDone = c.id; renderPanel(); } },
-      h("span", { class: "te-cok", "aria-hidden": "true", text: "✓" }), h("span", { class: "te-ctext", text: c.comment.split("\n")[0] }),
-      h("span", { class: "te-cwhere", text: targetText(c.target) }));
+      return h("div", { class: `te-card done compact pk-row${deletion.ticked(c.id) ? " selected" : ""}`,
+        title: `${c.resolved ? `Resolved ${c.resolved}. ` : ""}Click to show the thread`,
+        onclick: (e) => { if (!e.target.closest("input, button, .pk-confirm")) { openDone = c.id; renderPanel(); } } },
+      deletion.tick(c.id), h("span", { class: "te-cok", "aria-hidden": "true", text: "✓" }),
+      h("span", { class: "te-ctext", text: c.comment.split("\n")[0] }), h("span", { class: "te-cwhere", text: targetText(c.target) }),
+      trash, deletion.box(c.id));
     }
     const key = `${c.id}:${mode}`;
     const close = () => { delete cdrafts[key]; cedit = null; renderPanel(); };
@@ -1099,8 +1093,7 @@
     const acts = h("div", { class: "te-cacts" });
     const btn = (text, onclick, cls, title) => acts.append(h("button", { type: "button", class: `pv-btn sm${cls ? " " + cls : ""}`, text, title, onclick }));
     const spacer = () => acts.append(h("span", { class: "te-grow" }));
-    const del = () => acts.append(h("button", { type: "button", class: "te-icon te-del", "aria-label": "Delete comment",
-      title: "Delete (Undo brings it back)", html: TRASH, onclick: () => commentOp({ op: "delete", id: c.id }, "Comment deleted") }));
+    const del = () => acts.append(trash);
     const resolve = () => commentOp({ op: "update", id: c.id, status: "done" }, "Comment resolved");
     let text = h("p", { text: c.comment }), reply = null;
     if (mode === "edit") {
@@ -1112,9 +1105,6 @@
       spacer();
       btn("Cancel", close, "ghost");
       btn(mode === "edit" ? "Save" : "Send", submit, "primary");
-    } else if (c.status === "deleted") {
-      spacer();
-      btn("Restore", () => commentOp({ op: "restore", id: c.id }, "Comment restored"));
     } else if (c.status === "open") {
       btn("Edit", () => open("edit"), "ghost");
       spacer();
@@ -1131,7 +1121,7 @@
       spacer();
       del();
     }
-    return h("div", { class: `te-card ${c.status}` },
+    return h("div", { class: `te-card pk-row ${c.status}` },
       h("div", { class: "te-meta" }, h("span", { class: `te-state ${c.status}`, text: STATE_NAME[c.status] || c.status,
         title: c.status === "done" && c.resolved ? `Resolved ${c.resolved}` : null }),
       h("button", { type: "button", class: "te-target", text: targetText(c.target), title: "Select the target",
@@ -1139,7 +1129,7 @@
       text,
       (c.replies || []).map((r) => h("div", { class: `te-reply ${r.by === "agent" ? "" : "author"}` },
         h("span", { class: "te-muted te-small", text: r.by === "agent" ? "Agent" : "You" }), h("br"), r.text)),
-      reply, acts);
+      reply, acts, mode ? null : deletion.box(c.id));
   }
   function selectTarget(t) {
     if (!t) { select({ kind: "table" }); return; }

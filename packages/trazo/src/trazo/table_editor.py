@@ -28,7 +28,7 @@ POST /__table/shared               {base_sha256, ops, label?, hidden?} set ops o
 POST /__table/undo                 {label, hidden?} reverts this table's last spec (or
                                      its shared) change; 409 when the file changed since
 GET  /__table-comments?label=L     {comments, undo}
-POST /__table-comments             {op: add|update|reply|delete|restore|undo, ...}
+POST /__table-comments             {op: add|update|reply|purge|undo, ...}
                                      (trazo.review_comments; add takes {table,
                                      comment, target?})
 GET  /__table-status               {tables: {label: sha256}, shared: sha256,

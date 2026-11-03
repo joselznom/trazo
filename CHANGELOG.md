@@ -16,6 +16,18 @@ its line under "Unreleased"; a release renames that heading to
 Internal changes (tests, CI, refactoring) stay out.
 -->
 
+## Unreleased
+
+### Changed
+
+- Deleting a review comment now removes it for good, after a warning, in
+  the preview and in the table and diagram editors. Each comment has a
+  trash button, shown when you point at it. Under Resolved you can tick
+  several comments and delete them together, or delete every resolved one.
+  The Deleted list is gone: comments left in it show as resolved, so you
+  can delete them too. The agent can delete resolved comments when you ask
+  it to (`trazo review delete`).
+
 ## v1.2.0 (2026-11-02)
 
 trazo now keeps itself up to date: the agent checks for a new version and installs it for you.

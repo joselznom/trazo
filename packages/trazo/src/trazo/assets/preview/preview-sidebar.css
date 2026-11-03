@@ -22,19 +22,15 @@
 }
 .pv-card:hover { border-color: var(--pv-line-strong); }
 .pv-card.current { border-color: var(--pv-focus); box-shadow: 0 0 0 1px var(--pv-focus); }
-.pv-card.deleted { opacity: 0.65; }
-.pv-card.deleted .pv-text { text-decoration: line-through; }
 .pv-card-head { display: flex; align-items: center; gap: 7px; font-size: 11.5px; color: var(--pv-muted); margin-bottom: 5px; min-width: 0; }
 .pv-dot { flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--pv-hl-open-edge); }
 .pv-card.review .pv-dot { background: var(--pv-accent); }
 .pv-card.done .pv-dot { background: var(--pv-ok-dot); }
 .pv-card.lost .pv-dot { background: var(--pv-warn-dot); }
-.pv-card.deleted .pv-dot { background: var(--pv-line-strong); }
 .pv-where { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pv-state { flex: none; font-size: 11px; font-weight: 600; color: var(--pv-warn); }
 .pv-card.review .pv-state { color: var(--pv-accent); }
 .pv-card.done .pv-state { color: var(--pv-ok); }
-.pv-card.deleted .pv-state { color: var(--pv-muted); }
 .pv-card blockquote {
   margin: 0 0 6px; color: var(--pv-muted); font: 13px/1.45 var(--pv-serif); overflow-wrap: anywhere;
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
@@ -58,8 +54,8 @@
 .pv-actions button:hover { background: var(--pv-hover); color: var(--pv-ink); }
 .pv-actions button.line { border-color: var(--pv-line-strong); }
 .pv-actions button.pri { background: var(--pv-accent); color: var(--pv-on-accent); }
-.pv-actions button.pv-del { display: inline-grid; place-items: center; width: 26px; height: 24px; padding: 0; color: var(--pv-muted); }
-.pv-actions button.pv-del:hover { color: var(--pv-err); }
+.pv-card button.pv-del { flex: none; display: inline-grid; place-items: center; width: 26px; height: 24px; padding: 0; color: var(--pv-muted); }
+.pv-card button.pv-del:hover { color: var(--pv-err); }
 .pv-card.done.compact {
   display: flex; align-items: center; gap: 8px; padding: 6px 8px; margin-bottom: 2px; border-color: transparent; background: transparent;
   color: var(--pv-ink-2); font-size: 12.5px;
@@ -74,7 +70,6 @@
 .pv-cfoot { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin: 12px 0 8px; padding: 8px 4px 0; border-top: 1px solid var(--pv-line); }
 .pv-cfoot button { color: var(--pv-muted); font-size: 12px; }
 .pv-cfoot button:hover { color: var(--pv-ink); }
-.pv-trash { margin-left: auto; }
 
 /* Source tab. */
 .pv-source { display: flex; flex-direction: column; flex: 1; min-height: 0; }

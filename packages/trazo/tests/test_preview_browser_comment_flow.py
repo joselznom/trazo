@@ -45,7 +45,7 @@ class CommentFlowTests(PreviewBrowserTestCase):
         self.wait_for("document.querySelector('.pv-card.open.current')")
         self.assertEqual(preview.load_comments()[0]["comment"], "Keep this draft")
 
-    def test_comment_flow_resolves_reopens_and_clears_resolved_in_one_undo(self):
+    def test_comment_flow_resolves_reopens_and_deletes_resolved_after_a_warning(self):
         self.open()
         self.select_second_paragraph()
         self.evaluate("""(() => {
@@ -92,26 +92,44 @@ class CommentFlowTests(PreviewBrowserTestCase):
         self.wait_for("document.querySelector('.pv-empty b')?.textContent === 'No resolved comments'")
         self.assertEqual(preview.load_comments()[0]["status"], "open")
         self.assertNotIn("resolved", preview.load_comments()[0])
-        # Delete all resolved is one step, undone from the notice.
-        other = preview.change_comments({"op": "add", "doc": "manuscript", "para": "Introduction ¶1",
-                                         "comment": "Second"})["comments"][1]["id"]
-        for comment_id in (cid, other):
+        # Deleting asks first and is for good: one comment, the ticked ones or every resolved one.
+        ids = [cid] + [preview.change_comments({"op": "add", "doc": "manuscript", "para": "Introduction ¶1",
+                                                "comment": text})["comments"][-1]["id"] for text in ("Two", "Three", "Open")]
+        for comment_id in ids[:3]:
             preview.change_comments({"op": "update", "id": comment_id, "status": "done"})
         self.open()
-        self.wait_for("document.querySelectorAll('.pv-card.done.compact').length === 2")
-        self.evaluate("Array.from(document.querySelectorAll('.pv-cfoot button')).find(b => b.textContent === 'Delete all resolved').click()")
-        self.wait_for("document.querySelector('.pv-toast')?.textContent.startsWith('2 resolved comments deleted')")
-        self.assertEqual({c["status"] for c in preview.load_comments()}, {"deleted"})
-        self.evaluate("document.querySelector('.pv-toast button').click()")
-        self.wait_for("document.querySelectorAll('.pv-card.done.compact').length === 2")
-        self.assertEqual({c["status"] for c in preview.load_comments()}, {"done"})
+        self.wait_for("document.querySelectorAll('.pv-card.done.compact').length === 3")
+        self.evaluate("document.querySelector('.pv-card.compact .pk-del').click()")
+        self.wait_for("document.activeElement?.textContent === 'Cancel'")
+        self.assertEqual(self.evaluate("document.querySelector('.pv-card.compact .pk-confirm b').textContent"),
+                         "Delete this comment?")
+        self.evaluate("document.activeElement.click()")
+        self.wait_for("!document.querySelector('.pk-confirm')")
+        for n in (0, 1):  # a tick redraws the list
+            self.evaluate(f"document.querySelectorAll('.pv-card.compact .pk-check')[{n}].click()")
+        self.wait_for("document.querySelector('.pv-cfoot > span')?.textContent === '2 selected'")
+        self.click(".pv-cfoot button", "Delete 2")
+        self.wait_for("document.querySelector('.pv-cfoot .pk-confirm b')?.textContent === 'Delete 2 comments?'")
+        self.click(".pk-confirm button", "Delete")
+        self.wait_for("document.querySelector('.pv-toast')?.textContent.startsWith('2 comments deleted')")
+        self.assertFalse(self.evaluate("!!document.querySelector('.pv-toast button')"))  # no Undo
+        self.assertEqual(len(preview.load_comments()), 2)
+        # Escape cancels; the open comment is never part of "all resolved".
+        self.click(".pv-cfoot button", "Delete all resolved")
+        self.wait_for("document.activeElement?.textContent === 'Cancel'")
+        self.evaluate("document.activeElement.dispatchEvent(new KeyboardEvent('keydown', {key: 'Escape', bubbles: true}))")
+        self.wait_for("!document.querySelector('.pk-confirm')")
+        self.click(".pv-cfoot button", "Delete all resolved")
+        self.click(".pk-confirm button", "Delete")
+        self.wait_for("document.querySelector('.pv-toast')?.textContent.startsWith('1 comment deleted')")
+        self.assertEqual([c["comment"] for c in preview.load_comments()], ["Open"])
 
     def click(self, selector, text):
         """Click the element matching selector whose text (or aria-label) is text."""
         self.evaluate(f"""Array.from(document.querySelectorAll({json.dumps(selector)}))
             .find(b => (b.textContent.trim() || b.getAttribute('aria-label')) === {json.dumps(text)}).click()""")
 
-    def test_diagram_comments_resolve_reply_and_clear_resolved_with_undo(self):
+    def test_diagram_comments_resolve_reply_undo_and_delete_resolved(self):
         from trazo import diagram as dg
         from trazo import diagram_editor
         self.addCleanup(diagram_editor.shutdown)
@@ -148,23 +166,24 @@ class CommentFlowTests(PreviewBrowserTestCase):
         })()""")
         self.wait_for("document.querySelector('#comments .ccard.open')")
         self.assertEqual([r["by"] for r in store.load()[0]["replies"]], ["agent", "author"])
-        # Resolved comments: one line each, deleted together in one undo step.
+        # Resolved comments: one line each; Undo next to the filter takes back the resolve.
         store.change({"op": "update", "id": cid, "status": "done"})
         self.wait_for("document.querySelector('#comments .empty b')?.textContent === 'Nothing to handle'")
         self.evaluate("document.querySelector('#comments [data-filter=resolved]').click()")
         self.wait_for("document.querySelector('#comments .ccard.done.compact')")
-        self.click("#comments .cfoot button", "Delete all resolved")
-        self.wait_for("document.querySelector('#toast')?.textContent.startsWith('1 resolved comment deleted')")
-        self.assertEqual(store.load()[0]["status"], "deleted")
-        self.evaluate("document.querySelector('#toast button').click()")
-        self.wait_for("document.querySelector('#comments .ccard.done.compact')")
-        self.assertEqual(store.load()[0]["status"], "done")
-        # After the notice, Undo next to the filter takes back the resolve.
         self.evaluate("document.querySelector('#comments .cfilter button[title^=\"Undo\"]').click()")
         self.wait_for("document.querySelector('#comments .empty b')?.textContent === 'No resolved comments'")
         self.assertEqual(store.load()[0]["status"], "open")
+        # A ticked comment is deleted for good after the warning.
+        store.change({"op": "update", "id": cid, "status": "done"})
+        self.wait_for("document.querySelector('#comments .ccard.done.compact .pk-check')")
+        self.evaluate("document.querySelector('#comments .pk-check').click()")
+        self.click("#comments .cfoot button", "Delete 1")
+        self.click("#comments .pk-confirm button", "Delete")
+        self.wait_for("document.querySelector('#toast')?.textContent.startsWith('1 comment deleted')")
+        self.assertEqual(store.load(), [])
 
-    def test_table_comments_edit_reply_and_clear_resolved_with_undo(self):
+    def test_table_comments_edit_reply_undo_and_delete_resolved(self):
         from trazo import table
         self.keep_files(table.COMMENTS_PATH, table.HISTORY_PATH)
         cid = table.COMMENTS.change({"op": "add", "table": "results", "comment": "Round"})["comments"][-1]["id"]
@@ -205,19 +224,20 @@ class CommentFlowTests(PreviewBrowserTestCase):
         self.click(".te-card .te-cacts button", "✓ Resolve")
         self.wait_for("document.querySelector('.te-cempty b')?.textContent === 'Nothing to handle'")
         self.assertTrue(table.COMMENTS.load()[0]["resolved"])
-        # Resolved comments: one line each, deleted together in one undo step.
+        # Resolved comments: one line each; Undo next to the filter takes back the resolve.
         self.evaluate("document.querySelector('.te-cbar [data-filter=resolved]').click()")
         self.wait_for("document.querySelector('.te-card.done.compact')")
-        self.click(".te-cfoot button", "Delete all resolved")
-        self.wait_for("document.querySelector('.te-flash')?.textContent.startsWith('1 resolved comment deleted')")
-        self.assertEqual(table.COMMENTS.load()[0]["status"], "deleted")
-        self.evaluate("document.querySelector('.te-flash button').click()")
-        self.wait_for("document.querySelector('.te-card.done.compact')")
-        self.assertEqual(table.COMMENTS.load()[0]["status"], "done")
-        # After the notice, Undo next to the filter takes back the resolve.
         self.evaluate("document.querySelector('.te-cundo').click()")
         self.wait_for("document.querySelector('.te-cempty b')?.textContent === 'No resolved comments'")
         self.assertEqual(table.COMMENTS.load()[0]["status"], "open")
+        # Its trash asks first; the deletion is for good.
+        table.COMMENTS.change({"op": "update", "id": cid, "status": "done"})
+        self.wait_for("document.querySelector('.te-card.done.compact .pk-del')")
+        self.evaluate("document.querySelector('.te-card.compact .pk-del').click()")
+        self.wait_for("document.querySelector('.te-card.compact .pk-confirm b')?.textContent === 'Delete this comment?'")
+        self.click(".pk-confirm button", "Delete")
+        self.wait_for("document.querySelector('.te-flash')?.textContent.startsWith('1 comment deleted')")
+        self.assertEqual(table.COMMENTS.load(), [])
 
 
 if __name__ == "__main__":

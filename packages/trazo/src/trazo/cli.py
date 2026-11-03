@@ -19,7 +19,7 @@ COMMANDS = {
     "build": ("builds", "build the Word files: values, tables, diagrams, steps, Pandoc"),
     "run": ("build_graph:run_main", "run one [[build.steps]] step (or values, tables, diagrams)"),
     "verify": ("build_graph:verify_main", "clean, build everything, run the checks, test the Word files"),
-    "review": ("review", "list, answer and undo comments across the workspace"),
+    "review": ("review", "list, answer, delete and undo comments across the workspace"),
     "preview": ("preview", "live HTML preview with comments, source editor and diff"),
     "diagram": ("diagram", "create, check, render and export declarative diagrams"),
     "table": ("table", "check, render and patch tables from data and JSON specs"),
