@@ -22,7 +22,8 @@ class HandTableTests(PreviewBrowserTestCase):
         self.keep_files(path, table.HISTORY_PATH, table.output_path("studies"))
         path.write_text(json.dumps(SPEC), encoding="utf-8")
         self.chrome.call("Page.navigate", {"url": self.url.replace("/manuscript.html", "/tables#studies")}, self.session)
-        self.wait_for("document.querySelector('td[data-row]') && document.readyState === 'complete'")
+        self.wait_for("document.querySelector('td[data-row]')")
+        self.table_settled()
         return path
 
     def saved(self, path):
