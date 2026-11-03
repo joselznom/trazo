@@ -73,6 +73,16 @@ class EditorTests(Restore):
         self.assertEqual(self.call("/__table?label=nope")[0], 404)
         self.assertEqual(self.call("/__table?label=../x")[0], 400)
 
+    def test_state_names_the_data_inputs_and_other_tables_of_each_field(self):
+        path = DATA / "results.json"
+        data = json.loads(path.read_text())
+        data["inputs"] = {"data/results.csv": "0" * 64}
+        path.write_text(json.dumps(data))
+        state = self.state()
+        self.assertEqual(state["data"]["inputs"], ["data/results.csv"])
+        self.assertEqual(state["map_usage"]["cohort"], [{"label": "cohorts", "own": ["test", "train"]}])
+        self.assertNotIn("method", state["map_usage"])
+
     def test_preview_does_not_write(self):
         before = (SPECS / "results.json").read_bytes()
         draft = spec("results")

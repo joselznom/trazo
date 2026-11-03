@@ -240,6 +240,7 @@
     const tlabel = it.kind === "table" ? it.id.slice(4) : "";
     if (TABLE_SPECS.includes(tlabel)) {
       acts.append(h("a", { class: "pv-btn sm", href: tableHref(tlabel), title: tableTitle(tlabel), text: "Edit table" }));
+      row.append(h("span", { class: "pv-chip", title: "Its numbers come from the project's data and script", text: "From your data" }));
       if (tableComments[tlabel]) row.append(h("span", { class: "pv-chip", title: "Open comments in the table editor", text: plural(tableComments[tlabel], "open comment") }));
     }
     if (it.kind === "table" && it.hasCaption) {

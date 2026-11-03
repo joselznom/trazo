@@ -42,7 +42,9 @@ Spec keys (unknown keys are errors):
     formats {name: "{mean:.2f} ({sd:.2f})"}: str.format on the composite's
              keys, or {value} for a scalar; {k, n} adds pct = 100*k/n
     maps {field: {value: text}}; highlight [{column, best max|min, within
-    table|block|<key>, key}]; emphasis [{row: {key: value}, column}]
+    table|block|<key>, key}]; emphasis [{row: {key: value}, column}];
+    marks [{column, row?, mark}]: a superscript of 1 to 3 characters (a, *, †)
+             after a cell's text, or after the column header without row
 _shared.json holds formats and maps for every table; a spec's own entries
 override them. Headers, maps, formats, title, legend and note are Markdown
 as written; text from data is escaped. Title, legend and note quote data values as
@@ -87,7 +89,6 @@ trazo.review_comments.
 
 from __future__ import annotations
 
-import argparse
 import hashlib
 import html
 import json
@@ -104,7 +105,7 @@ from .local_server import NotFound, RequestError
 from .project import PROJECT
 from .review_comments import CommentStore
 from .review_history import History, rel
-from .review_storage import REVIEW_DIR, StoreError, review_lock, write_atomic
+from .review_storage import REVIEW_DIR, review_lock, write_atomic
 
 ROOT = PROJECT.root
 SPEC_DIR = PROJECT.path("table_specs")
@@ -121,7 +122,7 @@ LABEL_RE = re.compile(r"^[a-z0-9][a-z0-9_-]*$")
 NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")
 ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]*$")
 SPEC_KEYS = {"schema_version", "data", "title", "legend", "note", "rows", "columns", "maps", "formats",
-             "highlight", "emphasis", "missing"}
+             "highlight", "emphasis", "marks", "missing"}
 SHARED_KEYS = {"schema_version", "formats", "maps"}
 DATA_KEYS = {"schema_version", "generator", "inputs", "values", "records"}
 ROWS_KEYS = {"keys", "order", "filter", "block"}
@@ -130,6 +131,8 @@ GROUP_KEYS = {"id", "header", "columns"}
 PIVOT_KEYS = {"id", "pivot", "values", "columns"}
 HIGHLIGHT_KEYS = {"column", "best", "within", "key"}
 EMPHASIS_KEYS = {"row", "column"}
+MARK_KEYS = {"column", "row", "mark"}
+MARK_RE = re.compile(r"^[^\s^\\]{1,3}$")  # a superscript: no spaces, ^ or backslash
 ALIGNS = ("left", "center", "right")
 DEFAULT_MISSING = "–"
 # Markdown punctuation escaped in text that comes from data.
@@ -403,6 +406,15 @@ class Checker:
                 self.string(rule, "column", where)
                 if not isinstance(rule.get("row"), dict) or not rule.get("row"):
                     self.error(where, f"{where}.row must be a non-empty object of row keys")
+        for i, rule in enumerate(spec.get("marks", []) if isinstance(
+                spec.get("marks", []), list) else [None]):
+            where = f"marks.{i}"
+            if self.keys(rule, MARK_KEYS, where, ("column", "mark")):
+                self.string(rule, "column", where)
+                if not isinstance(rule.get("mark"), str) or not MARK_RE.match(rule["mark"]):
+                    self.error(where, f"{where}.mark must be 1 to 3 characters without spaces, ^ or \\")
+                if "row" in rule and (not isinstance(rule["row"], dict) or not rule["row"]):
+                    self.error(where, f"{where}.row must be a non-empty object of row keys")
         return self.issues
 
     def data(self, data: Any, name: str) -> list[Issue]:
@@ -457,6 +469,7 @@ class Leaf:
         self.hidden = bool(col.get("hidden"))
         self.group = group  # (key, header) of the spanning header above
         self.pivot = pivot  # (field, value)
+        self.mark: str | None = None  # a superscript after the header (spec marks)
 
 
 class Table:
@@ -481,6 +494,7 @@ class Table:
         self.cells: list[list[str]] = []
         self.values: list[list[Any]] = []  # raw cell values
         self.bold: set[tuple[int, int]] = set()
+        self.marks: dict[tuple[int, int], str] = {}  # (row, visible column) -> superscript
         self.caption = ""
         self.note: list[str] = []  # paragraphs below the table
         self.markdown: str | None = None
@@ -783,20 +797,35 @@ class Table:
                 self.bold.update((r, col) for r, _ in members if self.cells[r][col] == shown)
         for i, rule in enumerate(self.spec.get("emphasis", [])):
             where = f"emphasis.{i}"
-            wanted = rule["row"]
-            unknown = [k for k in wanted if k not in self.keys]
-            if unknown:
-                self.error(where, f"{where}: row uses {', '.join(unknown)}, not in rows.keys "
-                                  f"({', '.join(self.keys)})")
-                continue
-            matches = [r for r, row in enumerate(self.rows)
-                       if all(row["key"][k] == v for k, v in wanted.items())]
-            col = self.leaf_index(rule["column"], where)
-            if len(matches) != 1:
-                self.error(where, f"{where}: row {show(wanted)} matches {len(matches)} rows "
-                                  f"(stale emphasis; it must match exactly one)")
-            elif col is not None:
-                self.bold.add((matches[0], col))
+            cell = self.one_cell(rule, where)
+            if cell is not None:
+                self.bold.add(cell)
+        for i, rule in enumerate(self.spec.get("marks", [])):
+            where = f"marks.{i}"
+            if "row" not in rule:
+                col = self.leaf_index(rule["column"], where)
+                if col is not None:
+                    leaf = self.leaves[col]
+                    leaf.mark, leaf.header = rule["mark"], f"{leaf.header}^{escape(rule['mark'])}^"
+            elif (cell := self.one_cell(rule, where)) is not None:
+                self.marks[cell] = rule["mark"]
+
+    def one_cell(self, rule: dict[str, Any], where: str) -> tuple[int, int] | None:
+        """(row, column) of the one cell a rule's row and column name, or None (an error)."""
+        wanted = rule["row"]
+        unknown = [k for k in wanted if k not in self.keys]
+        if unknown:
+            self.error(where, f"{where}: row uses {', '.join(unknown)}, not in rows.keys "
+                              f"({', '.join(self.keys)})")
+            return None
+        matches = [r for r, row in enumerate(self.rows)
+                   if all(row["key"][k] == v for k, v in wanted.items())]
+        col = self.leaf_index(rule["column"], where)
+        if len(matches) != 1:
+            self.error(where, f"{where}: row {show(wanted)} matches {len(matches)} rows "
+                              f"(stale {where.split('.')[0]}; it must match exactly one)")
+            return None
+        return None if col is None else (matches[0], col)
 
     # ------------------------------------------------ caption
 
@@ -864,8 +893,10 @@ def body_items(table: Table) -> list[tuple[str, Any]]:
         if block and hkey(row["key"][block]) != current:
             current = hkey(row["key"][block])
             items.append(("block", f"**{table.mapped(block, row['key'][block])}**"))
-        items.append(("row", [f"**{text}**" if (r, c) in table.bold and text else text
-                              for c, text in enumerate(table.cells[r])]))
+        cells = [f"**{text}**" if (r, c) in table.bold and text else text
+                 for c, text in enumerate(table.cells[r])]
+        items.append(("row", [text + (f"^{escape(m)}^" if (m := table.marks.get((r, c))) else "")
+                              for c, text in enumerate(cells)]))
     return items
 
 
@@ -1015,7 +1046,17 @@ def md_inline(text: str) -> str:
     text = re.sub(r"\[(.+?)\]\{\.caption-title\}", r'<span class="caption-title">\1</span>', text)
     text = re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", text)
     text = re.sub(r"(?<![*\w])\*(?![\s*])(.+?)(?<![\s*])\*(?![*\w])", r"<em>\1</em>", text)
+    text = re.sub(r"\^([^\s^]+?)\^", r"<sup>\1</sup>", text)
     return re.sub("\x00(\\d+)\x01", lambda m: html.escape(kept[int(m.group(1))]), text)
+
+
+def label_of(table: Table, field: str, value: str) -> dict[str, Any]:
+    """The map entry that names a text value from the data, for renaming it in the
+    editor; `shared` when it comes from _shared.json (not this spec's maps)."""
+    mapping = table.maps.get(field, {})
+    own = table.spec.get("maps", {}).get(field, {})
+    return {"field": field, "value": value, "text": mapping.get(value, value),
+            "shared": value in mapping and value not in own}
 
 
 def group_key(leaf: Leaf) -> tuple[str, str]:
@@ -1038,7 +1079,16 @@ def render_model(table: Table, hidden: bool = False) -> dict[str, Any] | None:
 
     def head(leaf: Leaf, rowspan: int) -> dict[str, Any]:
         return {"text_html": md_inline(leaf.header), "colspan": 1, "rowspan": rowspan,
-                "id": leaf.id, "kind": "leaf", "align": leaf.align, "hidden": leaf.hidden}
+                "id": leaf.id, "kind": "leaf", "align": leaf.align, "hidden": leaf.hidden,
+                **({"mark": leaf.mark} if leaf.mark else {}),
+                # A single-column pivot is headed by its value's label.
+                **({"label": label_of(table, *leaf.pivot)} if leaf.pivot and not leaf.group
+                   and isinstance(leaf.pivot[1], str) else {})}
+
+    def named(cell: dict[str, Any], leaf: Leaf) -> dict[str, Any]:
+        if isinstance(cell["raw"], str) and not leaf.format:
+            cell["label"] = label_of(table, leaf.field, cell["raw"])
+        return cell
 
     top: list[dict[str, Any]] = []
     bottom: list[dict[str, Any]] = []
@@ -1052,20 +1102,26 @@ def render_model(table: Table, hidden: bool = False) -> dict[str, Any] | None:
             top.append({"text_html": md_inline(span[2]), "colspan": span[1] - span[0],
                         "rowspan": 1, "id": key, "kind": kind, "align": "center",
                         "hidden": all(x.hidden for x in leaves[span[0]:span[1]])})
+            if leaf.pivot and isinstance(leaf.pivot[1], str):
+                top[-1]["label"] = label_of(table, *leaf.pivot)
         bottom.append(head(leaf, 1))
     body: list[dict[str, Any]] = []
     r = -1
     for i, (kind, cells) in enumerate(items):
         if kind == "block":
-            body.append({"block": md_inline(cells)})
+            value = table.rows[r + 1]["key"][table.spec["rows"]["block"]]
+            body.append({"block": md_inline(cells),
+                         **({"label": label_of(table, table.spec["rows"]["block"], value)}
+                            if isinstance(value, str) else {})})
             continue
         r += 1
         out = []
         for leaf in leaves:
             if leaf.hidden:
                 text, raw = table.hidden_cells[leaf.id][r]
-                out.append({"id": leaf.id, "text_html": md_inline(text), "raw": raw, "rowspan": 1,
-                            "bold": False, "align": leaf.align, "hidden": True})
+                out.append(named({"id": leaf.id, "text_html": md_inline(text), "raw": raw,
+                                  "rowspan": 1, "bold": False, "align": leaf.align,
+                                  "hidden": True}, leaf))
                 continue
             c = visible[leaf.id]
             if joined[i][c]:
@@ -1073,9 +1129,11 @@ def render_model(table: Table, hidden: bool = False) -> dict[str, Any] | None:
             span = 1
             while i + span < len(items) and joined[i + span][c]:
                 span += 1
-            out.append({"id": leaf.id, "text_html": md_inline(cells[c]),
-                        "raw": table.values[r][c], "rowspan": span,
-                        "bold": (r, c) in table.bold, "align": leaf.align, "hidden": False})
+            out.append(named({"id": leaf.id, "text_html": md_inline(cells[c]),
+                              "raw": table.values[r][c], "rowspan": span,
+                              "bold": (r, c) in table.bold, "align": leaf.align, "hidden": False,
+                              **({"mark": table.marks[r, c]} if (r, c) in table.marks else {})},
+                             leaf))
         body.append({"row": r, "key": table.rows[r]["key"], "cells": out})
     return {"header": [top, bottom] if groups else [top], "body": body,
             "caption_html": md_inline(table.caption),
@@ -1423,205 +1481,6 @@ def comment_place(comment: dict[str, Any]) -> str:
 COMMENTS = CommentStore(COMMENTS_PATH, "table", HISTORY, comment_targets, comment_place)
 
 
-# -------------------------------------------------- commands
-
-
-def format_issue(item: Issue) -> str:
-    where = f" [{item['id']}]" if item.get("id") else ""
-    return f"  {item['level']}: {item['code']}{where}: {item['message']}"
-
-
-def report(table: Table) -> None:
-    for item in table.issues:
-        print(format_issue(item))
-    status = "FAIL" if table.errors else "ok"
-    print(f"{table.label}: {status} ({len(table.errors)} error(s), "
-          f"{len(table.warnings)} warning(s))")
-
-
-def labels_of(names: list[str]) -> list[str]:
-    return names or all_labels()
-
-
-def cmd_check(names: list[str], as_json: bool, outputs: bool) -> int:
-    tables = []
-    for label in labels_of(names):
-        table = build(label)
-        if outputs:
-            table.issues += stale_output(table)
-        tables.append(table)
-    if as_json:
-        payload = [{"label": t.label, "file": rel(t.path), "ok": not t.errors,
-                    "errors": len(t.errors), "warnings": len(t.warnings), "issues": t.issues}
-                   for t in tables]
-        print(json.dumps(payload[0] if len(names) == 1 else payload, indent=2, ensure_ascii=False))
-    else:
-        if not tables:
-            print(f"no tables in {rel(SPEC_DIR)}")
-        for table in tables:
-            report(table)
-    return 1 if any(t.errors for t in tables) else 0
-
-
-@exclusive
-def cmd_render(names: list[str]) -> int:
-    failed = False
-    for label in labels_of(names):
-        table = build(label)
-        if table.markdown is None:
-            report(table)
-            print(f"{label}: not rendered (fix the errors)")
-            failed = True
-            continue
-        for item in table.issues:
-            print(format_issue(item))
-        write_atomic(output_path(label), table.markdown.encode("utf-8"))
-        print(f"rendered {rel(output_path(label))}")
-    return 1 if failed else 0
-
-
-def cmd_new(label: str, data_name: str) -> None:
-    path = spec_path(label)
-    if path.exists():
-        raise TableError(f"{rel(path)} already exists")
-    if not NAME_RE.match(data_name):
-        raise TableError(f"invalid data name {data_name!r}")
-    data, _ = read_json(data_path(data_name), "table data")
-    problems = Checker().data(data, data_name)
-    if problems:
-        raise TableError(problems[0]["message"])
-    fields: dict[str, list[Any]] = {}
-    for record in data["records"]:
-        for field, value in record.items():
-            fields.setdefault(field, []).append(value)
-    keys = ([f for f, vs in fields.items() if any(isinstance(v, str) for v in vs)]
-            or list(fields)[:1])
-    columns, formats = [], {}
-    for field, values in fields.items():
-        col: dict[str, Any] = {"id": re.sub(r"[^A-Za-z0-9_-]", "_", field), "field": field,
-                               "header": field}
-        sample = next((v for v in values if v is not None), None)
-        if isinstance(sample, dict):
-            col["format"] = field
-            formats[field] = " / ".join(f"{{{k}:.2f}}" for k in sample)
-        elif isinstance(sample, float) or any(isinstance(v, float) for v in values):
-            col["format"] = "dec2"
-            formats["dec2"] = "{value:.2f}"
-        if is_number(sample) or isinstance(sample, dict):
-            col["align"] = "right"
-        columns.append(col)
-    spec: dict[str, Any] = {"schema_version": 1, "data": data_name,
-                            "title": f"TODO: title of {label}.", "rows": {"keys": keys},
-                            "columns": columns}
-    if formats:
-        spec["formats"] = formats
-    HISTORY.write_file(path, dump_spec(spec), f"new {label}")
-    print(f"created {rel(path)} ({len(columns)} column(s), rows by {', '.join(keys)})")
-    print(f"next: trazo table describe {label}")
-
-
-def cmd_describe(label: str) -> int:
-    table = build(label)
-    spec = table.spec
-    status = "FAIL" if table.errors else "ok"
-    print(f"{label}: {rel(table.path)} -> {rel(output_path(label))} ({status}: "
-          f"{len(table.errors)} error(s), {len(table.warnings)} warning(s))")
-    if not table.fields:
-        report(table)
-        return 1
-    data = table.data
-    stale = any(i["code"] == "stale-data" for i in table.issues)
-    print(f"data {spec['data']}: {rel(data_path(spec['data']))}, {len(data['records'])} record(s), "
-          f"generator {data.get('generator', '?')}, inputs {'STALE' if stale else 'current'}")
-    print("fields:")
-    width = max(map(len, table.fields))
-    for field, values in table.fields.items():
-        kinds = sorted({"null" if v is None else "string" if isinstance(v, str) else
-                        "int" if isinstance(v, int) else "float" if is_number(v) else
-                        "composite {" + ", ".join(v) + "}" for v in values})
-        line = f"  {field:<{width}}  {' | '.join(kinds)}"
-        strings = list(dict.fromkeys(v for v in values if isinstance(v, str)))
-        if strings:
-            more = f", ... ({len(strings)} distinct)" if len(strings) > DISTINCT_SHOWN else ""
-            line += ": " + ", ".join(strings[:DISTINCT_SHOWN]) + more
-        print(line)
-    if data.get("values"):
-        print("values (for {name} in title and legend): "
-              + ", ".join(f"{k} = {show(v)}" for k, v in data["values"].items()))
-    rows = spec["rows"]
-    print(f"rows: {len(table.rows)}, one per {' x '.join(rows['keys'])}"
-          + (f"; block rows by {rows['block']}" if rows.get("block") else ""))
-    for part in ("order", "filter"):
-        for field, values in rows.get(part, {}).items():
-            print(f"  {part} {field}: {', '.join(map(show, values))}")
-    print("columns (patch paths: columns.<id>[.<leaf id>].<key>; leaf ids for highlight "
-          "and emphasis):")
-    used: dict[str, str] = {}
-
-    def leaf_line(col: dict[str, Any], full: str, indent: str) -> None:
-        extras = [f"field {col.get('field')}"]
-        if col.get("format"):
-            extras.append(f"format {col['format']}")
-            used[col["format"]] = table.formats.get(col["format"], "(unknown)")
-        extras += [k for k in ("merge", "hidden") if col.get(k)]
-        extras += [f"{k} {col[k]}" for k in ("align", "width") if k in col]
-        print(f"{indent}{full}  {show(col.get('header'))}  ({', '.join(extras)})")
-
-    for col in spec["columns"]:
-        if "pivot" in col:
-            values = col.get("values") or list(dict.fromkeys(
-                v for v in table.fields.get(col["pivot"], []) if v is not None))
-            print(f"  {col['id']}  pivot on {col['pivot']}: {', '.join(map(show, values))} "
-                  f"(leaf ids {col['id']}.<value>.<leaf>)")
-            for child in col["columns"]:
-                leaf_line(child, f"{col['id']}.{child['id']}", "    ")
-        elif "columns" in col:
-            print(f"  {col['id']}  group {show(col['header'])}")
-            for child in col["columns"]:
-                leaf_line(child, f"{col['id']}.{child['id']}", "    ")
-        else:
-            leaf_line(col, col["id"], "  ")
-    if used:
-        print("formats in use: " + "; ".join(f"{k} = {show(v)}" for k, v in used.items()))
-    unused = sorted(set(table.formats) - set(used))
-    if unused:
-        print("other formats: " + ", ".join(unused))
-    for i, rule in enumerate(spec.get("highlight", [])):
-        print(f"highlight.{i}: {rule['best']} of {rule['column']} within "
-              f"{rule.get('within', 'table')}")
-    for i, rule in enumerate(spec.get("emphasis", [])):
-        print(f"emphasis.{i}: {rule['column']} in row {show(rule['row'])}")
-    if table.issues:
-        print("issues:")
-        for item in table.issues:
-            print(format_issue(item))
-    if table.markdown:
-        print("rendered:")
-        print(table.markdown, end="")
-    return 0
-
-
-def cmd_patch(label: str | None, ops_file: str, shared: bool) -> int:
-    text = sys.stdin.read() if ops_file == "-" else Path(ops_file).read_text(encoding="utf-8")
-    try:
-        ops = json.loads(text)
-    except ValueError as exc:
-        raise TableError(f"operations are not valid JSON: {exc}") from exc
-    try:
-        summary = patch_shared(ops) if shared else patch(str(label), ops)
-    except SpecInvalid as exc:
-        for item in exc.issues:
-            print(format_issue(item))
-        raise
-    if not summary:
-        print("no change")
-        return 0
-    target = rel(SHARED_PATH) if shared else rel(spec_path(str(label)))
-    print(f"patched {target}: {'; '.join(summary)}")
-    print("rendered every table" if shared else f"rendered {rel(output_path(str(label)))}")
-    return 0
-
-
 def status_of(table: Table) -> str:
     if any(i["code"] not in ("stale-data", "stale-output") for i in table.errors):
         return "error"
@@ -1630,96 +1489,10 @@ def status_of(table: Table) -> str:
     return "ok"
 
 
-def cmd_list(as_json: bool) -> int:
-    entries = []
-    for label in all_labels():
-        table = build(label)
-        spec = table.spec if isinstance(table.spec, dict) else {}
-        entries.append({"label": label, "data": spec.get("data"),
-                        "status": status_of(table)})
-    if as_json:
-        print(json.dumps(entries, indent=2, ensure_ascii=False))
-        return 0
-    if not entries:
-        print(f"no tables in {rel(SPEC_DIR)}")
-    for entry in entries:
-        print(f"{entry['label']}  data {entry['data']}  {entry['status']}")
-    return 0
-
-
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(
-        prog="trazo table",
-        description=__doc__.splitlines()[0],
-        epilog="\n".join(__doc__.splitlines()[1:]),
-        formatter_class=argparse.RawDescriptionHelpFormatter)
-    sub = parser.add_subparsers(dest="command", required=True)
-    p = sub.add_parser("new", help="scaffold a spec with one column per data field")
-    p.add_argument("label")
-    p.add_argument("--data", required=True, help="data file name in the table data folder")
-    for name, about in (("render", "write the Markdown table (refuses on check errors)"),
-                        ("check", "check spec, data and formats (non-zero exit on error)")):
-        p = sub.add_parser(name, help=about)
-        p.add_argument("labels", nargs="*", metavar="LABEL")
-        p.add_argument("--all", action="store_true", help="every table")
-        if name == "check":
-            p.add_argument("--json", action="store_true", help="machine-readable output")
-            p.add_argument("--outputs", action="store_true",
-                           help="also fail when a rendered file is missing or out of date")
-    p = sub.add_parser("describe", help="fields, values, columns, rows and the rendered table")
-    p.add_argument("label")
-    p = sub.add_parser("patch", help="apply set/add/remove/move operations")
-    p.add_argument("args", nargs="+", metavar="LABEL OPS",
-                   help='LABEL and a JSON file with the operations ("-" for stdin); '
-                        "with --shared only the file")
-    p.add_argument("--shared", action="store_true",
-                   help="set formats.* and maps.* in _shared.json, then render every table")
-    p = sub.add_parser("undo", help="revert the last table spec, shared or comment change")
-    p.add_argument("label", nargs="?", help="only this table's last spec change")
-    p = sub.add_parser("comments", help="list open table comments")
-    p.add_argument("label", nargs="?", help="only this table")
-    p.add_argument("--all", action="store_true", help="every state, with threads")
-    p = sub.add_parser("resolve", help="reply to a table comment and set it to review")
-    p.add_argument("id")
-    p.add_argument("reply")
-    p = sub.add_parser("list", help="every table with its data and status")
-    p.add_argument("--json", action="store_true", help="machine-readable output")
-    args = parser.parse_args(argv)
-
-    try:
-        if args.command == "new":
-            cmd_new(args.label, args.data)
-        elif args.command in ("render", "check"):
-            if bool(args.labels) == args.all:
-                parser.error(f"{args.command} needs LABEL(s) or --all")
-            for label in args.labels:
-                spec_path(label)
-            if args.command == "render":
-                return cmd_render(args.labels)
-            return cmd_check(args.labels, args.json, args.outputs)
-        elif args.command == "describe":
-            return cmd_describe(args.label)
-        elif args.command == "patch":
-            if len(args.args) != (1 if args.shared else 2):
-                parser.error("patch needs LABEL OPS, or --shared OPS")
-            if args.shared:
-                return cmd_patch(None, args.args[0], True)
-            return cmd_patch(args.args[0], args.args[1], False)
-        elif args.command == "undo":
-            if args.label:
-                spec_path(args.label)
-            print(undo(args.label))
-        elif args.command == "comments":
-            COMMENTS.print(args.label, args.all)
-        elif args.command == "resolve":
-            COMMENTS.resolve(args.id, args.reply, TableError)
-            print(f"[{args.id}] review: reply added")
-        elif args.command == "list":
-            return cmd_list(args.json)
-    except (TableError, StoreError, OSError) as exc:
-        print(f"error: {exc}", file=sys.stderr)
-        return 1
-    return 0
+    """`trazo table` (trazo.table_cli)."""
+    from .table_cli import main as cli_main
+    return cli_main(argv)
 
 
 if __name__ == "__main__":
