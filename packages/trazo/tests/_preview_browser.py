@@ -57,7 +57,8 @@ class PreviewBrowserTestCase(unittest.TestCase):
                 + "".join(f'<script src="/__assets/preview/{script}"></script>' for script in preview.VIEWER_SCRIPTS)
                 + '</body></html>',
                 encoding="utf-8")
-        server = LocalServer(("127.0.0.1", 0), preview.Handler)
+        server = self.server = LocalServer(("127.0.0.1", 0), preview.Handler)
+        server.daemon_threads = False  # server_close waits for the requests in flight
         self.addCleanup(server.server_close)
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
@@ -66,7 +67,7 @@ class PreviewBrowserTestCase(unittest.TestCase):
         self.url = f"http://127.0.0.1:{server.server_port}/manuscript.html"
         context = self.chrome.call("Target.createBrowserContext")["browserContextId"]
         self.context = context
-        self.addCleanup(self.chrome.call, "Target.disposeBrowserContext", {"browserContextId": context})
+        self.addCleanup(self.close_page)
         target = self.chrome.call("Target.createTarget", {"url": "about:blank", "browserContextId": context})["targetId"]
         self.session = self.chrome.call("Target.attachToTarget", {"targetId": target, "flatten": True})["sessionId"]
         self.chrome.call("Emulation.setDeviceMetricsOverride", {
@@ -173,6 +174,17 @@ class PreviewBrowserTestCase(unittest.TestCase):
         }})()""")
         self.mouse("mousePressed", *point)
         self.mouse("mouseReleased", *point)
+
+    def close_page(self):
+        context, self.context = self.context, None
+        if context:
+            self.chrome.call("Target.disposeBrowserContext", {"browserContextId": context})
+
+    def tearDown(self):
+        # Before the cleanups delete files: Windows refuses to delete one a request is reading.
+        self.close_page()
+        self.server.shutdown()
+        self.server.server_close()
 
     def keep_files(self, *paths):
         """Restore these files (or remove them) after the test."""
