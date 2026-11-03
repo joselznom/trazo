@@ -38,7 +38,7 @@ from .preview_locate import HEADING
 TOKEN = re.compile(r"\s+|\w+|[^\w\s]")
 # Citations: a span may hold one whole, never cut one or sit inside its brackets.
 CITATION = re.compile(r"\[[^\[\]]*@[^\[\]]*\]|@[\w:.#$%&+?<>~/-]*\w")
-BLANK_LINE = re.compile(r"\n[ \t]*\n")
+BLANK_LINE = re.compile(r"\n[ \t\r]*\n")
 # A line that starts a block: a span may not begin a line with one.
 BLOCK_START = re.compile(r"[ \t]*(?:[-*+]\s|\d+[.)]\s|#|>|\||:|`{3}|~{3}|\$\$|!\[|<|\[\^|Table:|$)")
 # Where a block's text starts after a list, quote or heading marker.
@@ -303,7 +303,7 @@ def _blocks_inserted(text: str, c0: int, c1: int) -> list[int]:
     starts = []
     for m in BLANK_LINE.finditer(text, c0, c1):
         start = m.end()
-        while start < c1 and text[start] in " \t\n":
+        while start < c1 and text[start] in " \t\r\n":
             start += 1
         if start < c1:
             starts.append(start)
@@ -331,7 +331,7 @@ def marked(current: str, found: list[Edit]) -> str:
             continue
         marks = []
         new_blocks = _blocks_inserted(current, e.c0, e.c1) if new_text else []
-        if new_text and not old_text and (e.c0 == 0 or re.search(r"\n[ \t]*\n[ \t]*$", current[:e.c0])):
+        if new_text and not old_text and (e.c0 == 0 or re.search(r"\n[ \t\r]*\n[ \t]*$", current[:e.c0])):
             new_blocks = list(dict.fromkeys([e.c0 + len(e.new) - len(e.new.lstrip()), *new_blocks]))  # it starts a block too
         for start in new_blocks:
             at = lines.block_mark_at(start)

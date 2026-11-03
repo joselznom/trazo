@@ -78,6 +78,19 @@ class EditReviewTests(unittest.TestCase):
         preview.change_source({"op": "undo", "file": INTRO})
         self.assertEqual([(e["old"], e["new"]) for e in self.pending()], [("studied", "followed")])
 
+    def test_a_file_with_windows_line_endings_is_reviewed_exactly(self):
+        lf = self.path.read_bytes().replace(b"\r\n", b"\n")
+        crlf = lf.replace(b"\n", b"\r\n")
+        self.path.write_bytes(crlf)
+        self.pending()
+        self.path.write_bytes(crlf.replace(b"We studied", b"We followed").replace(
+            b"[@smith2020].\r\n", b"[@smith2020].\r\n\r\nA new paragraph.\r\n"))
+        edits = self.pending()
+        self.assertEqual([e["new"].strip() for e in edits], ["followed", "A new paragraph."])
+        self.assertIn("pv-new", preview_edit_review.reader()[0](self.path))
+        self.assertEqual(preview.change_edits({"op": "reject", "edits": edits})["done"], 2)
+        self.assertEqual(self.path.read_bytes(), crlf)
+
     def test_a_correction_in_a_new_file_leaves_the_rest_of_it_pending(self):
         self.pending()
         path = _support.ROOT / "manuscript/main/02_new.md"

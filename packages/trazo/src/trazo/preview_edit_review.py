@@ -51,6 +51,12 @@ def tracked() -> dict[str, Path]:
     return found
 
 
+def exact_text(path: Path) -> str:
+    """A file's text with its line endings: offsets into it stay true when
+    an edit is written back, also in a file with Windows line endings."""
+    return path.read_bytes().decode("utf-8")
+
+
 def load() -> dict[str, Any] | None:
     """The baseline store, or None before the first one is taken."""
     from . import preview
@@ -80,7 +86,7 @@ def ensure() -> dict[str, Any]:
     with review_lock():
         store = load()
         if store is None:
-            store = {"files": {name: path.read_text(encoding="utf-8") for name, path in tracked().items()},
+            store = {"files": {name: exact_text(path) for name, path in tracked().items()},
                      "seen": {}}
             save(store)
     return store
@@ -104,7 +110,7 @@ def reader() -> tuple[Callable[[Path], str] | None, Callable[[], None]]:
     seen: dict[str, list[str]] = {}
 
     def read(path: Path) -> str:
-        text = Path(path).read_text(encoding="utf-8")
+        text = exact_text(Path(path))
         name = names.get(Path(path).resolve())
         if name is None:
             return text
@@ -149,7 +155,7 @@ def edits_payload(doc: str | None) -> dict[str, Any]:
         if name not in files:
             continue
         times = store["seen"].get(name, {})
-        for e in pending(store, name, files[name].read_text(encoding="utf-8")):
+        for e in pending(store, name, exact_text(files[name])):
             out.append({"file": name, "id": e.id, "line": e.line, "old": e.old, "new": e.new,
                         "seen": times.get(e.id, "")})
     return {"doc": doc, "edits": out}
