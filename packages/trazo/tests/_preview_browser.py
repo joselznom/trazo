@@ -34,6 +34,7 @@ class PreviewBrowserTestCase(unittest.TestCase):
             "OUT_DIR": root,
             "COMMENTS_PATH": root / "comments.json",
             "HISTORY_PATH": root / "history.json",
+            "EDITS_PATH": root / "edits.json",
             "STATE": {name: dict(state) for name, state in preview.STATE.items()},
         }.items():
             patcher = patch.object(preview, name, value)

@@ -12,7 +12,7 @@
   };
   const textNodes = (el) => {
     const walker = el.ownerDocument.createTreeWalker(el, NodeFilter.SHOW_TEXT, {
-      acceptNode: (t) => t.parentElement.closest("button, .pv-para, .pv-src-mark, .pv-tbl-edit, .pv-diagram, .pk-front, .pk-keywords") ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT,
+      acceptNode: (t) => t.parentElement.closest("button, .pv-para, .pv-src-mark, .pv-tbl-edit, .pv-diagram, .pk-front, .pk-keywords, .pv-edit-del") ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT,
     });
     const nodes = [];
     while (walker.nextNode()) nodes.push(walker.currentNode);

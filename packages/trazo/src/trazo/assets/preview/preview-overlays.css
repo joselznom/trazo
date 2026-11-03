@@ -49,6 +49,17 @@
 .pv-fab button { display: inline-flex; align-items: center; gap: 5px; padding: 4px 9px; border-radius: 6px; }
 .pv-fab button:hover { background: var(--pv-hover); }
 .pv-fab svg { width: 15px; height: 15px; color: var(--pv-ink-2); }
+/* The selected edit's bar (preview-edits.js): accept, reject, and what a changed block was. */
+.pv-edit-bar {
+  position: fixed; z-index: 60; display: flex; flex-wrap: wrap; gap: 1px; max-width: min(360px, calc(100vw - 16px)); padding: 2px;
+  border: 1px solid var(--pv-line); border-radius: 7px; background: var(--pv-card); box-shadow: var(--pv-shadow-pop);
+}
+.pv-edit-bar button { display: inline-grid; place-items: center; width: 26px; height: 24px; border-radius: 5px; }
+.pv-edit-bar button:hover, .pv-edit-bar button:focus-visible { background: var(--pv-hover); outline: none; }
+.pv-edit-bar svg { width: 14px; height: 14px; }
+.pv-edit-bar .ok { color: var(--pv-ok); }
+.pv-edit-bar .no { color: var(--pv-err); }
+.pv-edit-was { flex-basis: 100%; max-height: 8em; overflow: auto; padding: 4px 6px 3px; border-top: 1px solid var(--pv-line); font: 11.5px/1.45 var(--pv-mono); color: var(--pv-del-ink); white-space: pre-wrap; overflow-wrap: anywhere; }
 .pv-editor button[data-op="cancel"] { background: transparent; color: var(--pv-ink-2); }
 .pv-editor {
   position: fixed; z-index: 61; width: 340px; max-width: calc(100vw - 16px); background: var(--pv-card); color: var(--pv-ink);

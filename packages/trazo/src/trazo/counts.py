@@ -34,7 +34,8 @@ from .project import PROJECT, ConfigError, Project
 
 # Subtrees that hold no main-text words.
 SKIP_TAGS = {"head", "figure", "table", "h1", "h2", "h3", "h4", "h5", "h6", "button", "script", "style", "annotation"}
-SKIP_CLASSES = {"table-note", "footnote-back", "abstract-title", "pk-front", "pk-keywords", "pk-form-badge"}
+SKIP_CLASSES = {"table-note", "footnote-back", "abstract-title", "pk-front", "pk-keywords", "pk-form-badge",
+                "pv-edit-del"}  # pv-edit-del: text a pending edit deleted (preview_edit_review)
 # Tags whose start or end separates words.
 BLOCKS = {"p", "li", "pre", "blockquote", "dt", "dd", "div", "section", "br", "ul", "ol", "dl",
           "h1", "h2", "h3", "h4", "h5", "h6", "table", "figure", "header", "hr"}
@@ -101,7 +102,7 @@ class Counter(HTMLParser):
         if tag not in VOID:
             skip = tag in SKIP_TAGS or bool(classes & SKIP_CLASSES) or ident == "refs"
             if self.total:
-                skip = tag in {"head", "button", "script", "style", "annotation"} or "pk-form-badge" in classes
+                skip = tag in {"head", "button", "script", "style", "annotation"} or bool({"pk-form-badge", "pv-edit-del"} & classes)
             self.stack.append((tag, ident, classes, skip))
 
     def handle_startendtag(self, tag, attrs):

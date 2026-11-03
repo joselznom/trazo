@@ -18,6 +18,16 @@ Internal changes (tests, CI, refactoring) stay out.
 
 ## Unreleased
 
+### New
+
+- The preview marks what changed in your text since you last reviewed it,
+  like tracked changes: inserted words in green, deleted ones struck
+  through, new paragraphs with a bar. Click a mark to accept or reject it,
+  or use **Edits** above the page to step through them or take them all at
+  once. Resolve on a comment the agent answered accepts its edits, and the
+  new Reject undoes them and reopens the comment. Your own saves from the
+  preview are accepted as you make them. Works without git.
+
 ### Changed
 
 - Deleting a review comment now removes it for good, after a warning, in
@@ -27,6 +37,11 @@ Internal changes (tests, CI, refactoring) stay out.
   The Deleted list is gone: comments left in it show as resolved, so you
   can delete them too. The agent can delete resolved comments when you ask
   it to (`trazo review delete`) (#14).
+
+### Removed
+
+- The preview's Diff tab, which compared a file with the last git commit:
+  the marks in the text replace it (`git diff` still shows it).
 
 ## v1.2.0 (2026-11-02)
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """A paper made by `trazo new` in a folder that is not a git repository
-builds its Word file and serves the preview; the Diff tab says history is
-off. Run by `make test-template` with trazo's Python and TRAZO_DEV.
+builds its Word file and serves the preview, whose review of pending edits
+needs no git. Run by `make test-template` with trazo's Python and TRAZO_DEV.
 
     TRAZO_DEV=packages/trazo python scripts/check-no-git.py
 """
@@ -71,10 +71,9 @@ def main() -> int:
                 assert server.poll() is None, "the preview exited"
                 assert time.monotonic() < deadline, "the preview did not answer"
                 time.sleep(0.5)
-            status, body = get(base + "/__diff?file=manuscript/main/01_introduction.md")
-            error = json.loads(body).get("error", "")
-            assert status >= 400 and error.startswith("History is off"), (status, body)
-            print(f"trazo preview without git: {base} answers; Diff tab: {error}")
+            status, body = get(base + "/__edits?doc=manuscript")
+            assert status == 200 and json.loads(body)["edits"] == [], (status, body)
+            print(f"trazo preview without git: {base} answers; no pending edits")
         finally:
             server.terminate()
             server.wait(timeout=30)

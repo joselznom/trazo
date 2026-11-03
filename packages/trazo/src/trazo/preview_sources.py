@@ -1,5 +1,6 @@
-"""The Source and Diff tabs: reading, saving and undoing a manuscript file, locating a
-paragraph in its source and diffing the file against git HEAD.
+"""The Source tab: reading, saving and undoing a manuscript file, and locating a
+paragraph in its source. Saves and their undo are the author's own changes:
+they are accepted in the edit review as they are made (preview_edit_review).
 
 The preview's paths and state stay in trazo.preview, and this code reads them from
 there when it runs (preview.NAME), so patching them on trazo.preview reaches it.
@@ -7,15 +8,14 @@ there when it runs (preview.NAME), so patching them on trazo.preview reaches it.
 
 import hashlib
 import os
-import subprocess
 import time
 from pathlib import Path
 
-from . import preview_diff, preview_locate
+from . import preview_edit_review, preview_locate
 from .expand import Values, load_entries, resolve_include
 from .local_server import Conflict, NotFound
 from .local_server import RequestError as CommentError
-from .review_storage import StoreError, read_list, review_lock, write_atomic, write_json
+from .review_storage import read_list, review_lock, write_atomic, write_json
 
 
 def sha256_of(data):
@@ -88,7 +88,8 @@ def change_source(request):
     save: {file, text, base_sha256} writes only if the file on disk still has
     the loaded sha256 (409 with the current sha otherwise). The previous
     content goes to file_history.json. undo: {op: "undo", file} restores it,
-    only if the file is still exactly what that save wrote.
+    only if the file is still exactly what that save wrote. Undoing a
+    rejection of edits (kind "reject") makes those edits pending again.
     """
     from . import preview
     if not isinstance(request, dict):
@@ -112,6 +113,8 @@ def change_source(request):
                 raise Conflict("undo discarded: the file changed since that save",
                                sha256=current)
             write_atomic(path, entry["before_text"].encode("utf-8"))
+            if entry.get("kind") != "reject":
+                preview_edit_review.absorb(file, old, entry["before_text"])
             del entries[mine[-1]]
             save_file_history(entries)
         else:
@@ -128,6 +131,7 @@ def change_source(request):
                                 "after_sha": sha256_of(new)})
                 save_file_history(entries)
                 write_atomic(path, new)
+                preview_edit_review.absorb(file, old, text)
         data, text = read_source(path)
         return source_state(file, path, data, text)
 
@@ -177,41 +181,3 @@ def locate_source(request):
             if found["score"] > result["score"]:
                 result = {"file": other.relative_to(preview.ROOT).as_posix(), **found}
     return result
-
-
-class GitError(StoreError):
-    """git is missing or the repository is unusable."""
-
-def git(*args):
-    from . import preview
-    try:
-        return subprocess.run(["git", "-C", str(preview.ROOT), *args], capture_output=True,
-                              timeout=20)
-    except FileNotFoundError as exc:
-        raise GitError("History is off: git is not installed") from exc
-    except subprocess.TimeoutExpired as exc:
-        raise GitError("git timed out") from exc
-
-
-def diff_source(file):
-    """Word-level diff of a manuscript file against git HEAD."""
-    path, file = source_path(file)
-    text = read_source(path)[1]
-    probe = git("rev-parse", "--is-inside-work-tree")
-    if probe.returncode != 0:
-        raise GitError("History is off: this folder is not a git repository")
-    head = git("show", f"HEAD:{file}")
-    if head.returncode != 0:
-        err = head.stderr.decode(errors="replace")
-        if any(m in err for m in ("exists on disk, but not in", "does not exist in",
-                                  "unknown revision", "bad revision", "invalid object name")):
-            return {"file": file, "status": "new"}  # untracked or no commits yet
-        raise GitError(f"git show failed: {err.strip()}")
-    old = head.stdout.decode("utf-8", errors="replace")
-    if old.replace("\r\n", "\n") == text.replace("\r\n", "\n"):
-        return {"file": file, "status": "clean"}
-    result = preview_diff.diff(old, text)
-    if not result["changed"]:
-        return {"file": file, "status": "clean",
-                "note": "only blank lines or plain-prose line wrapping changed"}
-    return {"file": file, "status": "changed", **result}

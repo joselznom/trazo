@@ -40,6 +40,8 @@
     const isEditing = editing && editing.id === c.id;
     const prefix = entry && entry.c.doc !== doc ? `${DOCS[c.doc] || c.doc} · ` : "";
     const place = hit?.el.dataset.label || c.para;
+    // The pending edits in the text it is about (preview-edits.js): Resolve accepts them, Reject undoes them.
+    const near = c.status === "review" && !isEditing ? editsNear(hit) : [];
     el.dataset.id = c.id;
     if (c.status === "done" && openDone !== c.id && !isEditing) {
       el.className = `pv-card done compact pk-row${deletion.ticked(c.id) ? " selected" : ""}`;
@@ -142,7 +144,8 @@
     } else if (c.status === "review") {
       button("reply", "Reply", false, "Ask Claude for more; reopens the comment");
       spacer();
-      button("resolve", "✓ Resolve", "pri", "Claude's change is fine");
+      if (near.length) button("reject-edits", "✕ Reject", "no", `Undo ${plural(near.length, "edit")} in the text and reopen the comment for Claude`);
+      button("resolve", "✓ Resolve", "pri", near.length ? `Accept ${plural(near.length, "edit")} in the text and close the comment` : "Claude's change is fine");
       trash();
     } else {
       if (c.quote) button("show", "Show in text", false, "Scroll to the text it was about and highlight it for a moment");
@@ -160,7 +163,16 @@
       if (op === "save-edit") { submit(area); return; }
       if (op === "resolve") {
         if (navId === c.id) navId = null;  // it leaves the active list
-        send({ op: "update", id: c.id, status: "done" }, "Comment resolved");
+        // `near` is empty unless the comment is in review.
+        // Only once its edits are all accepted: missed ones changed since and are shown again.
+        applyEdits("accept", near).then((done) => { if (done && !done.missing) send({ op: "update", id: c.id, status: "done" }, "Comment resolved"); });
+        return;
+      }
+      if (op === "reject-edits") {
+        applyEdits("reject", near).then((done) => {
+          if (done && !done.missing) send({ op: "reply", id: c.id, by: "author", status: "open",
+            text: "I rejected your edits for this comment; the text is back as it was." }, "Edits rejected; the comment is open for Claude again");
+        });
         return;
       }
       if (op === "show") { showResolved(c, hit); return; }

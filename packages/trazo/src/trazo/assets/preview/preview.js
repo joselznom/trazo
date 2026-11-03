@@ -10,6 +10,7 @@
     submissionView.hidden = view !== "submission";
     zoomBar.hidden = view === "submission";
     zoomFit.hidden = typeMenu.hidden = view !== "doc";
+    renderEditsUi();
     if (view === "doc") applyZoom(false); else applyFigsZoom();
     renderTabs();
     renderWords();
@@ -71,7 +72,7 @@
   const handoffEl = handoff && view === "doc" ? landOnPlace(handoff) : null;
   // Restore the scroll position after a live reload (unless the address or
   // a Submission row asks for a place); the section in view then decides
-  // which file the Source and Diff tabs start with.
+  // which file the Source tab starts with.
   if (!landOn() && !handoffEl) {
     let saved = null;
     try { saved = JSON.parse(sget(readingKey)); } catch (e) { /* pixel fallback */ }
@@ -115,6 +116,7 @@
   setTab(tab);
   started = true;
   loadComments();
+  loadEdits();
   if (view !== "submission") loadSubmission();  // applyView() opened the view
   if (handoff && handoff.edit && handoff.file) openSourceLine({ ...handoff, doc }, handoffEl);
   window.addEventListener("focus", () => loadSubmission());  // e.g. after `trazo build --submission`
@@ -187,11 +189,13 @@
       const text = status.ok ? status.warnings.join("\n") : status.error;
       const label = state === "ok" ? "Build OK" : state === "warn" ? plural(status.warnings.length, "warning") : "Build failed";
       showBuild(state, label, `Built ${status.built}${text ? "\n" + text.split("\n").slice(0, 6).join("\n") : ""}`);
-      const message = state === "ok" ? "" :
-        (state === "error" ? "Build failed (showing last good version):\n" : "Pandoc warnings:\n") + text;
+      // Spec tables whose Markdown is not what their spec makes (edited by hand?).
+      const outputs = (all.outputs || []).length ? `Edited by hand? ${all.outputs.join(", ")}: the next table render rebuilds it from its spec, so change the spec instead.` : "";
+      const message = [state === "ok" ? "" :
+        (state === "error" ? "Build failed (showing last good version):\n" : "Pandoc warnings:\n") + text, outputs].filter(Boolean).join("\n\n");
       // Only touch the DOM on change, so the message can be selected and copied.
       if (banner.textContent !== message) banner.textContent = message;
-      banner.className = `pv-banner ${state}`;
+      banner.className = `pv-banner ${state === "ok" && outputs ? "warn" : state}`;
     } catch (e) {
       showBuild("off", "Offline", "The preview server does not answer.");
       resolveStatus();

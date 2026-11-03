@@ -225,7 +225,7 @@ class SubmissionCheckTests(SubmissionProject, unittest.TestCase):
         import xml.etree.ElementTree as ET
         import zipfile
 
-        from trazo import preview_diff
+        from trazo import edit_diff
         self.write("data/values.json", json.dumps({"values": {"cohort.n": {"value": 120, "text": "120"}}}))
         self.write("manuscript/main/00_abbreviations.md",
                    "# Abbreviations {#abbreviations .uncounted}\n\nMRI\n:   *Imaging* $x^2$ {{v:cohort.n}} [@first]; see [@tbl:study]\n")
@@ -269,7 +269,7 @@ class SubmissionCheckTests(SubmissionProject, unittest.TestCase):
                         self.assertEqual(document.find(".//w:tblPr/w:tblStyle", ns).get(f"{{{docx_indexes.W}}}val"), "Abbreviations")
                         self.assertIsNotNone(document.find(".//w:i", ns))
                         self.assertIn("oMath", ET.tostring(document).decode())
-                    self.assertGreater(preview_diff.diff("MRI\n:   Old meaning\n", "MRI\n:   *Imaging*\n")["changed"], 0)
+                    self.assertTrue(edit_diff.edits("MRI\n:   Old meaning\n", "MRI\n:   *Imaging*\n"))
 
     def test_failed_form_only_build_keeps_serving_cold_cached_snapshot(self):
         self.write("manuscript/main/00_abstract.md", "# Abstract\n\nSummary.\n")

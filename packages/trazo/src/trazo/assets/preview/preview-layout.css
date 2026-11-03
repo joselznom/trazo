@@ -33,6 +33,18 @@
 .pv-zoom-reset { min-width: 54px; padding: 5px; font-variant-numeric: tabular-nums; border-radius: 4px; }
 .pv-zoom-reset:hover { background: var(--pv-hover); }
 .pv-zoom-fit[aria-pressed="true"] { color: var(--pv-accent); background: var(--pv-accent-soft); }
+/* The Edits control (preview-edits.js), first in the view bar. */
+.pv-edits { position: relative; display: inline-flex; align-items: center; gap: 2px; margin-right: 6px; padding-right: 8px; border-right: 1px solid var(--pv-line); }
+.pv-edits-toggle { display: inline-flex; align-items: center; gap: 5px; padding: 4px 8px 4px 10px; border-radius: 6px; font-size: 12.5px; font-weight: 500; color: var(--pv-ink); }
+.pv-edits-toggle:hover, .pv-edits-toggle[aria-expanded="true"] { background: var(--pv-hover); }
+.pv-edits-toggle .n { color: var(--pv-ok); font-variant-numeric: tabular-nums; }
+.pv-edits-toggle svg { width: 12px; height: 12px; }
+.pv-edits-menu { position: absolute; top: calc(100% + 6px); left: 0; z-index: 35; min-width: 200px; padding: 6px; border: 1px solid var(--pv-line-strong); border-radius: 8px; background: var(--pv-card); box-shadow: var(--pv-shadow-pop); }
+.pv-edits-menu button { display: flex; align-items: center; gap: 8px; width: 100%; padding: 6px 10px; border-radius: 6px; text-align: left; color: var(--pv-ink); font-size: 13px; }
+.pv-edits-menu button:hover, .pv-edits-menu button:focus-visible { background: var(--pv-hover); outline: none; }
+.pv-edits-menu .ck { width: 14px; color: var(--pv-ok); }
+.pv-edits-menu .danger { color: var(--pv-err); }
+.pv-edits-menu hr { margin: 4px 2px; border: 0; border-top: 1px solid var(--pv-line); }
 .pv-scroller { position: relative; flex: 1; min-height: 0; overflow: auto; container: pvdoc / inline-size; overscroll-behavior: contain; }
 .pv-scrim { position: absolute; inset: 0; background: var(--pv-scrim); z-index: 45; }
 
