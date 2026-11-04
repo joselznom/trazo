@@ -15,9 +15,14 @@ description: Use when creating or updating generated manuscript tables, editing 
   `legend` (may quote data values as `{n}`), `note` (below the table, in
   Word's Table Note style; a blank line starts a paragraph), `rows` (`keys`, `order`,
   `filter`, `block`), `columns` (leaves, groups and pivots), `formats`,
-  `maps`, `highlight`, `emphasis` and `missing`. `_shared.json` holds
+  `maps`, `highlight`, `emphasis`, `marks` and `missing`. `_shared.json` holds
   formats and maps used by several tables and by `{{v:key|format}}` in
   prose. `scripts/trazo table --help` documents every key.
+- `marks` puts a superscript (1 to 3 characters: a, *, †) after a cell
+  (`{"column", "row", "mark"}`) or a column header (no `row`); explain each
+  mark in the `note`. Row labels are `maps` entries: the author renames them
+  in the editor, in this spec's `maps` or, for every table, in
+  `_shared.json`.
 - `merge` joins a cell to the one above when its text is equal and every
   column to its left is joined too, so merge columns go leftmost.
   `highlight` bolds the best value per `within` set; cells that show the
@@ -59,7 +64,11 @@ ids for `highlight` and `emphasis` are `<id>`, `<group>.<leaf>` or
 preview's table editor ("Edit table"), which saves through the same
 operations.
 
-Comments from the table editor target the table, a column or one cell:
+Comments from the table editor target the table, a column or one cell.
+The editor never changes a number: the author asks for new columns, rows
+or numbers with a comment that starts "Add a column:", "Add a row:",
+"Change this:" or "Change this column:". Change the generator (and the
+spec) for those, then resolve the comment saying what changed:
 
 ```bash
 scripts/trazo table comments [LABEL]          # open ones (--all: every state)

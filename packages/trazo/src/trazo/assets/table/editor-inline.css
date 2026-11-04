@@ -1,0 +1,30 @@
+/* Table editor: the format bar, editing on the table, marks, the "this
+   table only or everywhere" choice and Advanced (editor-inline.js). */
+.te-adv-only { display: none !important; }
+.te-advanced .te-adv-only { display: revert !important; }
+.te-kindb { font-size: 11.5px; padding: 2px 8px; border-radius: 999px; white-space: nowrap;
+  background: color-mix(in srgb, var(--pv-accent) 11%, transparent); color: var(--pv-accent); }
+.te-kindb::before { content: "🔒 "; font-size: 10px; }
+.te-bar { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.te-tool { width: 28px; height: 28px; border: 1px solid var(--pv-line); background: var(--pv-card); font-size: 13px; }
+.te-tool.on { background: var(--pv-accent-soft); color: var(--pv-accent); border-color: transparent; }
+.te-bar .te-sep { width: 1px; height: 18px; background: var(--pv-line); margin: 0 4px; }
+table.te-t td.te-label, table.te-t th { cursor: text; }
+table.te-t td.te-num { cursor: default; }
+table.te-t .te-editing { padding: 0; box-shadow: inset 0 0 0 2px var(--pv-accent); }
+.te-cellin { width: 100%; min-width: 6em; box-sizing: border-box; border: 0; outline: 0; padding: 6px 8px;
+  font: inherit; color: inherit; background: var(--pv-card); }
+.te-advbar { flex: none; border-top: 1px solid var(--pv-line); padding: 8px 14px; font-size: 12.5px; color: var(--pv-ink-2); }
+.te-mchip { min-width: 26px; height: 24px; border: 1px solid var(--pv-line-strong); border-radius: 5px;
+  background: var(--pv-card); cursor: pointer; font-size: 12px; }
+.te-mchip.on { background: var(--pv-accent-soft); color: var(--pv-accent); border-color: var(--pv-accent); }
+.te-mark-in { width: 5.5em; height: 24px; }
+.te-scope { display: flex; flex-direction: column; gap: 3px; margin: 6px 0; font-size: 12.5px; }
+.te-opt { display: flex; gap: 6px; align-items: flex-start; cursor: pointer; }
+.te-pop { position: fixed; z-index: 30; width: 270px; padding: 10px 12px; border-radius: 8px; font-size: 12.5px;
+  background: var(--pv-card); border: 1px solid var(--pv-line-strong); box-shadow: 0 8px 24px rgba(0, 0, 0, .18); }
+.te-pop-t { font-weight: 600; margin-bottom: 6px; }
+.te-src { margin-top: 10px; font-size: 12.5px; }
+.te-src summary { color: var(--pv-accent); cursor: pointer; }
+.te-src p { margin: 6px 0 0; }
+.te-raw { margin: 0; padding: 8px; background: var(--pv-hover); border-radius: 6px; white-space: pre-wrap; }

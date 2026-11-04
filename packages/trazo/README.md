@@ -231,11 +231,17 @@ contract, every spec key and the patch operations are documented in
 `src/trazo/table.py` (`trazo table --help`).
 
 The preview has a table editor at `/tables#<label>` (**Edit table** on a
-spec table and on its Figures & Tables card): click the caption, a header or
-a cell to change titles, headers, formats, row order, blocks, merges and
-bold cells, comment on them (`C`), and undo with ⌘Z. Every change is a
-`trazo table patch` operation, so it is validated, saved, rendered and
-undoable like one; numbers are never edited there. Agents answer its
+spec table and on its Figures & Tables card, which says **From your data**).
+Double-click a header, a row or block label, or press Enter or F2 on it, to
+rename it in place; a label shared through `_shared.json` with another table
+asks "in this table only" (the spec's `maps`) or "everywhere". Select a cell
+for its decimals (a shared format asks the same), bold, a mark (a, *, †,
+the spec's `marks`) and, on demand, where its number comes from. Numbers
+are never edited there: **Ask the agent** opens a comment for a new column,
+row or number. **Advanced** shows fields, ids, format templates, row keys,
+pivots, the bold-the-best rule and the Data tab. Comment with `C`; undo with
+⌘Z. Every change is a `trazo table patch` operation (or `patch --shared`),
+so it is validated, saved, rendered and undoable like one. Agents answer its
 comments with `trazo table comments` and `trazo table resolve`.
 
 The diagram editor is also part of the preview, at `/diagrams#<name>`

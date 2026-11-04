@@ -17,9 +17,12 @@ scripts/trazo table check --all --outputs  # spec errors, stale data, out-of-dat
 - `scripts/trazo table render` writes `tables/output/md/<label>.md`. The
   label is the cross-reference: `summary.json` renders `{#tbl:summary}`.
 - In the live preview (`scripts/trazo preview serve`, after the build
-  above), **Edit table** on a table opens the table editor: change headers,
-  formats, row order, blocks, merges and bold cells, leave comments for the
-  agent, and undo with ⌘Z. It saves the spec and re-renders the table at once.
+  above), **Edit table** on a table opens the table editor. Double-click a
+  header or a label to rename it; change decimals, row order, blocks,
+  merges, bold cells and marks (a, *, †); ask the agent for new columns,
+  rows or numbers with a comment; undo with ⌘Z. Numbers come from the data
+  and are never typed over. **Advanced** shows the fields, formats and
+  rules. It saves the spec and re-renders the table at once.
 - `scripts/trazo table describe LABEL` shows the data fields, the column
   ids and the rendered table; `table patch LABEL OPS.json` edits a spec and
   `table undo` reverts it. `scripts/trazo table --help` documents every

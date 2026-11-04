@@ -12,8 +12,11 @@ GET  /__tables                     [{label, title, data, status (ok|stale|error)
                                      open_comments, kind: "spec"}]
 GET  /__table?label=L[&hidden=1]   {label, file, sha256, spec, shared: {formats, maps,
                                      sha256}, data: {file, sha256, fields: {name: {types,
-                                     values}}, values, records (first 50), count},
-                                     model, issues, format_usage, undo}
+                                     values}}, values, records (first 50), count, inputs},
+                                     model, issues, format_usage, map_usage, undo}
+                                   (map_usage: {field: [{label, own}]}: the other tables
+                                   that show the field and the values their own maps
+                                   rename, for "this table only or everywhere")
                                    (hidden=1: hidden leaves in the model, flagged)
 POST /__table/preview              {label, spec, hidden?} -> {model, issues}; nothing
                                      is written (live typing)
@@ -103,10 +106,43 @@ def data_payload(table: tb.Table) -> dict[str, Any]:
         fields[name] = {"types": types, "values": distinct[:VALUES_SHOWN], "keys": keys}
     records = table.data.get("records", []) if isinstance(table.data, dict) else []
     name = table.spec.get("data") if isinstance(table.spec, dict) else None
+    inputs = table.data.get("inputs", {}) if isinstance(table.data, dict) else {}
     return {"file": tb.rel(tb.data_path(name)) if isinstance(name, str) else None,
-            "sha256": table.data_sha256,
+            "sha256": table.data_sha256, "inputs": list(inputs) if isinstance(inputs, dict) else [],
             "fields": fields, "values": table.data.get("values", {}) if table.fields else {},
             "records": records[:RECORDS_SHOWN], "count": len(records)}
+
+
+def shown_fields(spec: dict[str, Any]) -> set[str]:
+    """The fields a spec shows: row keys, column fields and pivots."""
+    rows, columns = spec.get("rows"), spec.get("columns")
+    keys = rows.get("keys", []) if isinstance(rows, dict) else []
+    fields = {k for k in keys if isinstance(k, str)}
+    for col in columns if isinstance(columns, list) else []:
+        children = col.get("columns") if isinstance(col, dict) else None
+        for item in [col, *(children if isinstance(children, list) else [])]:
+            if isinstance(item, dict):
+                fields |= {item[k] for k in ("field", "pivot") if isinstance(item.get(k), str)}
+    return fields
+
+
+def map_usage(label: str) -> dict[str, list[dict[str, Any]]]:
+    """For each field: the other tables that show it, so they share its labels in
+    _shared.json, with the values their own maps rename. Read from the specs
+    only (no table is built)."""
+    usage: dict[str, list[dict[str, Any]]] = {}
+    for other in tb.all_labels():
+        try:
+            spec = tb.read_json(tb.spec_path(other), "table spec")[0] if other != label else None
+        except tb.TableError:
+            continue
+        if not isinstance(spec, dict):
+            continue
+        maps = spec.get("maps")
+        for field in sorted(shown_fields(spec)):
+            own = maps.get(field) if isinstance(maps, dict) else None
+            usage.setdefault(field, []).append({"label": other, "own": sorted(own) if isinstance(own, dict) else []})
+    return usage
 
 
 def next_undo(label: str) -> str | None:
@@ -126,7 +162,7 @@ def table_state(label: Any, hidden: bool = False) -> dict[str, Any]:
             "shared": {"formats": shared.get("formats", {}), "maps": shared.get("maps", {}),
                        "sha256": tb.sha256_of(tb.SHARED_PATH), "file": tb.rel(tb.SHARED_PATH)},
             "data": data_payload(table), "model": tb.render_model(table, hidden),
-            "issues": table.issues, "format_usage": tb.format_usage(),
+            "issues": table.issues, "format_usage": tb.format_usage(), "map_usage": map_usage(label),
             "undo": next_undo(label)}
 
 
