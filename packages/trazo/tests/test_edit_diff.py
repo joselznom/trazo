@@ -78,6 +78,14 @@ class EditsTests(unittest.TestCase):
         [edit] = edit_diff.edits(BASE, crlf.replace("increased", "rose"))
         self.assertEqual((edit.old, edit.new), ("increased", "rose"))
 
+    def test_a_last_line_without_an_ending_keeps_its_place(self):
+        found = edit_diff.edits("First", "First\nSecond\n")
+        self.assertEqual(edit_diff.accept("First", found), "First\nSecond\n")
+        self.assertEqual(edit_diff.reject("First\nSecond\n", found), "First")
+        found = edit_diff.edits("First\nSecond\n", "First")
+        self.assertEqual(edit_diff.reject("First", found), "First\nSecond\n")
+        self.assertEqual(edit_diff.merge("First\nSecond\n", "First", "First\nThird\n").count("First"), 1)
+
     def test_a_very_long_changed_run_still_gives_exact_edits(self):
         base = "".join(f"line {i} of the text\n" for i in range(1500))
         current = "".join(f"> line {i} of the text\n" for i in range(1500))
@@ -102,6 +110,17 @@ class EditsTests(unittest.TestCase):
         self.assertEqual(edit_diff.merge("Score rose.\n", "Score fell.\n", "Score rose!\n"), "Score fell!\n")
         self.assertEqual(edit_diff.merge("Score rose.\n", "Score fell.\n", "Score rose, indeed.\n"),
                          "Score fell, indeed.\n")
+
+    def test_an_authors_change_in_a_very_long_paragraph_leaves_the_edits_around_it_pending(self):
+        words = ["the", "word"] * 1500  # no rare word for the diff to hold on to
+        changed = lambda *pairs: " ".join(dict(pairs).get(i, w) for i, w in enumerate(words)) + "\n"
+        base, current = changed(), changed((800, "new"), (2400, "final"))
+        saved = changed((800, "new"), (1600, "kept"), (2400, "final"))
+        merged = edit_diff.merge(current, base, saved)
+        self.assertIn("kept", merged)
+        pending = " ".join(e.new for e in edit_diff.edits(merged, saved))
+        self.assertIn("new", pending)
+        self.assertIn("final", pending)
 
     def test_an_authors_correction_in_a_pending_insertion_takes_only_that_correction(self):
         new = "One first text.\n\nTwo second text.\n"

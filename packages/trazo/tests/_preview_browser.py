@@ -78,16 +78,20 @@ class PreviewBrowserTestCase(unittest.TestCase):
             {"name": "prefers-reduced-motion", "value": "no-preference"}]}, self.session)
 
     def doCleanups(self):
+        # Added last, so it runs first; as a cleanup, its failure leaves the others running.
+        if getattr(self, "session", None):
+            self.addCleanup(self.close_pages)
+        return super().doCleanups()
+
+    def close_pages(self):
         """Close the pages and wait for their last requests before the test's
         cleanups run: Windows refuses to delete a file a handler still has open."""
-        if getattr(self, "session", None):
-            for target in self.chrome.call("Target.getTargets")["targetInfos"]:
-                if target.get("browserContextId") == self.context and target["type"] == "page":
-                    self.chrome.call("Target.closeTarget", {"targetId": target["targetId"]})
-            deadline = time.monotonic() + 5
-            while time.monotonic() < deadline and any("process_request_thread" in t.name for t in threading.enumerate()):
-                time.sleep(0.01)
-        return super().doCleanups()
+        for target in self.chrome.call("Target.getTargets")["targetInfos"]:
+            if target.get("browserContextId") == self.context and target["type"] == "page":
+                self.chrome.call("Target.closeTarget", {"targetId": target["targetId"]})
+        deadline = time.monotonic() + 5
+        while time.monotonic() < deadline and any("process_request_thread" in t.name for t in threading.enumerate()):
+            time.sleep(0.01)
 
     def evaluate(self, expression, session=None):
         reply = self.chrome.call("Runtime.evaluate", {
