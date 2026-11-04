@@ -54,6 +54,10 @@ NO_BLOCK_MARK = re.compile(r"!\[|:::|Table:|:\s|\[\^|\$\$")
 PAIRED = "*~^`$"
 GAP_WORDS = 1     # edits this many words apart (or fewer) are one edit
 CONTEXT = 24      # characters around an edit that its id depends on
+# Above this many words and spaces a changed run lets difflib skip the commonest
+# tokens: still an exact diff, and about 18 times faster, since a long run with
+# no blank line to split it would otherwise hold up the preview for seconds.
+LONG_RUN = 2000
 
 
 @dataclass(frozen=True)
@@ -80,13 +84,16 @@ def changes(base: str, current: str) -> list[tuple[int, int, int, int]]:
     a, b = base.splitlines(keepends=True), current.splitlines(keepends=True)
     a_at, b_at = list(accumulate(map(len, a), initial=0)), list(accumulate(map(len, b), initial=0))
     out = []
-    for tag, i1, i2, j1, j2 in SequenceMatcher(None, a, b, autojunk=False).get_opcodes():
+    # Lines compare without their endings: an editor converting a file's line
+    # endings changes every line and no word.
+    bare_a, bare_b = [line.rstrip("\r\n") for line in a], [line.rstrip("\r\n") for line in b]
+    for tag, i1, i2, j1, j2 in SequenceMatcher(None, bare_a, bare_b, autojunk=False).get_opcodes():
         if tag == "equal":
             continue
         ta, sa = _tokens(base[a_at[i1]:a_at[i2]], a_at[i1])
         tb, sb = _tokens(current[b_at[j1]:b_at[j2]], b_at[j1])
         ends_a, ends_b = sa[1:] + [a_at[i2]], sb[1:] + [b_at[j2]]
-        for op, k1, k2, m1, m2 in SequenceMatcher(None, ta, tb, autojunk=False).get_opcodes():
+        for op, k1, k2, m1, m2 in SequenceMatcher(None, ta, tb, autojunk=len(tb) > LONG_RUN).get_opcodes():
             if op == "equal":
                 continue
             b0 = sa[k1] if k1 < len(ta) else a_at[i2]

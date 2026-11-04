@@ -72,6 +72,19 @@ class EditsTests(unittest.TestCase):
         self.assertEqual(edit_diff.edits("One two\nthree.\n", "One two three.\n"), [])
         self.assertEqual(len(edit_diff.edits("One. Two.\n", "One.\n\nTwo.\n")), 1)
 
+    def test_converting_line_endings_is_no_edit(self):
+        crlf = BASE.replace("\n", "\r\n")
+        self.assertEqual(edit_diff.edits(BASE, crlf), [])
+        [edit] = edit_diff.edits(BASE, crlf.replace("increased", "rose"))
+        self.assertEqual((edit.old, edit.new), ("increased", "rose"))
+
+    def test_a_very_long_changed_run_still_gives_exact_edits(self):
+        base = "".join(f"line {i} of the text\n" for i in range(1500))
+        current = "".join(f"> line {i} of the text\n" for i in range(1500))
+        found = edit_diff.edits(base, current)
+        self.assertEqual(edit_diff.reject(current, found), base)
+        self.assertEqual(edit_diff.accept(base, found), current)
+
     def test_a_merge_keeps_both_sides_and_theirs_wins_where_both_changed(self):
         # The author's save (before -> after) goes into the baseline; the
         # pending edits it did not touch stay pending.

@@ -77,6 +77,18 @@ class PreviewBrowserTestCase(unittest.TestCase):
         self.chrome.call("Emulation.setEmulatedMedia", {"features": [
             {"name": "prefers-reduced-motion", "value": "no-preference"}]}, self.session)
 
+    def doCleanups(self):
+        """Close the pages and wait for their last requests before the test's
+        cleanups run: Windows refuses to delete a file a handler still has open."""
+        if getattr(self, "session", None):
+            for target in self.chrome.call("Target.getTargets")["targetInfos"]:
+                if target.get("browserContextId") == self.context and target["type"] == "page":
+                    self.chrome.call("Target.closeTarget", {"targetId": target["targetId"]})
+            deadline = time.monotonic() + 5
+            while time.monotonic() < deadline and any("process_request_thread" in t.name for t in threading.enumerate()):
+                time.sleep(0.01)
+        return super().doCleanups()
+
     def evaluate(self, expression, session=None):
         reply = self.chrome.call("Runtime.evaluate", {
             "expression": expression, "awaitPromise": True, "returnByValue": True}, session or self.session)
