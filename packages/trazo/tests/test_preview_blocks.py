@@ -142,6 +142,20 @@ class SaveTests(unittest.TestCase):
         self.assertTrue(answer["saved"])
         self.assertEqual(self.chapter.read_text(encoding="utf-8"), text.replace("quick", "slow"))
 
+    def test_two_words_join_across_a_source_line_break(self):
+        text = "One\n  two.\n"
+        key, rendered = self.block(text, "One")
+        self.assertTrue(self.save(key, rendered, "Onetwo.")["saved"])
+        self.assertEqual(self.chapter.read_text(encoding="utf-8"), "Onetwo.\n")
+
+    def test_a_stale_save_cannot_land_on_an_equal_paragraph(self):
+        text = "Same.\n\nSame.\n"
+        key = next(k for (_, k), node in roundtrip.page_blocks(self.page(text)).items())
+        self.chapter.write_text("Changed.\n\nSame.\n", encoding="utf-8")
+        with self.assertRaises(preview.Conflict):
+            self.save(key, "Same.", "Mine.")
+        self.assertEqual(self.chapter.read_text(encoding="utf-8"), "Changed.\n\nSame.\n")
+
     def test_a_save_is_the_authors_own_and_can_be_undone(self):
         text = "The quick fox.\n"
         key, rendered = self.block(text, "quick")

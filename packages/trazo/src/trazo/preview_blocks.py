@@ -7,9 +7,10 @@ value, math, code, note call, inline image) in a span, so a locked chip on the
 page and its Markdown are one to one. The Word build never sees these marks.
 trazo.preview_block_save writes an edit of the page back to the block.
 
-A key is a hash of the block's text and its number among equal blocks, so a
-change elsewhere in the file leaves the key valid and a change to the block
-does not. Text whose reading a mark could change gets none: it is not a block.
+A key is a hash of the block's text, its number among equal blocks and how many
+there are, so a change elsewhere in the file leaves the key valid, a change to
+the block does not, and a key cannot pass to a twin when one of them changes.
+Text whose reading a mark could change gets none: it is not a block.
 """
 
 from __future__ import annotations
@@ -26,10 +27,10 @@ from . import edit_diff
 PROTECTED = re.compile(r"""
     <!--.*?-->
   | (?P<atom>
-        (?<!`)(?P<tick>`+)(?!`)[^\n]*?[^`\n](?P=tick)(?!`)
+        (?<!`)(?P<tick>`+)(?!`)[^\n]*?[^`\n](?P=tick)(?!`)(?:\{[^{}]*\})?
       | \$(?=[^\s$])[^$\n]*(?<![\s\\])\$(?!\d)
       | \{\{v:[^{}]*\}\}
-      | !\[[^\]]*\]\([^)]*\)(?:\{[^{}]*\})?
+      | !\[[^\]]*\]\((?:[^()]|\([^()]*\))*\)(?:\{[^{}]*\})?
       | \^\[(?:[^\[\]]|\[[^\]]*\])*\]
       | \[\^[^\]]+\]
       | \[[^\[\]]*@[^\[\]]*\](?![(\[{])
@@ -80,11 +81,11 @@ def blocks_of(text: str, lines: edit_diff.Lines | None = None) -> list[Block]:
                 and not (last > i and SETEXT.fullmatch(lines.lines[i + 1]))):
             found.append((at, lines.starts[last] + len(lines.lines[last].rstrip("\r"))))
         i = last + 1
-    seen: Counter[str] = Counter()
+    digests = [hashlib.sha1(text[at:end].encode("utf-8")).hexdigest()[:12] for at, end in found]
+    total, seen = Counter(digests), Counter[str]()
     blocks = []
-    for at, end in found:
-        digest = hashlib.sha1(text[at:end].encode("utf-8")).hexdigest()[:12]
-        blocks.append(Block(at, end, f"{digest}-{seen[digest]}"))
+    for (at, end), digest in zip(found, digests):
+        blocks.append(Block(at, end, f"{digest}-{seen[digest]}-{total[digest]}"))
         seen[digest] += 1
     return blocks
 

@@ -79,6 +79,8 @@ A citation with a locator @smith2020 [p. 3] and a linked one [see @smith2020](ht
 
 A double tick ``a`b`` and a price of $5 and $6 are not what they seem here.
 
+Highlighted `print(1)`{.python} and an image in parentheses ![a](a(b).png) keep their syntax.
+
 Setext title
 ============
 

@@ -29,7 +29,7 @@ PREFIXES = {"start-list": "1. ", "start-head": "# ", "start-bullet": "- ", "star
 INSERTS = {"insert": "Zqxnew ", "active": "p<0.05, 5*3, a_b, $5 and [x] @y ~z^ ",
            "sentence": "A brand new clause, with commas; and “quotes”. ", "typed": "don't say \"this\" -- or that... "}
 # Most common first: test_preview_blocks.py holds these to a stricter rate.
-COMMON = ("replace", "typo", "delete", "multi", *INSERTS)
+COMMON = ("replace", "typo", "delete", "join", "multi", *INSERTS)
 KINDS = (*COMMON, "chip", "rewrite", *PREFIXES)
 
 
@@ -99,6 +99,8 @@ def flat(node: Node, count: list[int] | None = None) -> str:
             out.append(child)
         elif "pv-src" in child.classes or child.tag in NESTED_BLOCKS or "pv-edit-del" in child.classes:
             continue
+        elif child.tag == "br":
+            out.append(" ")
         elif "pv-atom" in child.classes:
             out.append(chr(CHIP + int(child.attrs["data-i"])))
         elif _other_chip(child):
@@ -153,6 +155,8 @@ def edited(kind: str, text: str, rng: random.Random) -> str | None:
         return text[:a] + INSERTS[kind] + text[a:]
     if kind == "delete":
         return text[:a] + text[b + 1 if b < len(text) and text[b] == " " else b:]
+    if kind == "join":
+        return text[:b] + text[b + 1:] if text[b:b + 1] == " " else None
     if len(words) < 2:
         return None
     first, second = sorted(rng.sample(words, 2), key=lambda m: m.start())
@@ -195,10 +199,11 @@ def run(doc: str, rounds: int, out_dir: Path) -> tuple[Counter, list[tuple[str, 
                     results[kind, "refused"] += 1
                     results["why", answer["refused"]] += 1
             page = page_blocks(build(out_dir / "after"))
+            shown = {comparable(flat(node)) for node in page.values()}
             for file, key, kind, after in saved:
-                node = page.get((file, key))
+                node = page.get((file, key))  # blocks that ended up equal have other keys
                 got = squash(flat(node)) if node is not None else "(not on the page)"
-                good = comparable(got) == comparable(after)
+                good = comparable(got) == comparable(after) or (node is None and comparable(after) in shown)
                 results[kind, "right" if good else "WRONG"] += 1
                 if not good:
                     wrong.append((kind, after, got))

@@ -50,11 +50,11 @@ def _masked(source: str) -> str:
     return PROTECTED.sub(lambda m: "\0" * len(m.group(0)), source)
 
 
-def _squeezed(source: str) -> tuple[str, list[int]]:
+def _squeezed(source: str) -> tuple[str, list[tuple[int, int]]]:
     """`source` with each run of spaces as one, and where each character was:
     the page has no trace of the source's line breaks or indents."""
     found = list(re.finditer(r"\s+|\S", source))
-    return "".join(" " if m[0].isspace() else m[0] for m in found), [m.start() for m in found]
+    return "".join(" " if m[0].isspace() else m[0] for m in found), [m.span() for m in found]
 
 
 class _Offsets:
@@ -63,7 +63,7 @@ class _Offsets:
     def __init__(self, before: str, source: str, spans: list[tuple[int, int]], references: set[str]) -> None:
         self.before, self.source, self.spans = before, source, spans
         plain, where = _squeezed(_masked(source))
-        self.table: dict[int, int] = {}
+        self.table: dict[int, tuple[int, int]] = {}
         for a, b, size in SequenceMatcher(None, before.translate(TYPOGRAPHY), plain.translate(TYPOGRAPHY),
                                           autojunk=False).get_matching_blocks():
             for k in range(size):
@@ -71,7 +71,7 @@ class _Offsets:
         # The brackets of a link by reference are not on the page: nothing maps inside them.
         for m in SHORTCUT_LINK.finditer(source):
             if m[1].lower() in references:
-                self.table = {k: v for k, v in self.table.items() if not m.start() <= v < m.end()}
+                self.table = {k: v for k, v in self.table.items() if not m.start() <= v[0] < m.end()}
 
     def atom(self, ch: str) -> tuple[int, int] | None:
         i = ord(ch) - CHIP_FIRST
@@ -81,7 +81,7 @@ class _Offsets:
         if _is_chip(self.before[i]):
             span = self.atom(self.before[i])
             return span[side] if span else None
-        return self.table[i] + side if i in self.table else None
+        return self.table[i][side] if i in self.table else None
 
     def after(self, i: int) -> int | None:
         """The offset just after character i of the rendered text."""
@@ -180,6 +180,8 @@ class _Page(HTMLParser):
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         if not self.depth:
             self.kinds.append(tag)
+        if tag == "br":
+            self.text.append(" ")
         self.depth += tag not in VOID
 
     def handle_endtag(self, tag: str) -> None:
@@ -194,8 +196,8 @@ def _without_atoms(source: str) -> str:
 
 
 def _comparable(text: str) -> str:
-    """Text as the check compares it: without chips, spaces or smart typography."""
-    return "".join("".join(ch for ch in text if not _is_chip(ch)).translate(TYPED).split())
+    """Text as the check compares it: without chips, runs of spaces or smart typography."""
+    return " ".join("".join(ch for ch in text if not _is_chip(ch)).translate(TYPED).split())
 
 
 def _alone(block: str, definitions: str) -> tuple[str, list[str]]:
