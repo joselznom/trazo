@@ -27,6 +27,13 @@ Internal changes (tests, CI, refactoring) stay out.
   once. Resolve on a comment the agent answered accepts its edits, and the
   new Reject undoes them and reopens the comment. Your own saves from the
   preview are accepted as you make them. Works without git (#16).
+- Tables typed by hand: **+ New table** in the table editor makes a table
+  that is not computed from your data, empty or pasted from Excel, Word or
+  Sheets, and adds it to the section you choose. Type in its cells, add rows
+  and columns, and format text; it goes to Word like any table (#17).
+- **Make editable** on a Markdown table turns it into a table typed by hand,
+  with its caption, note and cross-references. A table that would lose
+  something says why and keeps **Edit source** (#18).
 
 ### Changed
 
@@ -37,6 +44,17 @@ Internal changes (tests, CI, refactoring) stay out.
   The Deleted list is gone: comments left in it show as resolved, so you
   can delete them too. The agent can delete resolved comments when you ask
   it to (`trazo review delete`) (#14).
+- The table editor speaks plainly: double-click a header or a row label to
+  rename it, change decimals with − and +, add marks (a, *, †) and bold
+  cells from a format bar, and ask the agent for new columns, rows or
+  numbers with one click. Numbers from your data stay locked, and a cell
+  tells you where its number comes from. A label or format that other
+  tables or the text also use asks whether to change it in this table only
+  or everywhere. Technical settings move under **Advanced** (#15).
+
+### Fixed
+
+- The table editor no longer shows "null" under a table without a note (#15).
 
 ### Removed
 

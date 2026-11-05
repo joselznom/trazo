@@ -45,15 +45,12 @@ declarations, title page and cover letter pages), an index of the headings with 
 counts and comment badges on the left (under the document's main-text words,
 figures, tables and references; see [Word counts](#word-counts)), and on the right the **Comments**
 and **Source** (the Markdown file of the section in view) tabs. Select text to add a review comment; click a paragraph
-marker (¶) to open its source. Edits made to the sources since you last
-reviewed them are marked in the text (inserted, deleted, new paragraphs):
-click one to accept or reject it (`a` / `r`), step through them or take them
-all at once with **Edits** above the page, and Resolve or Reject on a
-comment the agent answered takes the edits next to its text. Accepting
-keeps the file as it is; rejecting puts the old text back (Undo save in
-the Source tab brings it back again). Your own saves from the preview are
-accepted as you make them. The first preview with this version starts with
-nothing to review (`notes/review/edits.json` keeps what you last reviewed). Keys: `[` and `]` fold the sidebars, `j` / `k`
+marker (¶) to open its source. Source edits since your
+last review are marked in the text: click one to accept or reject it (`a` / `r`),
+or use **Edits** above the page to step through them or take them all. Resolve or
+Reject on a comment the agent answered takes the edits next to its text. Undo save
+(Source tab) reverses a rejection; your own preview saves count as reviewed
+(`notes/review/edits.json`). Keys: `[` and `]` fold the sidebars, `j` / `k`
 step through open comments. Sidebars resize by dragging their inner edge;
 below 900 px they become drawers. The theme menu offers auto, light and dark
 modes and five colour palettes, shared with the table and diagram editors.
@@ -238,12 +235,37 @@ contract, every spec key and the patch operations are documented in
 `src/trazo/table.py` (`trazo table --help`).
 
 The preview has a table editor at `/tables#<label>` (**Edit table** on a
-spec table and on its Figures & Tables card): click the caption, a header or
-a cell to change titles, headers, formats, row order, blocks, merges and
-bold cells, comment on them (`C`), and undo with ⌘Z. Every change is a
-`trazo table patch` operation, so it is validated, saved, rendered and
-undoable like one; numbers are never edited there. Agents answer its
+spec table and on its Figures & Tables card, which says **From your data**).
+Double-click a header, a row or block label, or press Enter or F2 on it, to
+rename it in place; a label shared through `_shared.json` with another table
+asks "in this table only" (the spec's `maps`) or "everywhere". Select a cell
+for its decimals (a shared format asks the same), bold, a mark (a, *, †,
+the spec's `marks`) and, on demand, where its number comes from. Numbers
+are never edited there: **Ask the agent** opens a comment for a new column,
+row or number. **Advanced** shows fields, ids, format templates, row keys,
+pivots, the bold-the-best rule and the Data tab. Comment with `C`; undo with
+⌘Z. Every change is a `trazo table patch` operation (or `patch --shared`),
+so it is validated, saved, rendered and undoable like one. Agents answer its
 comments with `trazo table comments` and `trazo table resolve`.
+
+A table can also be **typed by hand**: **+ New table** in the editor asks for
+a title, a document and a section, starts empty or from a pasted range
+(its first row is the headers), and adds the `!include` at the end of that
+section. Its cells live in the spec (`body` instead of `data` and `rows`,
+documented in `src/trazo/table_hand.py`), so there is no data and no script.
+Double-click a cell to type; the bar adds rows, block rows and columns, and
+formats bold, italic, superscript and subscript. Pasting a range from Excel,
+Word or Sheets fills from the selected cell and grows the table; a new
+column of numbers is aligned right. Text is published as typed: nothing is
+calculated.
+
+A Markdown table with a caption offers **Make editable** (on its card and
+under it in the article): once confirmed, it becomes a table typed by hand
+and the text keeps a line that includes it. Caption, note and cross-references
+stay. The table editor then offers **Undo** until the first edit. A table
+that would lose something (merged cells, a link, an equation, code, a value
+such as `{{v:key}}`) says why and keeps **Edit source**; see
+`src/trazo/table_convert.py`.
 
 The diagram editor is also part of the preview, at `/diagrams#<name>`
 (**Edit diagram** on a figure, **All diagrams** in Figures & Tables). It
