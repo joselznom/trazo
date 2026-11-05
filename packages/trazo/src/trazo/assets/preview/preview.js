@@ -155,18 +155,19 @@
       versions = Object.fromEntries(docNames.map((n) => [n, all.documents[n] ? all.documents[n].version : 0]));
       if (loaded === null) loaded = { ...versions };
       resolveStatus();
-      // Do not reload while a comment is being written or edited. The server
+      // Do not reload while a comment is being written or edited, or with the
+      // caret in the text, even if nothing is typed yet. The server
       // only bumps the version on a successful build, so a failed build shows
       // the banner without reloading. The Figures & Tables view shows every
       // document, so it reloads for any of them.
-      const busy = hasUnsaved();
+      const busy = hasUnsaved() || !!writing;
       const catalogVersion = `${all.catalog}:${all.review}`;
       if (!busy && catalogVersion && catalogStamp !== catalogVersion) {
         catalogStamp = catalogVersion;
         loadAll().then(() => { if (view === "figures" && !hasUnsaved()) renderFigs(); });
       }
       const stale = (view !== "doc" ? docNames : [doc]).some((n) => versions[n] !== loaded[n]);
-      if (stale && !busy && await App.reload(() => !hasUnsaved())) return;
+      if (stale && !busy && await App.reload(() => !hasUnsaved() && !writing)) return;
       hold.hidden = !(busy && stale);
       if (view === "doc") for (const n of docNames) if (n !== doc) loaded[n] = versions[n];  // not shown here
       // Refresh copies fetched at another version, or before the first

@@ -56,7 +56,7 @@ re-renders the spec tables in-process (no project code runs), unless the
 project has its own tables stage (a `tables` step or [commands] entry): a
 spec change then reruns it before the rebuild, since it may read the specs.
 Endpoints: GET/POST /__source, /__table-caption, /__figure-text and /__edits,
-POST /__block (an edit of a paragraph's text, see trazo.preview_block_save),
+GET/POST /__block (an edit of a paragraph's text, see trazo.preview_block_save),
 GET /__values, GET /__submission (the Submission view's report,
 reused until what it reads changes; ?fields=0 leaves out the form fields,
 ?fresh=S makes it again if its check started over S seconds ago), POST /__locate,
@@ -120,7 +120,7 @@ from .background import CommandJob
 from .expand import VALUES_PATH
 from .local_server import Conflict, Download, NotFound  # noqa: F401  (callers catch preview.NotFound)
 from .local_server import RequestError as CommentError
-from .preview_block_save import change_block
+from .preview_block_save import change_block, get_block
 
 # Moved to their own modules; imported back because callers and tests use preview.<name>.
 from .preview_captions import (  # noqa: F401
@@ -201,7 +201,7 @@ VIEWER_SCRIPTS = (
     "preview-comment-anchors.js", "preview-comment-list.js", "preview-comment-highlights.js",
     "preview-source.js", "preview-diff.js", "preview-edits.js", "preview-build.js", "preview-new-comments.js",
     "preview-captions.js", "preview-caption-editors.js", "preview-export.js", "preview-export-picker.js",
-    "preview-figures.js", "preview-lightbox.js", "preview-submission.js", "preview.js",
+    "preview-figures.js", "preview-lightbox.js", "preview-submission.js", "preview-writing.js", "preview.js",
 )
 WATCHED = tuple(PROJECT.config["preview"]["watch"])
 PANDOC_FLAGS = [
@@ -333,6 +333,7 @@ def get_route(path, query):
         "/__status": status, "/__comments": lambda: comments_payload(first("doc")),
         "/__edits": lambda: edits_payload(first("doc")), "/__values": values_info,
         "/__source": lambda: get_source(first("file")),
+        "/__block": lambda: get_block(first("file"), first("h")),
         "/__figure-text": lambda: get_figure_text(first("doc"), first("id")),
         "/__table-caption": lambda: get_table_caption(first("doc"), first("id")),
         "/__export": lambda: export_request(query),

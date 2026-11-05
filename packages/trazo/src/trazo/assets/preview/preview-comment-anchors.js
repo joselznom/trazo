@@ -20,7 +20,8 @@
   };
 
   // Whitespace-squashed text of an element, mapped back to its text nodes.
-  // The page text never changes before a reload, so it is computed once.
+  // The page text changes only where the author writes (forgetText), so it is
+  // computed once.
   const flatCache = new WeakMap();
   function flatText(el) {
     let entry = flatCache.get(el);
@@ -39,6 +40,11 @@
     entry = { nodes, flat, map };
     flatCache.set(el, entry);
     return entry;
+  }
+
+  function forgetText(el) {
+    flatCache.delete(el);
+    contextCache.delete(el);
   }
 
   const SURROUND = 32;

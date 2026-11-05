@@ -215,7 +215,8 @@ def _balanced(text: str) -> bool:
         depth += {"[": 1, "]": -1}.get(ch, 0)
         if depth < 0:
             return False
-    if depth or any(plain.count(ch) % 2 for ch in PAIRED):
+    # By runs too: the two asterisks that close a bold are an even count and still half a pair.
+    if depth or any(plain.count(ch) % 2 or len(re.findall(rf"{re.escape(ch)}+", plain)) % 2 for ch in PAIRED):
         return False
     # `_` emphasis opens or closes at a word boundary; inside words it is text.
     return len(re.findall(r"(?<!\w)_|_(?!\w)", plain)) % 2 == 0
