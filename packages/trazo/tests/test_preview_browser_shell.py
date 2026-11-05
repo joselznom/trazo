@@ -106,7 +106,10 @@ class ShellTests(PreviewBrowserTestCase):
             self.chrome.call("Page.navigate", {"url": self.url.replace("/manuscript.html", path)}, session)
             self.wait_for(f"document.querySelector({json.dumps(ready)}) && document.readyState === 'complete'", session)
             peers.append(session)
-        themed = "document.documentElement.dataset.theme === 'dark' && document.documentElement.dataset.palette === 'polar'"
+        # The tab that resets the theme gets no event for it and keeps the old look, so the
+        # look alone would pass before the new saves reach it: the first of them drops the palette.
+        themed = ("document.documentElement.dataset.theme === 'dark' && document.documentElement.dataset.palette === 'polar'"
+                  " && JSON.parse(localStorage.getItem('trazo-preview'))?.palette === 'polar'")
         reset = "!document.documentElement.hasAttribute('data-theme') && !document.documentElement.hasAttribute('data-palette')"
         for operation in ("removeItem('trazo-preview')", "clear()"):
             self.evaluate("""document.querySelector('.pv-theme').click();
