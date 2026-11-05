@@ -14,6 +14,11 @@ chose to keep their text ({keep: true}): the edit is then made to the Markdown
 the key stood for (trazo.preview_blocks.SOURCES) and merged into the block most
 like it. A save goes through change_source, so it has an undo and counts as the
 author's own change.
+
+U+F8FF in `after` is a paragraph break: the block becomes several, each checked
+alone (in a list, new items). An empty `after` deletes the block. {into, previous}
+joins the block to the one before it, whose key and text they are. The answer's
+`parts` are the keys of the blocks the edit left.
 """
 
 from __future__ import annotations
@@ -28,10 +33,14 @@ from . import pandoc_run
 from .counts import VOID
 from .edit_diff import Lines, changes, merge
 from .local_server import Conflict, RequestError
-from .preview_blocks import PROTECTED, QUOTE, SOURCES, Block, atoms, atoms_in, blocks_of, escaped
+from .preview_blocks import ITEM, PROTECTED, QUOTE, SOURCES, Block, atoms, atoms_in, blocks_of, escaped
 from .preview_sources import change_source, get_source, source_path
 
 CHIP_FIRST, OTHER_CHIP_FIRST, CHIP_LAST = 0xE000, 0xF000, 0xF8FE
+BREAK = ""
+# Between two blocks that can join: blank lines and the markers of the second.
+GAP = re.compile(r"[\s>]*(?:(?:[-*+]|\d+[.)]|#[.)])[ \t]+)?")
+BLANK_LINE = re.compile(r"[ \t]*\r?\n")
 ACTIVE = re.compile(r"([\\`*_\[\]{}$@~^<>#|])")
 # Typed text that would start a list, a definition or a caption: ends in the character to escape.
 LEAD = re.compile(r"^\s*(?:[-+:](?=\s)|(?:\d+|[A-Za-z])[.)](?=\s)|Table:)")
@@ -124,7 +133,11 @@ def _balanced(masked: str, at: int, end: int) -> tuple[int, int]:
 
 def _escaped_text(text: str, starts_line: bool) -> str:
     text = ACTIVE.sub(r"\\\1", text)
-    return LEAD.sub(lambda m: f"{m[0][:-1]}\\{m[0][-1]}", text) if starts_line else text
+    return _lead_escaped(text) if starts_line else text
+
+
+def _lead_escaped(text: str) -> str:
+    return LEAD.sub(lambda m: f"{m[0][:-1]}\\{m[0][-1]}", text)
 
 
 def patch(before: str, after: str, source: str, spans: list[tuple[int, int]],
@@ -225,14 +238,14 @@ def check(before: str, after: str, source: str, patched: str, definitions: str) 
         return "a locked element would change"
     try:
         text, kinds = _alone(source, definitions)
-        new_text, new_kinds = _alone(patched, definitions)
+        built = [_alone(part, definitions) for part in patched.split(BREAK)]
     except (OSError, subprocess.SubprocessError) as exc:
         return f"could not check the result: {exc}"
     if text != _comparable(before):
         return "this paragraph has more on the page than its Markdown shows"
-    if new_text != _comparable(after):
+    if [part for part, _ in built] != [_comparable(part) for part in after.split(BREAK)]:
         return "the Markdown would not read as written"
-    if new_kinds != kinds:
+    if any(new_kinds != kinds for _, new_kinds in built):
         return "the paragraph would become something else"
     return ""
 
@@ -241,7 +254,7 @@ def _squashed(request: dict[str, Any], key: str) -> str:
     value = request.get(key)
     if not isinstance(value, str):
         raise RequestError(f"{key} must be a string")
-    return " ".join(value.split())
+    return re.sub(f" ?{BREAK} ?", BREAK, " ".join(value.split()))
 
 
 def _find(text: str, key: Any, sha256: str) -> tuple[Block, Lines]:
@@ -255,10 +268,14 @@ def _find(text: str, key: Any, sha256: str) -> tuple[Block, Lines]:
 def _rewritten(request: dict[str, Any], text: str, source: str, spans: list[tuple[int, int]]) -> tuple[str | None, str]:
     """`source` with the author's edit, or None and why not. `text` is its file."""
     before, after = _squashed(request, "before"), _squashed(request, "after")
+    if not after:
+        return "", ""
     references = {m[1].lower() for m in DEFINITION.finditer(text)}
     patched = patch(before, after, source, spans, references)
     if patched is None:
         return None, "this change has no place in the Markdown"
+    first, *others = patched.split(BREAK)
+    patched = BREAK.join([first, *map(_lead_escaped, others)])
     definitions = "\n".join(m[0] for m in DEFINITION.finditer(text))
     why = check(before, after, source, patched, definitions)
     return (None, why) if why else (patched, "")
@@ -286,7 +303,9 @@ def _kept_mine(request: dict[str, Any], text: str, sha256: str) -> tuple[Block, 
     alone = Block(0, len(source), "")
     patched, why = (_markdown(request), "") if "markdown" in request else (
         _rewritten(request, text, source, _spans(source, alone, Lines(source))))
-    return block, None if patched is None else merge(source, text[block.at:block.end], patched), why
+    if not patched:
+        return block, patched, why
+    return block, merge(source, text[block.at:block.end], patched), why
 
 
 def _markdown(request: dict[str, Any]) -> str:
@@ -294,6 +313,49 @@ def _markdown(request: dict[str, Any]) -> str:
     if not isinstance(markdown, str):
         raise RequestError("markdown must be a string")
     return markdown
+
+
+def _joined(request: dict[str, Any], text: str, block: Block, lines: Lines, sha256: str) -> tuple[Block, str | None, str]:
+    """The block before this one, and this one's Markdown to follow it, or None and why not."""
+    blocks = blocks_of(text, lines)
+    at = blocks.index(block)
+    previous = blocks[at - 1] if at else None
+    if previous is None or previous.key != request["into"]:
+        raise Conflict("the paragraph before this one changed on disk", sha256=sha256)
+    if not GAP.fullmatch(text, previous.end, block.at):
+        return previous, None, "there is something between these two paragraphs"
+    new, why = _rewritten(request, text, text[block.at:block.end], _spans(text, block, lines))
+    if not new:
+        return previous, None, why or "there is nothing to join"
+    left, first = _squashed(request, "previous"), text[previous.at:previous.end]
+    definitions = "\n".join(m[0] for m in DEFINITION.finditer(text))
+    why = check(f"{left} {_squashed(request, 'before')}", f"{left} {_squashed(request, 'after')}",
+                f"{first} {text[block.at:block.end]}", f"{first} {new}", definitions)
+    return previous, None if why else new, why
+
+
+def _between(text: str, block: Block) -> str:
+    """What goes between two parts of a split block: a blank line, or in a list a new item."""
+    newline = "\r\n" if "\r\n" in text else "\n"
+    prefix = text[text.rfind("\n", 0, block.at) + 1:block.at]
+    quote = QUOTE.match(prefix)
+    quoted = quote[0] if quote else ""
+    marker = prefix[len(quoted):]
+    if ITEM.match(marker):
+        return newline + quoted + re.sub(r"\d+", lambda m: str(int(m[0]) + 1), marker, count=1)
+    return newline + quoted.rstrip() + newline + prefix
+
+
+def _whole_lines(text: str, block: Block) -> tuple[int, int]:
+    """The span of a block with its marker and line ending, and of the blank line
+    after it when one comes before it too."""
+    start = text.rfind("\n", 0, block.at) + 1
+    end = text.find("\n", block.end)
+    end = len(text) if end < 0 else end + 1
+    blank = BLANK_LINE.match(text, end)
+    if blank and (not start or BLANK_LINE.fullmatch(text, text.rfind("\n", 0, start - 1) + 1, start)):
+        end = blank.end()
+    return start, end
 
 
 def change_block(request: Any) -> dict[str, Any]:
@@ -309,15 +371,25 @@ def change_block(request: Any) -> dict[str, Any]:
         if not request.get("keep"):
             raise
         block, new, why = _kept_mine(request, text, state["sha256"])
+        first, start = block.at, block.at
     else:
-        new, why = (_markdown(request), "") if "markdown" in request else (
-            _rewritten(request, text, text[block.at:block.end], _spans(text, block, lines)))
+        first, start = block.at, block.at
+        if "into" in request:
+            previous, new, why = _joined(request, text, block, lines, state["sha256"])
+            first, start, new = previous.at, previous.end, None if new is None else f" {new}"
+        else:
+            new, why = (_markdown(request), "") if "markdown" in request else (
+                _rewritten(request, text, text[block.at:block.end], _spans(text, block, lines)))
     source = text[block.at:block.end]
     if new is None:
         return {"refused": why, "file": file, "markdown": source}
     if new == source:
-        return {"saved": True, "file": file, "markdown": new, "h": block.key}
-    changed = text[:block.at] + new + text[block.end:]
+        return {"saved": True, "file": file, "markdown": new, "h": block.key, "parts": [block.key]}
+    end = block.end
+    if not new:
+        start, end = _whole_lines(text, block)
+    written = new.replace(BREAK, _between(text, block))
+    changed = text[:start] + written + text[end:]
     change_source({"file": file, "text": changed, "base_sha256": state["sha256"]})
-    keys = [b.key for b in blocks_of(changed) if b.at == block.at]
-    return {"saved": True, "file": file, "markdown": new, "h": keys[0] if keys else ""}
+    parts = [b.key for b in blocks_of(changed) if first <= b.at < start + len(written)]
+    return {"saved": True, "file": file, "markdown": written, "h": parts[0] if parts else "", "parts": parts}

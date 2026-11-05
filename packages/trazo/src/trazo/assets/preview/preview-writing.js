@@ -11,7 +11,7 @@
   // Chips the build did not wrap, and what is on the page but not in the block.
   const OTHER_CHIPS = ".citation, .pv-val, span.math, math, code, .footnote-ref, a[href^='#'], img, svg";
   const NOT_TEXT = ".pv-src, .pv-para, .pv-src-mark, .pv-edit-del, .pv-write-bar, button, ul, ol, dl, blockquote";
-  const CHIP = 0xE000, OTHER_CHIP = 0xF000;
+  const CHIP = 0xE000, OTHER_CHIP = 0xF000, BREAK = "";
   const browserWrites = (() => {
     const probe = document.createElement("div");
     try { probe.contentEditable = "plaintext-only"; } catch (e) { return false; }
@@ -77,7 +77,7 @@
 
   function startWriting(el) {
     const mark = blockMark.get(el);
-    if (!mark) return false;
+    if (!mark) return null;
     let ed = failed.get(el);
     if (ed) clearFailure(ed);
     else {
@@ -89,7 +89,7 @@
     el.classList.add("pv-writing");
     el.contentEditable = "plaintext-only";
     writing = ed;
-    return true;
+    return ed;
   }
 
   function stopWriting() {
@@ -109,38 +109,68 @@
     ed.bar = null;
   }
 
-  async function sendBlock(ed, body) {
+  // One at a time and in order: a save may need the key the one before it got.
+  // `group` are the paragraphs the block becomes, the first being the one sent.
+  let saveQueue = Promise.resolve();
+  function sendBlock(ed, body, { group = [ed], refused = showFailure, done = null } = {}) {
     saves++;
     showSaveState("Saving…");
-    let result;
-    try {
-      result = await postJson("/__block", { file: ed.mark.dataset.file, h: ed.mark.dataset.h, ...body });
-    } catch (e) {
-      result = { ok: false, status: 0, payload: { error: "the preview server did not answer" } };
-    }
-    saves--;
-    if (result.ok && result.payload.saved) blockSaved(ed, result.payload);
-    else showFailure(ed, result.status, result.payload);
+    saveQueue = saveQueue.then(async () => {
+      const { file, h: key } = group[0].mark.dataset;
+      let result;
+      try {
+        result = await postJson("/__block", { file, h: key, ...(typeof body === "function" ? body() : body) });
+      } catch (e) {
+        result = { ok: false, status: 0, payload: { error: "the preview server did not answer" } };
+      }
+      saves--;
+      if (!result.ok || !result.payload.saved) refused(ed, result.status, result.payload);
+      else if (done) { showSaveState("Saved", true); done(result.payload); }
+      else blockSaved(ed, result.payload, group);
+    });
   }
 
   function saveBlock(ed, extra) {
-    const after = textOf(ed.el);
-    if (after !== ed.before || failed.has(ed.el)) sendBlock(ed, { before: ed.before, after, ...extra });
+    const after = textOf(ed.el), anchor = ed.draftOf;
+    if (anchor) {
+      ed.draftOf = null;
+      if (!after) { dropParagraph(ed); return; }
+      ed.sent = after;
+      sendBlock(ed, () => ({ before: anchor.before, after: anchor.before + BREAK + after, ...extra }), {
+        group: [anchor, ed],
+        refused: (...failure) => { ed.draftOf = anchor; showFailure(...failure); },
+      });
+    } else if (after !== ed.before || failed.has(ed.el)) {
+      ed.sent = after;
+      sendBlock(ed, { before: ed.before, after, ...extra });
+    }
   }
 
-  function blockSaved(ed, payload) {
+  function dropParagraph(ed) {
+    blockMark.delete(ed.el);
+    ed.el.remove();
+  }
+
+  // Until the page reloads, the chips of a paragraph are numbered as its Markdown is.
+  function numberChips(el) {
+    $$(".pv-atom", el).filter((chip) => chip.closest("p, li") === el).forEach((chip, i) => { chip.dataset.i = String(i); });
+  }
+
+  function blockSaved(ed, payload, group) {
     clearFailure(ed);
     closeMarkdown(ed);
-    ed.mark.dataset.h = payload.h;
-    // Until the page reloads, the chips left are numbered as the Markdown is.
-    $$(".pv-atom", ed.el).forEach((chip, i) => { chip.dataset.i = String(i); });
+    if (ed.sent !== undefined) ed.before = ed.sent;
+    group.forEach((part, i) => { if (payload.parts[i]) part.mark.dataset.h = payload.parts[i]; });
+    if (!payload.parts.length) dropParagraph(ed);
+    else if (ed !== writing) numberChips(ed.el);
     showSaveState("Saved", true);
   }
 
   function discardWriting(ed) {
     clearFailure(ed);
     closeMarkdown(ed);
-    ed.restore();
+    if (ed.draftOf) dropParagraph(ed);
+    else ed.restore();
     forgetPageText();
     showSaveState("", false);
   }
@@ -213,18 +243,14 @@
   }, true);
   page.addEventListener("focusout", (e) => {
     // Another window taking the focus is not leaving the paragraph.
-    if (writing && e.target === writing.el && document.hasFocus()
+    if (writing && !writing.joining && e.target === writing.el && document.hasFocus()
         && !(e.relatedTarget && writing.el.contains(e.relatedTarget))) saveBlock(stopWriting());
   });
   page.addEventListener("input", () => { if (writing) fab.hidden = true; });
   document.addEventListener("keydown", (e) => {
-    if (!writing) return;
-    if (e.key === "Escape") {
+    if (writing && !writing.joining && e.key === "Escape") {
       e.preventDefault();
       discardWriting(stopWriting());
       getSelection().removeAllRanges();
-    } else if (e.key === "Enter") {
-      e.preventDefault();
-      writing.el.blur();
     }
   }, true);

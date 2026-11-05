@@ -30,7 +30,8 @@ INSERTS = {"insert": "Zqxnew ", "active": "p<0.05, 5*3, a_b, $5 and [x] @y ~z^ "
            "sentence": "A brand new clause, with commas; and “quotes”. ", "typed": "don't say \"this\" -- or that... "}
 # Most common first: test_preview_blocks.py holds these to a stricter rate.
 COMMON = ("replace", "typo", "delete", "join", "multi", *INSERTS)
-KINDS = (*COMMON, "chip", "rewrite", *PREFIXES)
+KINDS = (*COMMON, "chip", "rewrite", "split", *PREFIXES)
+BREAK = ""
 
 
 @dataclass
@@ -143,6 +144,12 @@ def edited(kind: str, text: str, rng: random.Random) -> str | None:
         return "Fully rewritten paragraph " + " and ".join(ch for ch in text if ord(ch) >= CHIP and ord(ch) < 0xF8FF) + " with new words."
     if kind in PREFIXES:
         return PREFIXES[kind] + text
+    if kind == "split":
+        cuts = [m.end() for m in re.finditer(r"[.;:] (?=\S)", text)] or [m.start() for m in words[1:]]
+        if not cuts:
+            return None
+        at = rng.choice(cuts)
+        return text[:at].rstrip() + BREAK + text[at:]
     if not words:
         return None
     word = rng.choice(words)
@@ -195,7 +202,7 @@ def run(doc: str, rounds: int, out_dir: Path) -> tuple[Counter, list[tuple[str, 
                     results["why", "the file changed"] += 1
                     continue
                 if answer.get("saved"):
-                    saved.append((file, answer["h"], kind, after))
+                    saved.extend((file, part, kind, text) for part, text in zip(answer["parts"], after.split(BREAK)))
                 else:
                     results[kind, "refused"] += 1
                     results["why", answer["refused"]] += 1
