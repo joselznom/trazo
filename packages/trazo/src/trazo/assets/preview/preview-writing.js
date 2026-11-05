@@ -166,7 +166,8 @@
           writeButton("Open Markdown", () => openSourceAt(ed.el))]
         : [writeButton("Edit Markdown", () => editMarkdown(ed, payload.markdown), payload.markdown === undefined),
           writeButton("Discard", () => discardWriting(ed))]));
-    if (ed.el.tagName === "LI") ed.el.append(ed.bar);
+    if (ed.box) ed.box.prepend(ed.bar);
+    else if (ed.el.tagName === "LI") ed.el.append(ed.bar);
     else ed.el.after(ed.bar);
   }
 
