@@ -17,24 +17,24 @@ from __future__ import annotations
 
 import re
 import subprocess
-from collections.abc import Iterator
 from difflib import SequenceMatcher
 from html.parser import HTMLParser
 from typing import Any
 
-from .edit_diff import Lines
+from . import pandoc_run
+from .counts import VOID
+from .edit_diff import Lines, changes
 from .local_server import Conflict, RequestError
-from .preview_blocks import PROTECTED, QUOTE, Block, atoms_in, blocks_of, escaped
+from .preview_blocks import PROTECTED, QUOTE, Block, atoms, atoms_in, blocks_of, escaped
 from .preview_sources import change_source, get_source, source_path
 
 CHIP_FIRST, OTHER_CHIP_FIRST, CHIP_LAST = 0xE000, 0xF000, 0xF8FE
 ACTIVE = re.compile(r"([\\`*_\[\]{}$@~^<>#|])")
-# Typed text that would start a list, a definition, a line block or a caption.
-LEAD = re.compile(r"^(\s*)(?:([-+:|])(?=\s)|(\d+)([.)])(?=\s)|(Table)(:))")
+# Typed text that would start a list, a definition or a caption: ends in the character to escape.
+LEAD = re.compile(r"^\s*(?:[-+:](?=\s)|(?:\d+|[A-Za-z])[.)](?=\s)|Table:)")
 # What Pandoc's smart typography makes of plain characters, undone.
 TYPOGRAPHY = str.maketrans({"’": "'", "‘": "'", "“": '"', "”": '"', "\u00a0": " "})
 TYPED = str.maketrans({"’": "'", "‘": "'", "“": '"', "”": '"', "—": "---", "–": "--", "…": "..."})
-TOKEN = re.compile(r"\s+|\w+|[^\w\s]")
 MARKERS = ("***", "**", "__", "~~", "*", "_", "~", "^")
 DEFINITION = re.compile(r"(?m)^ {0,3}\[([^\]^]+)\]:.*$")
 SHORTCUT_LINK = re.compile(r"\[([^\[\]]+)\](?![(\[{:])")
@@ -53,17 +53,8 @@ def _masked(source: str) -> str:
 def _squeezed(source: str) -> tuple[str, list[int]]:
     """`source` with each run of spaces as one, and where each character was:
     the page has no trace of the source's line breaks or indents."""
-    out, where, i = [], [], 0
-    while i < len(source):
-        where.append(i)
-        if source[i].isspace():
-            out.append(" ")
-            while i < len(source) and source[i].isspace():
-                i += 1
-        else:
-            out.append(source[i])
-            i += 1
-    return "".join(out), where
+    found = list(re.finditer(r"\s+|\S", source))
+    return "".join(" " if m[0].isspace() else m[0] for m in found), [m.start() for m in found]
 
 
 class _Offsets:
@@ -86,37 +77,26 @@ class _Offsets:
         i = ord(ch) - CHIP_FIRST
         return self.spans[i] if ord(ch) < OTHER_CHIP_FIRST and i < len(self.spans) else None
 
-    def after(self, i: int) -> int | None:
-        """The offset just after character i of the rendered text."""
-        if i < 0:
-            return 0
+    def _edge(self, i: int, side: int) -> int | None:
         if _is_chip(self.before[i]):
             span = self.atom(self.before[i])
-            return span[1] if span else None
-        return self.table[i] + 1 if i in self.table else None
+            return span[side] if span else None
+        return self.table[i] + side if i in self.table else None
+
+    def after(self, i: int) -> int | None:
+        """The offset just after character i of the rendered text."""
+        return 0 if i < 0 else self._edge(i, 1)
 
     def at(self, i: int) -> int | None:
         """The offset of character i of the rendered text."""
-        if i >= len(self.before):
-            return len(self.source)
-        if _is_chip(self.before[i]):
-            span = self.atom(self.before[i])
-            return span[0] if span else None
-        return self.table.get(i)
+        return len(self.source) if i >= len(self.before) else self._edge(i, 0)
 
 
 def _word_changes(old: str, new: str) -> list[tuple[int, int, str]]:
     """Word by word, the changes from `old` to `new`, trimmed to what differs."""
-    a, b = TOKEN.findall(old), TOKEN.findall(new)
-    starts = [0]
-    for token in a:
-        starts.append(starts[-1] + len(token))
     out = []
-    for tag, i, j, x, y in SequenceMatcher(None, a, b, autojunk=False).get_opcodes():
-        if tag == "equal":
-            continue
-        start, end, text = starts[i], starts[j], "".join(b[x:y])
-        gone = old[start:end]
+    for start, end, new_start, new_end in changes(old, new, exact=True):
+        gone, text = old[start:end], new[new_start:new_end]
         head = 0
         while head < min(len(gone), len(text)) and gone[head] == text[head]:
             head += 1
@@ -140,9 +120,7 @@ def _balanced(masked: str, at: int, end: int) -> tuple[int, int]:
 
 def _escaped_text(text: str, starts_line: bool) -> str:
     text = ACTIVE.sub(r"\\\1", text)
-    if starts_line:
-        text = LEAD.sub(lambda m: m[1] + (m[3] or m[5] or "") + "\\" + (m[2] or m[4] or m[6]), text, count=1)
-    return text
+    return LEAD.sub(lambda m: f"{m[0][:-1]}\\{m[0][-1]}", text) if starts_line else text
 
 
 def patch(before: str, after: str, source: str, spans: list[tuple[int, int]],
@@ -192,7 +170,6 @@ def patch(before: str, after: str, source: str, spans: list[tuple[int, int]],
 
 class _Page(HTMLParser):
     """The text of Pandoc's HTML and the tags of its top-level blocks."""
-    EMPTY = ("br", "hr", "img", "wbr")
 
     def __init__(self) -> None:
         super().__init__(convert_charrefs=True)
@@ -203,29 +180,17 @@ class _Page(HTMLParser):
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         if not self.depth:
             self.kinds.append(tag)
-        self.depth += tag not in self.EMPTY
-
-    def handle_startendtag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
-        if not self.depth:
-            self.kinds.append(tag)
+        self.depth += tag not in VOID
 
     def handle_endtag(self, tag: str) -> None:
-        self.depth -= tag not in self.EMPTY
+        self.depth -= tag not in VOID
 
     def handle_data(self, data: str) -> None:
         self.text.append(data)
 
 
-def _atoms(source: str) -> Iterator[re.Match[str]]:
-    return (m for m in PROTECTED.finditer(source) if m["atom"] and not escaped(source, m.start()))
-
-
 def _without_atoms(source: str) -> str:
-    pieces, last = [], 0
-    for m in _atoms(source):
-        pieces.append(source[last:m.start()])
-        last = m.end()
-    return "".join(pieces) + source[last:]
+    return PROTECTED.sub(lambda m: "" if m["atom"] and not escaped(source, m.start()) else m[0], source)
 
 
 def _comparable(text: str) -> str:
@@ -237,18 +202,20 @@ def _alone(block: str, definitions: str) -> tuple[str, list[str]]:
     """What a block without its atoms reads built alone, and its kind."""
     from . import preview
     source = _without_atoms(QUOTE_LINE.sub("", block))
-    result = subprocess.run([*preview.PROJECT.command("pandoc"), "--from=markdown", "--to=html", "--wrap=none"],
-                            input=f"{source}\n\n{definitions}", capture_output=True, encoding="utf-8",
-                            cwd=preview.ROOT, timeout=CHECK_TIMEOUT, check=True)
+    result = pandoc_run.run(["--from=markdown", "--to=html", "--wrap=none"],
+                            input=f"{source}\n\n{definitions}".encode(), timeout=CHECK_TIMEOUT,
+                            command=preview.PROJECT.command("pandoc"), cwd=preview.ROOT)
+    if result.returncode:
+        raise OSError(pandoc_run.decode(result.stderr))
     page = _Page()
-    page.feed(result.stdout)
+    page.feed(pandoc_run.decode(result.stdout))
     return _comparable("".join(page.text)), page.kinds
 
 
 def check(before: str, after: str, source: str, patched: str, definitions: str) -> str:
     """Why `patched` is not what the author left on the page ("" if it is)."""
-    remaining = iter(m[0] for m in _atoms(source))
-    if not all(m[0] in remaining for m in _atoms(patched)):
+    remaining = iter(m[0] for m in atoms(source))
+    if not all(m[0] in remaining for m in atoms(patched)):
         return "a locked element would change"
     try:
         text, kinds = _alone(source, definitions)
@@ -311,8 +278,9 @@ def change_block(request: Any) -> dict[str, Any]:
         if patched is None:
             return {"refused": why, "file": file, "markdown": source}
         new = patched
+    if new == source:
+        return {"saved": True, "file": file, "markdown": new, "h": block.key}
     changed = text[:block.at] + new + text[block.end:]
-    if new != source:
-        change_source({"file": file, "text": changed, "base_sha256": state["sha256"]})
+    change_source({"file": file, "text": changed, "base_sha256": state["sha256"]})
     keys = [b.key for b in blocks_of(changed) if b.at == block.at]
     return {"saved": True, "file": file, "markdown": new, "h": keys[0] if keys else ""}

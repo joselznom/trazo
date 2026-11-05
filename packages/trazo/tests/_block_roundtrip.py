@@ -25,10 +25,12 @@ NESTED_BLOCKS = {"ul", "ol", "dl", "blockquote"}
 # Chips the page has that the build did not wrap: the viewer locks them too.
 OTHER_CHIP_CLASSES = {"citation", "pv-val", "math", "footnote-ref"}
 SMART = str.maketrans({"’": "'", "‘": "'", "“": '"', "”": '"', "—": "---", "–": "--", "…": "..."})
-# Most common first: test_preview_blocks.py holds the first ones to a stricter rate.
-COMMON = ("replace", "typo", "insert", "delete", "active", "sentence", "multi", "typed")
-KINDS = (*COMMON, "chip", "rewrite", "start-list", "start-head", "start-bullet", "start-quote", "start-table")
 PREFIXES = {"start-list": "1. ", "start-head": "# ", "start-bullet": "- ", "start-quote": "> ", "start-table": "Table: "}
+INSERTS = {"insert": "Zqxnew ", "active": "p<0.05, 5*3, a_b, $5 and [x] @y ~z^ ",
+           "sentence": "A brand new clause, with commas; and “quotes”. ", "typed": "don't say \"this\" -- or that... "}
+# Most common first: test_preview_blocks.py holds these to a stricter rate.
+COMMON = ("replace", "typo", "delete", "multi", *INSERTS)
+KINDS = (*COMMON, "chip", "rewrite", *PREFIXES)
 
 
 @dataclass
@@ -65,9 +67,6 @@ class _Tree(HTMLParser):
         self.at.children.append(node)
         if tag not in EMPTY:
             self.at = node
-
-    def handle_startendtag(self, tag, attrs):
-        self.at.children.append(Node(tag, {k: v or "" for k, v in attrs}, self.at))
 
     def handle_endtag(self, tag):
         node = self.at
@@ -134,8 +133,10 @@ def edited(kind: str, text: str, rng: random.Random) -> str | None:
     words = list(re.finditer(r"[^\W\d_]{3,}", text))
     if kind == "chip":
         chips = [i for i, ch in enumerate(text) if CHIP <= ord(ch) < OTHER_CHIP]
-        at = rng.choice(chips) if chips else None
-        return None if at is None else squash(text[:at] + text[at + 1:])
+        if not chips:
+            return None
+        at = rng.choice(chips)
+        return squash(text[:at] + text[at + 1:])
     if kind == "rewrite":
         return "Fully rewritten paragraph " + " and ".join(ch for ch in text if ord(ch) >= CHIP and ord(ch) < 0xF8FF) + " with new words."
     if kind in PREFIXES:
@@ -148,16 +149,10 @@ def edited(kind: str, text: str, rng: random.Random) -> str | None:
         return text[:a] + "Zqxword" + text[b:]
     if kind == "typo":
         return text[:a + 1] + "q" + text[a + 1:]
-    if kind == "insert":
-        return text[:a] + "Zqxnew " + text[a:]
+    if kind in INSERTS:
+        return text[:a] + INSERTS[kind] + text[a:]
     if kind == "delete":
         return text[:a] + text[b + 1 if b < len(text) and text[b] == " " else b:]
-    if kind == "active":
-        return text[:a] + "p<0.05, 5*3, a_b, $5 and [x] @y ~z^ " + text[a:]
-    if kind == "sentence":
-        return text[:a] + "A brand new clause, with commas; and “quotes”. " + text[a:]
-    if kind == "typed":
-        return text[:a] + "don't say \"this\" -- or that... " + text[a:]
     if len(words) < 2:
         return None
     first, second = sorted(rng.sample(words, 2), key=lambda m: m.start())

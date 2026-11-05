@@ -10,7 +10,7 @@ from unittest.mock import patch
 import _block_roundtrip as roundtrip
 import _support
 
-from trazo import preview, preview_block_save, preview_blocks, preview_edit_review, preview_render
+from trazo import edit_diff, preview, preview_block_save, preview_blocks, preview_edit_review, preview_render
 
 SYNTAX = Path(__file__).with_name("_block_syntax.md")
 CHAPTER = "manuscript/main/02_syntax.md"
@@ -40,6 +40,12 @@ class BlockTests(unittest.TestCase):
     def test_equal_blocks_have_different_keys(self):
         first, second = preview_blocks.blocks_of("Same.\n\nSame.\n")
         self.assertNotEqual(first.key, second.key)
+
+    def test_each_atom_of_a_block_gets_a_span_of_its_own(self):
+        text = "Code `x_1 * y`, math $a^2$, a note^[Text.], {{v:n}}, [@a], @b [p. 3] and ![i](a.png){height=1em}.\n"
+        wrapped = edit_diff.with_marks(text, preview_blocks.marks(text, "a.md"))
+        self.assertEqual(wrapped.count("pv-atom"), 7)
+        self.assertIn('<span class="pv-atom" data-i="5">@b [p. 3]</span>', wrapped)
 
     def test_a_line_ending_is_not_part_of_a_block_in_a_windows_file(self):
         self.assertEqual(self.blocks("One\r\ntwo.\r\n\r\nThree.\r\n"), ["One\r\ntwo.", "Three."])

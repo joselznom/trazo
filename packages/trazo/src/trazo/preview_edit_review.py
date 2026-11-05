@@ -116,7 +116,7 @@ def reader() -> tuple[Callable[[Path], str] | None, Callable[[], None]]:
             return text
         found = pending(store, name, text)
         seen[name] = [e.id for e in found]
-        return edit_diff.marked(text, found, preview_blocks.marks(text, name))
+        return edit_diff.with_marks(text, edit_diff.edit_marks(text, found) + preview_blocks.marks(text, name))
 
     def done() -> None:
         stamp = time.strftime("%Y-%m-%d %H:%M:%S")

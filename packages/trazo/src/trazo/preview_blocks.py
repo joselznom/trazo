@@ -17,6 +17,7 @@ from __future__ import annotations
 import hashlib
 import re
 from collections import Counter
+from collections.abc import Iterator
 from dataclasses import dataclass
 
 from . import edit_diff
@@ -96,17 +97,22 @@ def escaped(text: str, at: int) -> bool:
     return run % 2 == 1
 
 
+def atoms(text: str, start: int = 0, end: int | None = None) -> Iterator[re.Match[str]]:
+    """The atoms of text[start:end]."""
+    return (m for m in PROTECTED.finditer(text, start, len(text) if end is None else end)
+            if m["atom"] and not escaped(text, m.start()))
+
+
 def atoms_in(text: str, block: Block, lines: edit_diff.Lines) -> list[tuple[int, int, bool]]:
     """(start, end, bare) of each atom of a block a span may wrap; `bare` is a
     citation without brackets, which a bracketed span would change."""
-    return [(m.start(), m.end(), m.group(0)[0] in "@-")
-            for m in PROTECTED.finditer(text, block.at, block.end)
-            if m["atom"] and not escaped(text, m.start()) and lines.inline(*m.span())]
+    return [(m.start(), m.end(), m[0][0] in "@-") for m in atoms(text, block.at, block.end) if lines.holds(*m.span())]
 
 
 def marks(text: str, name: str) -> list[tuple[int, int, str]]:
-    """The marks of a file's blocks for trazo.edit_diff.marked. An atom's span
-    goes inside any edit span that starts or ends with it."""
+    """The marks of a file's blocks for trazo.edit_diff.with_marks. An atom's
+    span has orders -1 and 4 to go inside an edit's span that starts or ends
+    with it."""
     if UNQUOTABLE.search(name):
         return []
     lines = edit_diff.Lines(text)
