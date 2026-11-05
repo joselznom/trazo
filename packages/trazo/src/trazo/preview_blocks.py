@@ -7,9 +7,10 @@ value, math, code, note call, inline image) in a span, so a locked chip on the
 page and its Markdown are one to one. The Word build never sees these marks.
 trazo.preview_block_save writes an edit of the page back to the block.
 
-A key is a hash of the block's text, its number among equal blocks and how many
-there are, so a change elsewhere in the file leaves the key valid, a change to
-the block does not, and a key cannot pass to a twin when one of them changes.
+A key is a hash of the block's text, so a change elsewhere in the file leaves
+it valid and a change to the block does not. Text alone cannot tell equal blocks
+apart, so their keys also hold their number and a hash of the whole file: any
+change to the file ends them, rather than passing one to a twin.
 Text whose reading a mark could change gets none: it is not a block.
 """
 
@@ -58,6 +59,10 @@ class Block:
     key: str
 
 
+def _digest(text: str) -> str:
+    return hashlib.sha1(text.encode("utf-8")).hexdigest()[:12]
+
+
 def _starts_item(line: str) -> bool:
     quote = QUOTE.match(line)
     return bool(ITEM.match(line[quote.end():] if quote else line))
@@ -81,11 +86,12 @@ def blocks_of(text: str, lines: edit_diff.Lines | None = None) -> list[Block]:
                 and not (last > i and SETEXT.fullmatch(lines.lines[i + 1]))):
             found.append((at, lines.starts[last] + len(lines.lines[last].rstrip("\r"))))
         i = last + 1
-    digests = [hashlib.sha1(text[at:end].encode("utf-8")).hexdigest()[:12] for at, end in found]
+    digests = [_digest(text[at:end]) for at, end in found]
     total, seen = Counter(digests), Counter[str]()
+    revision = _digest(text) if len(total) < len(digests) else ""
     blocks = []
     for (at, end), digest in zip(found, digests):
-        blocks.append(Block(at, end, f"{digest}-{seen[digest]}-{total[digest]}"))
+        blocks.append(Block(at, end, digest if total[digest] == 1 else f"{digest}-{seen[digest]}-{revision}"))
         seen[digest] += 1
     return blocks
 

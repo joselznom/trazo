@@ -191,8 +191,9 @@ def run(doc: str, rounds: int, out_dir: Path) -> tuple[Counter, list[tuple[str, 
                     continue
                 try:
                     answer = preview_block_save.change_block({"file": file, "h": key, "before": before, "after": after})
-                except Conflict:  # an equal block was saved first, and the page has not caught up
-                    answer = {"refused": "conflict"}
+                except Conflict:  # a key of equal blocks: the page has not caught up with this round's saves
+                    results["why", "the file changed"] += 1
+                    continue
                 if answer.get("saved"):
                     saved.append((file, answer["h"], kind, after))
                 else:

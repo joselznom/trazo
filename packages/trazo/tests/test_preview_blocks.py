@@ -37,9 +37,10 @@ class BlockTests(unittest.TestCase):
         self.assertEqual(after[1].key, before[0].key)
         self.assertNotEqual(after[2].key, before[1].key)
 
-    def test_equal_blocks_have_different_keys(self):
+    def test_equal_blocks_have_keys_of_their_own_that_any_change_ends(self):
         first, second = preview_blocks.blocks_of("Same.\n\nSame.\n")
         self.assertNotEqual(first.key, second.key)
+        self.assertNotIn(first.key, [b.key for b in preview_blocks.blocks_of("Same.\n\nSame.\n\nNew.\n")])
 
     def test_each_atom_of_a_block_gets_a_span_of_its_own(self):
         text = "Code `x_1 * y`, math $a^2$, a note^[Text.], {{v:n}}, [@a], @b [p. 3] and ![i](a.png){height=1em}.\n"
@@ -149,12 +150,11 @@ class SaveTests(unittest.TestCase):
         self.assertEqual(self.chapter.read_text(encoding="utf-8"), "Onetwo.\n")
 
     def test_a_stale_save_cannot_land_on_an_equal_paragraph(self):
-        text = "Same.\n\nSame.\n"
-        key = next(k for (_, k), node in roundtrip.page_blocks(self.page(text)).items())
-        self.chapter.write_text("Changed.\n\nSame.\n", encoding="utf-8")
+        key, rendered = self.block("Same.\n\nOther.\n\nSame.\n", "Same")
+        self.chapter.write_text("Changed.\n\nSame.\n\nSame.\n", encoding="utf-8")
         with self.assertRaises(preview.Conflict):
-            self.save(key, "Same.", "Mine.")
-        self.assertEqual(self.chapter.read_text(encoding="utf-8"), "Changed.\n\nSame.\n")
+            self.save(key, rendered, "Mine.")
+        self.assertEqual(self.chapter.read_text(encoding="utf-8"), "Changed.\n\nSame.\n\nSame.\n")
 
     def test_a_save_is_the_authors_own_and_can_be_undone(self):
         text = "The quick fox.\n"
