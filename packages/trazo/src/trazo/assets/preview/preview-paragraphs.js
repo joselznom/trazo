@@ -15,16 +15,25 @@
     return textOf(head.cloneContents()) === "";
   }
 
-  // Whether the caret cannot go any further inside the paragraph this way.
-  function atEdge(forward, unit) {
-    const selection = getSelection();
-    if (!selection.isCollapsed) return false;
-    const was = selection.getRangeAt(0).cloneRange();
-    selection.modify("move", forward ? "forward" : "backward", unit);
-    const stayed = selection.focusNode === was.startContainer && selection.focusOffset === was.startOffset;
+  function atEnd(ed) {
+    const tail = getSelection().getRangeAt(0).cloneRange();
+    tail.setEnd(ed.el, ed.el.childNodes.length);
+    return textOf(tail.cloneContents()) === "";
+  }
+
+  // Whether the caret is on the paragraph's first or last line: a move by a line stays on it.
+  function onLastLine(ed, forward) {
+    const selection = getSelection(), was = selection.getRangeAt(0).cloneRange();
+    const top = () => {
+      const range = selection.getRangeAt(0);
+      return (range.getClientRects()[0] || ed.el.getBoundingClientRect()).top;
+    };
+    const from = top();
+    selection.modify("move", forward ? "forward" : "backward", "line");
+    const moved = Math.abs(top() - from);
     selection.removeAllRanges();
     selection.addRange(was);
-    return stayed;
+    return moved < parseFloat(getComputedStyle(ed.el).fontSize) * 0.6;
   }
 
   function caretAtEdge(el, atEnd) {
@@ -153,9 +162,9 @@
     } else if (e.key === "Backspace" && plain && getSelection().isCollapsed && atStart(writing)) {
       e.preventDefault();
       joinBack();
-    } else if (plain && e.key.startsWith("Arrow")) {
+    } else if (plain && e.key.startsWith("Arrow") && getSelection().isCollapsed) {
       const forward = e.key === "ArrowDown" || e.key === "ArrowRight";
-      const unit = e.key === "ArrowUp" || e.key === "ArrowDown" ? "line" : "character";
-      if (atEdge(forward, unit) && goTo(forward)) e.preventDefault();
+      const edge = e.key === "ArrowLeft" ? atStart(writing) : e.key === "ArrowRight" ? atEnd(writing) : onLastLine(writing, forward);
+      if (edge && goTo(forward)) e.preventDefault();
     }
   }, true);
