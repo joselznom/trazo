@@ -10,10 +10,10 @@ exactly what the author left on the page, keep its kind, and keep the source
 of its chips. If not, nothing is written and the answer says why ({refused,
 markdown}). {file, h, markdown} replaces the block with Markdown the author
 wrote, unchecked. A block that changed on disk answers 409, unless the author
-chose to keep their text ({source}, the Markdown it started from, which GET
-/__block?file&h gives): the edit is then merged into the block most like it. A
-save goes through change_source, so it has an undo and counts as the author's
-own change.
+chose to keep their text ({keep: true}): the edit is then made to the Markdown
+the key stood for (trazo.preview_blocks.SOURCES) and merged into the block most
+like it. A save goes through change_source, so it has an undo and counts as the
+author's own change.
 """
 
 from __future__ import annotations
@@ -28,7 +28,7 @@ from . import pandoc_run
 from .counts import VOID
 from .edit_diff import Lines, changes, merge
 from .local_server import Conflict, RequestError
-from .preview_blocks import PROTECTED, QUOTE, Block, atoms, atoms_in, blocks_of, escaped
+from .preview_blocks import PROTECTED, QUOTE, SOURCES, Block, atoms, atoms_in, blocks_of, escaped
 from .preview_sources import change_source, get_source, source_path
 
 CHIP_FIRST, OTHER_CHIP_FIRST, CHIP_LAST = 0xE000, 0xF000, 0xF8FE
@@ -271,9 +271,9 @@ def _spans(text: str, block: Block, lines: Lines) -> list[tuple[int, int]]:
 def _kept_mine(request: dict[str, Any], text: str, sha256: str) -> tuple[Block, str | None, str]:
     """The block most like the one the author started from, with their edit
     merged in, or None and why not: where both changed the same words, theirs stay."""
-    source = request["source"]
-    if not isinstance(source, str):
-        raise RequestError("source must be a string")
+    source = SOURCES.get(request.get("h"))
+    if source is None:
+        raise Conflict("the preview no longer knows this paragraph", sha256=sha256)
     matcher = SequenceMatcher(None, autojunk=False)
     matcher.set_seq2(source.split())
 
@@ -284,16 +284,16 @@ def _kept_mine(request: dict[str, Any], text: str, sha256: str) -> tuple[Block, 
     if block is None or likeness(block) < SAME_BLOCK:
         raise Conflict("this paragraph is no longer in the file", sha256=sha256)
     alone = Block(0, len(source), "")
-    patched, why = _rewritten(request, text, source, _spans(source, alone, Lines(source)))
+    patched, why = (_markdown(request), "") if "markdown" in request else (
+        _rewritten(request, text, source, _spans(source, alone, Lines(source))))
     return block, None if patched is None else merge(source, text[block.at:block.end], patched), why
 
 
-def get_block(file: Any, key: Any) -> dict[str, Any]:
-    """The Markdown of a block, which the viewer keeps while it is written in."""
-    _, file = source_path(file)
-    state = get_source(file)
-    block, _ = _find(state["text"], key, state["sha256"])
-    return {"file": file, "markdown": state["text"][block.at:block.end]}
+def _markdown(request: dict[str, Any]) -> str:
+    markdown = request["markdown"]
+    if not isinstance(markdown, str):
+        raise RequestError("markdown must be a string")
+    return markdown
 
 
 def change_block(request: Any) -> dict[str, Any]:
@@ -306,16 +306,12 @@ def change_block(request: Any) -> dict[str, Any]:
     try:
         block, lines = _find(text, request.get("h"), state["sha256"])
     except Conflict:
-        if "source" not in request:
+        if not request.get("keep"):
             raise
         block, new, why = _kept_mine(request, text, state["sha256"])
     else:
-        if "markdown" in request:
-            new, why = request["markdown"], ""
-            if not isinstance(new, str):
-                raise RequestError("markdown must be a string")
-        else:
-            new, why = _rewritten(request, text, text[block.at:block.end], _spans(text, block, lines))
+        new, why = (_markdown(request), "") if "markdown" in request else (
+            _rewritten(request, text, text[block.at:block.end], _spans(text, block, lines)))
     source = text[block.at:block.end]
     if new is None:
         return {"refused": why, "file": file, "markdown": source}

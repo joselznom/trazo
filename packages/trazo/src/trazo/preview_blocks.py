@@ -49,6 +49,12 @@ RULE = re.compile(r"[ \t]{0,3}(?:(?:-[ \t]*){3,}|(?:\*[ \t]*){3,}|(?:_[ \t]*){3,
 SETEXT = re.compile(r"[ \t]*(?:=+|-+)[ \t\r]*")
 # A name that could not sit in the mark's quoted attribute: its file gets no marks.
 UNQUOTABLE = re.compile(r'["\\\n]')
+# Key -> the Markdown of each block marked since the preview started, oldest first. A
+# page can be older than the last build, and an author keeping their text over a
+# change on disk needs the Markdown that text came from. A key is a hash of it, so
+# an entry never goes stale; the limit is a few builds of a long thesis.
+SOURCES: dict[str, str] = {}
+SOURCES_LIMIT = 50_000
 
 
 @dataclass(frozen=True)
@@ -125,8 +131,11 @@ def marks(text: str, name: str) -> list[tuple[int, int, str]]:
     lines = edit_diff.Lines(text)
     out = []
     for block in blocks_of(text, lines):
+        SOURCES[block.key] = text[block.at:block.end]
         out.append((block.at, 1, f'[]{{.pv-src data-file="{name}" data-h="{block.key}"}}'))
         for i, (start, end, bare) in enumerate(atoms_in(text, block, lines)):
             out.append((start, 4, f'<span class="pv-atom" data-i="{i}">' if bare else "["))
             out.append((end, -1, "</span>" if bare else f']{{.pv-atom data-i="{i}"}}'))
+    for key in list(SOURCES)[:max(0, len(SOURCES) - SOURCES_LIMIT)]:
+        del SOURCES[key]
     return out

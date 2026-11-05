@@ -190,10 +190,17 @@ class SaveTests(unittest.TestCase):
         key, rendered = self.block(text, "quick")
         self.chapter.write_text("The quick brown fox jumps over the sleepy dog.\n", encoding="utf-8")
         answer = preview.post_route("/__block", lambda: {
-            "file": CHAPTER, "h": key, "before": rendered, "after": rendered.replace("quick", "slow"),
-            "source": text.strip()})()
+            "file": CHAPTER, "h": key, "before": rendered, "after": rendered.replace("quick", "slow"), "keep": True})()
         self.assertTrue(answer["saved"])
         self.assertEqual(self.chapter.read_text(encoding="utf-8"), "The slow brown fox jumps over the sleepy dog.\n")
+
+    def test_keeping_markdown_merges_it_into_the_paragraph_as_it_is_now(self):
+        text = "The quick brown fox jumps over the lazy dog.\n"
+        key, _ = self.block(text, "quick")
+        self.chapter.write_text("The quick brown fox jumps over the sleepy dog.\n", encoding="utf-8")
+        preview.post_route("/__block", lambda: {
+            "file": CHAPTER, "h": key, "markdown": "The *slow* brown fox jumps over the lazy dog.", "keep": True})()
+        self.assertEqual(self.chapter.read_text(encoding="utf-8"), "The *slow* brown fox jumps over the sleepy dog.\n")
 
     def test_keeping_mine_needs_the_paragraph_to_still_be_there(self):
         text = "The quick brown fox jumps over the lazy dog.\n"
@@ -201,15 +208,12 @@ class SaveTests(unittest.TestCase):
         self.chapter.write_text("Nothing at all alike here, 12345.\n", encoding="utf-8")
         with self.assertRaises(preview.Conflict):
             preview.post_route("/__block", lambda: {"file": CHAPTER, "h": key, "before": rendered, "after": "Mine.",
-                                                    "source": text.strip()})()
+                                                    "keep": True})()
 
-    def test_the_viewer_can_ask_for_a_blocks_markdown(self):
-        text = "The *quick* fox.\n"
-        key, _ = self.block(text, "quick")
-        self.assertEqual(preview.get_block(CHAPTER, key)["markdown"], "The *quick* fox.")
-        self.chapter.write_text("Other.\n", encoding="utf-8")
+    def test_keeping_mine_needs_a_key_the_preview_marked(self):
+        self.chapter.write_text("The quick fox.\n", encoding="utf-8")
         with self.assertRaises(preview.Conflict):
-            preview.get_block(CHAPTER, key)
+            preview.post_route("/__block", lambda: {"file": CHAPTER, "h": "unknown", "before": "a", "after": "b", "keep": True})()
 
     def test_a_paragraph_the_page_shows_differently_is_refused_with_its_markdown(self):
         text = "A sentence here.\n"

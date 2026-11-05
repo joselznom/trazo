@@ -136,6 +136,24 @@ class WritingTests(PreviewBrowserTestCase):
         self.wait_for("!document.querySelector('.pv-write-box') && !document.querySelector('.pv-write-bar')")
         self.assertEqual(self.source(), "Plain *new* words.\n")
 
+    def test_markdown_that_cannot_be_saved_stays_and_can_be_kept(self):
+        self.build("Plain words here today.\n")
+        with patch("trazo.preview_block_save.check", lambda *args: "it does not read the same"):
+            self.write_in("words")
+            self.type("my ")
+            self.leave()
+            self.wait_for("document.querySelector('.pv-write-bar')")
+        self.evaluate("[...document.querySelectorAll('.pv-write-bar button')].find(b => b.textContent === 'Edit Markdown').click()")
+        self.wait_for("document.activeElement.classList.contains('pv-write-md')")
+        self.evaluate("document.activeElement.value = 'Plain *new* words here today.'")
+        self.chapter.write_text("Plain words here tomorrow.\n", encoding="utf-8")
+        self.evaluate("[...document.querySelectorAll('.pv-write-box button')].find(b => b.textContent === 'Save').click()")
+        self.wait_for("document.querySelector('.pv-write-bar')?.textContent.includes('changed on disk')")
+        self.assertEqual(self.evaluate("document.querySelector('.pv-write-md').value"), "Plain *new* words here today.")
+        self.evaluate("[...document.querySelectorAll('.pv-write-bar button')].find(b => b.textContent === 'Keep mine').click()")
+        self.wait_for("!document.querySelector('.pv-write-box') && !document.querySelector('.pv-write-bar')")
+        self.assertEqual(self.source(), "Plain *new* words here tomorrow.\n")
+
     def test_a_paragraph_changed_on_disk_keeps_the_text_until_the_author_picks(self):
         text = "The quick brown fox jumps over the lazy dog.\n"
         for choice, result in (("Keep mine", "The slow quick brown fox jumps over the sleepy dog.\n"),
@@ -150,9 +168,8 @@ class WritingTests(PreviewBrowserTestCase):
                     if (at >= 0) { getSelection().collapse(walker.currentNode, at); return; }
                   }
                 })()""")
-                self.type("slow ")
-                self.wait_for("writing.source")  # asked for when the writing started
                 self.chapter.write_text(text.replace("lazy", "sleepy"), encoding="utf-8")
+                self.type("slow ")
                 self.leave()
                 self.wait_for("document.querySelector('.pv-write-bar')")
                 self.assertIn("changed on disk", self.evaluate("document.querySelector('.pv-write-bar').textContent"))

@@ -82,7 +82,7 @@
     if (ed) clearFailure(ed);
     else {
       dropLineBreaks(el);
-      ed = { el, mark, before: textOf(el), restore: snapshotOf(el), source: null, asked: false };
+      ed = { el, mark, before: textOf(el), restore: snapshotOf(el) };
     }
     ed.locked = [...el.querySelectorAll(`.pv-atom, ${OTHER_CHIPS}, ${NOT_TEXT}`)];
     for (const node of ed.locked) node.contentEditable = "false";
@@ -100,15 +100,6 @@
     for (const node of ed.locked) node.removeAttribute("contenteditable");
     forgetPageText();
     return ed;
-  }
-
-  // "Keep mine" needs the Markdown this text came from, asked for when the typing starts.
-  function askSource(ed) {
-    ed.asked = true;
-    const { file, h: key } = ed.mark.dataset;
-    postJson(`/__block?file=${encodeURIComponent(file)}&h=${encodeURIComponent(key)}`)
-      .then(({ ok, payload }) => { if (ok) ed.source = payload.markdown; })
-      .catch(() => {});
   }
 
   function clearFailure(ed) {
@@ -139,6 +130,7 @@
 
   function blockSaved(ed, payload) {
     clearFailure(ed);
+    closeMarkdown(ed);
     ed.mark.dataset.h = payload.h;
     // Until the page reloads, the chips left are numbered as the Markdown is.
     $$(".pv-atom", ed.el).forEach((chip, i) => { chip.dataset.i = String(i); });
@@ -147,6 +139,7 @@
 
   function discardWriting(ed) {
     clearFailure(ed);
+    closeMarkdown(ed);
     ed.restore();
     forgetPageText();
     showSaveState("", false);
@@ -168,7 +161,7 @@
       : `Not saved: ${payload.refused || payload.error || "the server refused"}.`;
     ed.bar = h("div", { class: "pv-write-bar", role: "alert", contenteditable: "false" }, h("span", { text }),
       ...(changed
-        ? [writeButton("Keep mine", () => saveBlock(ed, { source: ed.source }), !ed.source),
+        ? [writeButton("Keep mine", () => (ed.area ? sendBlock(ed, { keep: true, markdown: ed.area.value }) : saveBlock(ed, { keep: true }))),
           writeButton("Take the file's", () => discardWriting(ed)),
           writeButton("Open Markdown", () => openSourceAt(ed.el))]
         : [writeButton("Edit Markdown", () => editMarkdown(ed, payload.markdown), payload.markdown === undefined),
@@ -177,18 +170,24 @@
     else ed.el.after(ed.bar);
   }
 
-  // Plan B: the block's Markdown in place of its text.
+  // Plan B: the block's Markdown in place of its text, there until it is saved.
   function editMarkdown(ed, markdown) {
-    const area = h("textarea", { class: "pv-write-md", "aria-label": "Markdown of this paragraph" });
+    const area = ed.area = h("textarea", { class: "pv-write-md", "aria-label": "Markdown of this paragraph" });
     area.value = markdown;
     area.rows = Math.max(3, Math.ceil(markdown.length / 70));
-    const close = () => { box.remove(); ed.el.hidden = false; };
-    const box = h("div", { class: "pv-write-box" }, area, h("div", { class: "pv-actions" },
-      writeButton("Cancel", close),
-      writeButton("Save", () => { close(); sendBlock(ed, { markdown: area.value }); })));
+    ed.box = h("div", { class: "pv-write-box" }, area, h("div", { class: "pv-actions" },
+      writeButton("Cancel", () => closeMarkdown(ed)),
+      writeButton("Save", () => { if (!saves) sendBlock(ed, { markdown: area.value }); })));
     ed.el.hidden = true;
-    ed.el.after(box);
+    ed.el.after(ed.box);
     area.focus();
+  }
+
+  function closeMarkdown(ed) {
+    if (!ed.box) return;
+    ed.box.remove();
+    ed.box = ed.area = null;
+    ed.el.hidden = false;
   }
 
   document.addEventListener("mouseup", (e) => {
@@ -211,11 +210,7 @@
     if (writing && e.target === writing.el && document.hasFocus()
         && !(e.relatedTarget && writing.el.contains(e.relatedTarget))) saveBlock(stopWriting());
   });
-  page.addEventListener("input", () => {
-    if (!writing) return;
-    fab.hidden = true;
-    if (!writing.asked) askSource(writing);
-  });
+  page.addEventListener("input", () => { if (writing) fab.hidden = true; });
   document.addEventListener("keydown", (e) => {
     if (!writing) return;
     if (e.key === "Escape") {
