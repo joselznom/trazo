@@ -265,8 +265,10 @@ def _find(text: str, key: Any, sha256: str) -> tuple[Block, Lines]:
     raise Conflict("this paragraph changed on disk", sha256=sha256)
 
 
-def _rewritten(request: dict[str, Any], text: str, source: str, spans: list[tuple[int, int]]) -> tuple[str | None, str]:
-    """`source` with the author's edit, or None and why not. `text` is its file."""
+def _rewritten(request: dict[str, Any], text: str, source: str, spans: list[tuple[int, int]],
+               lead: tuple[str, str] = ("", "")) -> tuple[str | None, str]:
+    """`source` with the author's edit, or None and why not. `text` is its file,
+    and `lead` the rendered text and Markdown of a block it joins."""
     before, after = _squashed(request, "before"), _squashed(request, "after")
     if not after:
         return "", ""
@@ -277,8 +279,9 @@ def _rewritten(request: dict[str, Any], text: str, source: str, spans: list[tupl
     first, *others = patched.split(BREAK)
     patched = BREAK.join([first, *map(_lead_escaped, others)])
     definitions = "\n".join(m[0] for m in DEFINITION.finditer(text))
-    why = check(before, after, source, patched, definitions)
-    return (None, why) if why else (patched, "")
+    shown, written = lead
+    why = check(shown + before, shown + after, written + source, written + patched, definitions)
+    return (None, why) if why else (written + patched, "")
 
 
 def _spans(text: str, block: Block, lines: Lines) -> list[tuple[int, int]]:
@@ -316,22 +319,18 @@ def _markdown(request: dict[str, Any]) -> str:
 
 
 def _joined(request: dict[str, Any], text: str, block: Block, lines: Lines, sha256: str) -> tuple[Block, str | None, str]:
-    """The block before this one, and this one's Markdown to follow it, or None and why not."""
+    """The span of this block and the one before it, and their Markdown joined, or None and why not."""
     blocks = blocks_of(text, lines)
     at = blocks.index(block)
     previous = blocks[at - 1] if at else None
     if previous is None or previous.key != request["into"]:
         raise Conflict("the paragraph before this one changed on disk", sha256=sha256)
+    both = Block(previous.at, block.end, previous.key)
     if not GAP.fullmatch(text, previous.end, block.at):
-        return previous, None, "there is something between these two paragraphs"
-    new, why = _rewritten(request, text, text[block.at:block.end], _spans(text, block, lines))
-    if not new:
-        return previous, None, why or "there is nothing to join"
-    left, first = _squashed(request, "previous"), text[previous.at:previous.end]
-    definitions = "\n".join(m[0] for m in DEFINITION.finditer(text))
-    why = check(f"{left} {_squashed(request, 'before')}", f"{left} {_squashed(request, 'after')}",
-                f"{first} {text[block.at:block.end]}", f"{first} {new}", definitions)
-    return previous, None if why else new, why
+        return both, None, "there is something between these two paragraphs"
+    lead = (f"{_squashed(request, 'previous')} ", f"{text[previous.at:previous.end]} ")
+    new, why = _rewritten(request, text, text[block.at:block.end], _spans(text, block, lines), lead)
+    return both, new or None, why or ("" if new else "there is nothing to join")
 
 
 def _between(text: str, block: Block) -> str:
@@ -371,12 +370,9 @@ def change_block(request: Any) -> dict[str, Any]:
         if not request.get("keep"):
             raise
         block, new, why = _kept_mine(request, text, state["sha256"])
-        first, start = block.at, block.at
     else:
-        first, start = block.at, block.at
         if "into" in request:
-            previous, new, why = _joined(request, text, block, lines, state["sha256"])
-            first, start, new = previous.at, previous.end, None if new is None else f" {new}"
+            block, new, why = _joined(request, text, block, lines, state["sha256"])
         else:
             new, why = (_markdown(request), "") if "markdown" in request else (
                 _rewritten(request, text, text[block.at:block.end], _spans(text, block, lines)))
@@ -384,12 +380,10 @@ def change_block(request: Any) -> dict[str, Any]:
     if new is None:
         return {"refused": why, "file": file, "markdown": source}
     if new == source:
-        return {"saved": True, "file": file, "markdown": new, "h": block.key, "parts": [block.key]}
-    end = block.end
-    if not new:
-        start, end = _whole_lines(text, block)
+        return {"saved": True, "file": file, "markdown": new, "parts": [block.key]}
+    start, end = (block.at, block.end) if new else _whole_lines(text, block)
     written = new.replace(BREAK, _between(text, block))
     changed = text[:start] + written + text[end:]
     change_source({"file": file, "text": changed, "base_sha256": state["sha256"]})
-    parts = [b.key for b in blocks_of(changed) if first <= b.at < start + len(written)]
-    return {"saved": True, "file": file, "markdown": written, "h": parts[0] if parts else "", "parts": parts}
+    parts = [b.key for b in blocks_of(changed) if start <= b.at < start + len(written)]
+    return {"saved": True, "file": file, "markdown": written, "parts": parts}

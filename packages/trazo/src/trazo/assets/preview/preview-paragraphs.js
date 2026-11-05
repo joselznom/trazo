@@ -8,18 +8,14 @@
   // ---------------------------------------------------------------- paragraphs
   const SUBLIST = ":scope > ul, :scope > ol, :scope > dl";
 
-  // Whether nothing of the paragraph comes before the caret.
-  function atStart(ed) {
-    const head = getSelection().getRangeAt(0).cloneRange();
-    head.setStart(ed.el, 0);
-    return textOf(head.cloneContents()) === "";
+  // The paragraph from the caret to its end, or to its start.
+  function restOf(ed, forward) {
+    const range = getSelection().getRangeAt(0).cloneRange();
+    if (forward) range.setEnd(ed.el, ed.el.childNodes.length);
+    else range.setStart(ed.el, 0);
+    return range;
   }
-
-  function atEnd(ed) {
-    const tail = getSelection().getRangeAt(0).cloneRange();
-    tail.setEnd(ed.el, ed.el.childNodes.length);
-    return textOf(tail.cloneContents()) === "";
-  }
+  const atEdge = (ed, forward) => textOf(restOf(ed, forward).cloneContents()) === "";
 
   // Whether the caret is on the paragraph's first or last line: a move by a line stays on it.
   function onLastLine(ed, forward) {
@@ -50,25 +46,22 @@
     (getSelection().focusNode.parentElement || el).scrollIntoView({ block: "nearest" });
   }
 
-  // A failed break puts the text back in one paragraph, where the failure shows.
-  function undoBreak(first, second) {
-    if (writing === second) stopWriting();
-    first.el.append(...[...second.el.childNodes].filter((node) => node !== second.mark));
-    dropParagraph(second);
-    numberChips(first.el);
+  // Moves a paragraph's text to the end of `el`, and the paragraph goes.
+  function takeText(el, ed, ...before) {
+    el.append(...before, ...[...ed.el.childNodes].filter((node) => !(node.nodeType === 1 && node.matches(".pv-src, .pv-para, .pv-src-mark"))));
+    dropParagraph(ed);
+    numberChips(el);
   }
 
   function breakParagraph() {
     const ed = writing, selection = getSelection();
     if (ed.el.querySelector(SUBLIST)) return;  // the new item would take the sublist from this one
     if (!selection.isCollapsed) selection.deleteFromDocument();
-    if (atStart(ed)) return;
-    if (ed.draftOf) { saveBlock(ed); ed.before = ed.sent; }
-    const tail = selection.getRangeAt(0).cloneRange();
-    tail.setEnd(ed.el, ed.el.childNodes.length);
+    if (atEdge(ed, false)) return;
+    if (ed.draftOf) saveBlock(ed);
     const mark = h("span", { class: "pv-src", "data-file": ed.mark.dataset.file, "data-h": "" });
     const el = h(ed.el.tagName.toLowerCase(), { class: ed.el.classList.contains("pv-p") ? "pv-p pv-can-write" : "pv-can-write" },
-      mark, tail.extractContents());
+      mark, restOf(ed, true).extractContents());
     ed.el.after(el);
     blockMark.set(el, mark);
     const left = textOf(ed.el), right = textOf(el);
@@ -82,10 +75,13 @@
       second.draftOf = first;
       return;
     }
-    first.sent = left;
     sendBlock(first, { before: first.before, after: left + BREAK + right }, {
       group: [first, second],
-      refused: (...failure) => { undoBreak(first, second); showFailure(...failure); },
+      refused: (...failure) => {  // the text goes back in one paragraph, where the failure shows
+        if (writing === second) stopWriting();
+        takeText(first.el, second);
+        showFailure(...failure);
+      },
     });
   }
 
@@ -93,9 +89,7 @@
     const at = previous.childNodes.length;
     blockMark.get(previous).dataset.h = payload.parts[0];
     stopWriting();
-    previous.append(" ", ...[...ed.el.childNodes].filter((node) => !(node.nodeType === 1 && node.matches(".pv-src, .pv-para, .pv-src-mark"))));
-    dropParagraph(ed);
-    numberChips(previous);
+    takeText(previous, ed, " ");
     startWriting(previous);
     previous.focus({ preventScroll: true });
     getSelection().collapse(previous, at + 1);
@@ -111,7 +105,7 @@
       writeInto(previous, true);
       return;
     }
-    if (ed.draftOf) { saveBlock(ed); ed.before = ed.sent; }
+    if (ed.draftOf) saveBlock(ed);
     const after = textOf(ed.el);
     // What is typed before the answer would be lost with this paragraph.
     ed.joining = true;
@@ -159,12 +153,12 @@
       e.preventDefault();
       if (e.metaKey || e.ctrlKey) writing.el.blur();
       else breakParagraph();
-    } else if (e.key === "Backspace" && plain && getSelection().isCollapsed && atStart(writing)) {
+    } else if (e.key === "Backspace" && plain && getSelection().isCollapsed && atEdge(writing, false)) {
       e.preventDefault();
       joinBack();
     } else if (plain && e.key.startsWith("Arrow") && getSelection().isCollapsed) {
       const forward = e.key === "ArrowDown" || e.key === "ArrowRight";
-      const edge = e.key === "ArrowLeft" ? atStart(writing) : e.key === "ArrowRight" ? atEnd(writing) : onLastLine(writing, forward);
-      if (edge && goTo(forward)) e.preventDefault();
+      const sideways = e.key === "ArrowLeft" || e.key === "ArrowRight";
+      if ((sideways ? atEdge(writing, forward) : onLastLine(writing, forward)) && goTo(forward)) e.preventDefault();
     }
   }, true);

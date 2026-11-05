@@ -135,7 +135,7 @@
     if (anchor) {
       ed.draftOf = null;
       if (!after) { dropParagraph(ed); return; }
-      ed.sent = after;
+      ed.before = after;
       sendBlock(ed, () => ({ before: anchor.before, after: anchor.before + BREAK + after, ...extra }), {
         group: [anchor, ed],
         refused: (...failure) => { ed.draftOf = anchor; showFailure(...failure); },
