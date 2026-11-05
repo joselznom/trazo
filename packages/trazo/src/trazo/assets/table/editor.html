@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Table editor</title>
 <link rel="stylesheet" href="/__assets/table/editor.css">
+<link rel="stylesheet" href="/__assets/table/editor-inline.css">
 <!-- config -->
 </head>
 <body>
@@ -13,8 +14,9 @@
   <a class="te-back" id="te-back" href="/" title="Back to the preview">← Preview</a>
   <div class="te-crumb">
     <span class="te-muted te-hide-sm">Figures &amp; Tables</span><span class="te-sep te-hide-sm">/</span>
-    <b id="te-num">Table</b><code class="te-lbl te-muted" id="te-label"></code>
+    <b id="te-num">Table</b><code class="te-lbl te-muted te-adv-only" id="te-label"></code>
   </div>
+  <span class="te-kindb" id="te-kindb" title="The numbers come from the project's data and script; they cannot be typed over" hidden>From your data</span>
   <button class="te-pill" id="te-check" type="button" title="trazo table check (opens the Check tab)"><span class="te-dot"></span><span>Check</span></button>
   <span class="te-grow"></span>
   <span class="te-muted te-save te-hide-sm" id="te-save" role="status" aria-live="polite"></span>
@@ -25,18 +27,19 @@
 <div class="te-banner" id="te-banner" hidden></div>
 <div class="te-main" id="te-main">
   <aside class="te-left" id="te-tables" aria-label="Tables">
-    <div class="te-head">Tables</div>
+    <div class="te-head te-head-row">Tables<button class="pv-btn sm" id="te-new" type="button">+ New table</button></div>
     <input class="te-search" id="te-filter" type="search" placeholder="Filter tables" aria-label="Filter tables">
     <div id="te-list"></div>
   </aside>
   <section class="te-work" id="te-work" aria-label="Table">
     <div class="te-tools">
-      <div class="te-menu-wrap">
+      <div class="te-bar" id="te-bar" role="toolbar" aria-label="Format"></div>
+      <span class="te-grow"></span>
+      <div class="te-menu-wrap te-adv-only">
         <button class="pv-btn sm" id="te-add" type="button" aria-haspopup="menu" aria-expanded="false">+ Column</button>
         <div class="te-menu" id="te-add-menu" role="menu" hidden></div>
       </div>
-      <button class="pv-btn sm" id="te-hidden" type="button" aria-pressed="false">Show hidden (0)</button>
-      <span class="te-grow"></span>
+      <button class="pv-btn sm te-adv-only" id="te-hidden" type="button" aria-pressed="false">Show hidden (0)</button>
       <div class="te-seg" role="group" aria-label="Preview width">
         <button type="button" id="te-w-page" class="on" aria-pressed="true">Page width</button><button type="button" id="te-w-fit" aria-pressed="false">Fit</button>
       </div>
@@ -47,15 +50,24 @@
   </section>
   <aside class="te-right" aria-label="Details">
     <nav class="te-tabs" role="tablist">
-      <button type="button" role="tab" data-tab="props" class="on">Properties</button>
+      <button type="button" role="tab" data-tab="props" class="on">Table</button>
       <button type="button" role="tab" data-tab="comments">Comments <span class="te-badge" id="te-cbadge" hidden></span></button>
       <button type="button" role="tab" data-tab="issues">Check <span class="te-dot" id="te-idot"></span></button>
-      <button type="button" role="tab" data-tab="data">Data</button>
+      <button type="button" role="tab" data-tab="data" class="te-adv-only">Data</button>
     </nav>
     <div class="te-panel" id="te-panel" role="tabpanel"></div>
+    <div class="te-advbar"><button type="button" class="te-switch" id="te-advanced" role="switch" aria-checked="false"
+      title="Show the technical settings: fields, ids, format templates, row keys, rules and the data"><i></i>Advanced</button></div>
     <div class="te-foot" role="status"><span class="te-dot" id="te-fdot"></span><span id="te-ftext">Loading…</span></div>
   </aside>
 </div>
+<script src="/__assets/table/editor-controls.js"></script>
+<script src="/__assets/table/editor-panel.js"></script>
+<script src="/__assets/table/editor-columns.js"></script>
+<script src="/__assets/table/editor-comments.js"></script>
+<script src="/__assets/table/editor-inline.js"></script>
+<script src="/__assets/table/editor-hand.js"></script>
+<script src="/__assets/table/editor-addmenu.js"></script>
 <script src="/__assets/table/editor.js"></script>
 </body>
 </html>
