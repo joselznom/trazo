@@ -166,6 +166,10 @@
           writeButton("Open Markdown", () => openSourceAt(ed.el))]
         : [writeButton("Edit Markdown", () => editMarkdown(ed, payload.markdown), payload.markdown === undefined),
           writeButton("Discard", () => discardWriting(ed))]));
+    placeBar(ed);
+  }
+
+  function placeBar(ed) {
     if (ed.box) ed.box.prepend(ed.bar);
     else if (ed.el.tagName === "LI") ed.el.append(ed.bar);
     else ed.el.after(ed.bar);
@@ -189,6 +193,7 @@
     ed.box.remove();
     ed.box = ed.area = null;
     ed.el.hidden = false;
+    if (ed.bar) placeBar(ed);
   }
 
   document.addEventListener("mouseup", (e) => {

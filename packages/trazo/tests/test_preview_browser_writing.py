@@ -157,6 +157,24 @@ class WritingTests(PreviewBrowserTestCase):
                 self.wait_for("!document.querySelector('.pv-write-box') && !document.querySelector('.pv-write-bar')")
                 self.assertEqual(self.source(), f"{marker}Plain *new* words here tomorrow.\n")
 
+    def test_closing_the_markdown_leaves_the_choices_of_a_failed_save(self):
+        self.build("Plain words here today.\n")
+        with patch("trazo.preview_block_save.check", lambda *args: "it does not read the same"):
+            self.write_in("words")
+            self.type("my ")
+            self.leave()
+            self.wait_for("document.querySelector('.pv-write-bar')")
+        self.evaluate("[...document.querySelectorAll('.pv-write-bar button')].find(b => b.textContent === 'Edit Markdown').click()")
+        self.wait_for("document.activeElement.classList.contains('pv-write-md')")
+        self.chapter.write_text("Plain words here tomorrow.\n", encoding="utf-8")
+        self.evaluate("[...document.querySelectorAll('.pv-write-box button')].find(b => b.textContent === 'Save').click()")
+        self.wait_for("document.querySelector('.pv-write-bar')?.textContent.includes('changed on disk')")
+        self.evaluate("[...document.querySelectorAll('.pv-write-box button')].find(b => b.textContent === 'Cancel').click()")
+        self.wait_for("!document.querySelector('.pv-write-box')")
+        self.assertTrue(self.evaluate("document.querySelector('.pv-write-bar').checkVisibility()"))
+        self.evaluate("[...document.querySelectorAll('.pv-write-bar button')].find(b => b.textContent === \"Take the file's\").click()")
+        self.wait_for("!document.querySelector('.pv-write-bar') && !document.querySelector('.pv-write-failed')")
+
     def test_a_paragraph_changed_on_disk_keeps_the_text_until_the_author_picks(self):
         text = "The quick brown fox jumps over the lazy dog.\n"
         for choice, result in (("Keep mine", "The slow quick brown fox jumps over the sleepy dog.\n"),
