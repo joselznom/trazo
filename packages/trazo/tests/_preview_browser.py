@@ -5,9 +5,11 @@ PreviewBrowserTestCase.
 """
 
 import json
+import sys
 import tempfile
 import threading
 import time
+import traceback
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -107,12 +109,26 @@ class PreviewBrowserTestCase(unittest.TestCase):
 
     def open(self, query=""):
         self.chrome.call("Page.navigate", {"url": self.url + query}, self.session)
-        self.wait_for("document.querySelector('.pv-bs-label')?.textContent.length > 0")
+        try:
+            self.wait_for("document.querySelector('.pv-bs-label')?.textContent.length > 0")
+        except AssertionError as exc:
+            raise AssertionError(f"{exc}\n{self.what_the_page_waits_for()}") from None
         self.wait_for("document.readyState === 'complete'")
         # On load the page restores its reading position in the first frame
         # after document.fonts.ready; wait for that frame (callbacks run in
         # order) so it cannot undo a test's own scrolling.
         self.evaluate("document.fonts.ready.then(() => new Promise(requestAnimationFrame))")
+
+    def what_the_page_waits_for(self):
+        """The page's state and the requests still running. Opening takes well under a
+        second, so one that times out is stuck, and the failure is the only trace of why."""
+        page = self.evaluate("""({url: location.href, ready: document.readyState,
+          shell: !!document.querySelector('.pv-build'),
+          finished: performance.getEntriesByType('resource').map(e => new URL(e.name).pathname)})""")
+        frames = sys._current_frames()
+        running = ["".join(traceback.format_stack(frames[t.ident])) for t in threading.enumerate()
+                   if "process_request_thread" in t.name and t.ident in frames]
+        return f"page: {page}\nrequests still running: {len(running)}\n" + "\n".join(running)
 
     def fail_fetches(self, *paths):
         """In pages opened next, fetches to these paths fail like a reset
