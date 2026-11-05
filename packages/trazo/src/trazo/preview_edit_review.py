@@ -33,7 +33,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any, cast
 
-from . import edit_diff
+from . import edit_diff, preview_blocks
 from .local_server import RequestError
 from .review_storage import StoreError, read_list, review_lock, write_atomic, write_json
 
@@ -98,8 +98,8 @@ def pending(store: dict[str, Any], name: str, text: str) -> list[edit_diff.Edit]
 
 def reader() -> tuple[Callable[[Path], str] | None, Callable[[], None]]:
     """(read, done) for one page build: `read` gives a file's text with the
-    marks of its pending edits; `done` records when each edit was first
-    seen. An unreadable baseline leaves the page unmarked (read None)
+    marks of its pending edits and of its blocks (trazo.preview_blocks);
+    `done` records when each edit was first seen. An unreadable baseline leaves the page unmarked (read None)
     rather than unbuilt."""
     try:
         store = ensure()
@@ -116,7 +116,7 @@ def reader() -> tuple[Callable[[Path], str] | None, Callable[[], None]]:
             return text
         found = pending(store, name, text)
         seen[name] = [e.id for e in found]
-        return edit_diff.marked(text, found)
+        return edit_diff.marked(text, found, preview_blocks.marks(text, name))
 
     def done() -> None:
         stamp = time.strftime("%Y-%m-%d %H:%M:%S")

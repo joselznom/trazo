@@ -178,6 +178,10 @@ class MarksTests(unittest.TestCase):
         found, text = self.marked("Quote\n", ">Quote\n")
         self.assertIn("<blockquote>", html(text))
 
+    def test_an_edit_that_ends_on_a_list_marker_keeps_the_list(self):
+        found, text = self.marked("1. Old Two\n", "1. New words:\n   - Two\n")
+        self.assertIn("<ul>", html(text))
+
     def test_a_new_file_marks_its_paragraphs_as_new(self):
         found, text = self.marked("", "# Methods\n\nWe did it.\n\nTwice.\n")
         self.assertEqual(len(found), 1)

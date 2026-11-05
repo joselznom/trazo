@@ -25,6 +25,7 @@ from __future__ import annotations
 import hashlib
 import re
 from bisect import bisect_right
+from collections.abc import Iterable
 from dataclasses import dataclass
 from difflib import SequenceMatcher
 from itertools import accumulate
@@ -40,7 +41,7 @@ TOKEN = re.compile(r"\s+|\w+|[^\w\s]")
 CITATION = re.compile(r"\[[^\[\]]*@[^\[\]]*\]|@[\w:.#$%&+?<>~/-]*\w")
 BLANK_LINE = re.compile(r"\n[ \t\r]*\n")
 # A line that starts a block: a span may not begin a line with one.
-BLOCK_START = re.compile(r"[ \t]*(?:[-*+]\s|\d+[.)]\s|#|>|\||:|`{3}|~{3}|\$\$|!\[|<|\[\^|Table:|$)")
+BLOCK_START = re.compile(r"[ \t]*(?:[-*+](?:\s|$)|\d+[.)](?:\s|$)|#|>|\||:|`{3}|~{3}|\$\$|!\[|<|\[\^|Table:|$)")
 # Where a block's text starts after a list, quote or heading marker.
 BLOCK_PREFIX = re.compile(r"[ \t]{0,3}(?:(?:[-*+]|\d+[.)])[ \t]+|>[ \t]?|#{1,6}[ \t]+)*")
 DEFINITION = re.compile(r" {0,3}[:~][ \t]")
@@ -219,7 +220,7 @@ def _balanced(text: str) -> bool:
     return len(re.findall(r"(?<!\w)_|_(?!\w)", plain)) % 2 == 0
 
 
-class _Lines:
+class Lines:
     """Line offsets of a text and where spans may go."""
 
     def __init__(self, text: str) -> None:
@@ -319,12 +320,14 @@ def _blocks_inserted(text: str, c0: int, c1: int) -> list[int]:
     return starts
 
 
-def marked(current: str, found: list[Edit]) -> str:
-    """`current` with the marks of `found`; an edit with no safe place has none."""
-    if not found:
+def marked(current: str, found: list[Edit], extra: Iterable[tuple[int, int, str]] = ()) -> str:
+    """`current` with the marks of `found`; an edit with no safe place has none.
+    `extra` adds other marks, as (offset, order, text) in the order below."""
+    extra = list(extra)
+    if not found and not extra:
         return current
-    lines = _Lines(current)
-    inserts: list[tuple[int, int, str]] = []  # (offset, order, text): closers, block marks, deletions, openers
+    lines = Lines(current)
+    inserts = extra  # (offset, order, text): closers, block marks, deletions, openers
     for e in found:
         attr = f'data-edit="{e.id}"'
         new_text, old_text = e.new.strip(), e.old.strip()

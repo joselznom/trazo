@@ -56,6 +56,7 @@ re-renders the spec tables in-process (no project code runs), unless the
 project has its own tables stage (a `tables` step or [commands] entry): a
 spec change then reruns it before the rebuild, since it may read the specs.
 Endpoints: GET/POST /__source, /__table-caption, /__figure-text and /__edits,
+POST /__block (an edit of a paragraph's text, see trazo.preview_block_save),
 GET /__values, GET /__submission (the Submission view's report,
 reused until what it reads changes; ?fields=0 leaves out the form fields,
 ?fresh=S makes it again if its check started over S seconds ago), POST /__locate,
@@ -92,6 +93,7 @@ Mono, Source Serif 4; SIL OFL) ship with trazo in assets/preview/.
 
 This module holds the preview's paths and state, the routes and the CLI; the
 work lives in preview_comments, preview_sources (the Source tab),
+preview_blocks and preview_block_save (writing on the page),
 preview_edit_review, preview_captions, preview_render, preview_watch and preview_full_build, which
 read that state from here when they run, and is imported back under its old
 names.
@@ -118,6 +120,7 @@ from .background import CommandJob
 from .expand import VALUES_PATH
 from .local_server import Conflict, Download, NotFound  # noqa: F401  (callers catch preview.NotFound)
 from .local_server import RequestError as CommentError
+from .preview_block_save import change_block
 
 # Moved to their own modules; imported back because callers and tests use preview.<name>.
 from .preview_captions import (  # noqa: F401
@@ -212,6 +215,7 @@ PANDOC_FLAGS = [
     "--citeproc",
     "--section-divs",
     "--to=html5",
+    "--wrap=none",  # a line break in a paragraph's HTML would show while writing in it
     f"--css=/{ASSET_URL}preview.css",
 ]
 
@@ -341,7 +345,7 @@ def get_route(path, query):
 
 def post_route(path, body):
     route = {"/__comments": change_comments, "/__source": change_source, "/__edits": change_edits,
-             "/__figure-text": change_figure_text,
+             "/__block": change_block, "/__figure-text": change_figure_text,
              "/__table-caption": change_table_caption,
              "/__locate": locate_source,
              "/__build-docx": start_docx_build, "/__cancel-docx": cancel_docx_build}.get(path)
