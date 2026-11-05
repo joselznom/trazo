@@ -191,7 +191,7 @@ class SaveTests(unittest.TestCase):
         self.chapter.write_text("The quick brown fox jumps over the sleepy dog.\n", encoding="utf-8")
         answer = preview.post_route("/__block", lambda: {
             "file": CHAPTER, "h": key, "before": rendered, "after": rendered.replace("quick", "slow"),
-            "mine": True, "source": text.strip()})()
+            "source": text.strip()})()
         self.assertTrue(answer["saved"])
         self.assertEqual(self.chapter.read_text(encoding="utf-8"), "The slow brown fox jumps over the sleepy dog.\n")
 
@@ -201,7 +201,7 @@ class SaveTests(unittest.TestCase):
         self.chapter.write_text("Nothing at all alike here, 12345.\n", encoding="utf-8")
         with self.assertRaises(preview.Conflict):
             preview.post_route("/__block", lambda: {"file": CHAPTER, "h": key, "before": rendered, "after": "Mine.",
-                                                    "mine": True, "source": text.strip()})()
+                                                    "source": text.strip()})()
 
     def test_the_viewer_can_ask_for_a_blocks_markdown(self):
         text = "The *quick* fox.\n"

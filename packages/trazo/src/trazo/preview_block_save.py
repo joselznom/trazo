@@ -10,10 +10,10 @@ exactly what the author left on the page, keep its kind, and keep the source
 of its chips. If not, nothing is written and the answer says why ({refused,
 markdown}). {file, h, markdown} replaces the block with Markdown the author
 wrote, unchecked. A block that changed on disk answers 409, unless the author
-chose to keep their text ({mine: true, source}, with the Markdown it started
-from, which GET /__block?file&h gives): the edit is then merged into the block
-most like `source`. A save goes through change_source, so it has an undo and
-counts as the author's own change.
+chose to keep their text ({source}, the Markdown it started from, which GET
+/__block?file&h gives): the edit is then merged into the block most like it. A
+save goes through change_source, so it has an undo and counts as the author's
+own change.
 """
 
 from __future__ import annotations
@@ -271,11 +271,15 @@ def _spans(text: str, block: Block, lines: Lines) -> list[tuple[int, int]]:
 def _kept_mine(request: dict[str, Any], text: str, sha256: str) -> tuple[Block, str | None, str]:
     """The block most like the one the author started from, with their edit
     merged in, or None and why not: where both changed the same words, theirs stay."""
-    source = request.get("source")
+    source = request["source"]
     if not isinstance(source, str):
         raise RequestError("source must be a string")
+    matcher = SequenceMatcher(None, autojunk=False)
+    matcher.set_seq2(source.split())
+
     def likeness(block: Block) -> float:
-        return SequenceMatcher(None, source, text[block.at:block.end], autojunk=False).ratio()
+        matcher.set_seq1(text[block.at:block.end].split())
+        return matcher.ratio()
     block = max(blocks_of(text), key=likeness, default=None)
     if block is None or likeness(block) < SAME_BLOCK:
         raise Conflict("this paragraph is no longer in the file", sha256=sha256)
@@ -302,7 +306,7 @@ def change_block(request: Any) -> dict[str, Any]:
     try:
         block, lines = _find(text, request.get("h"), state["sha256"])
     except Conflict:
-        if not request.get("mine"):
+        if "source" not in request:
             raise
         block, new, why = _kept_mine(request, text, state["sha256"])
     else:

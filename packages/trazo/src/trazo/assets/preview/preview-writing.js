@@ -31,12 +31,13 @@
     if (lasts) saveStateTimer = setTimeout(() => { saveState.textContent = ""; }, 2000);
   }
 
-  const markOf = (el) => $$(".pv-src", el).find((mark) => mark.closest("p, li") === el);
+  // Each paragraph with the block it is: one with two is not one block, and takes no writing.
+  const blockMark = new Map();
   if (browserWrites) for (const mark of $$(".pv-src", page)) {
     const el = mark.closest("p, li");
-    const own = el && !el.closest("nav, table, figure") && $$(".pv-src", el).filter((m) => m.closest("p, li") === el);
-    if (own && own.length === 1) el.classList.add("pv-can-write");
+    if (el && !el.closest("nav, table, figure")) blockMark.set(el, blockMark.has(el) ? null : mark);
   }
+  for (const [el, mark] of blockMark) if (mark) el.classList.add("pv-can-write");
 
   // The paragraph's text as the server reads it, each chip one character.
   function textOf(el) {
@@ -70,24 +71,18 @@
 
   // plaintext-only shows line breaks as written, and a <br> already is one.
   function dropLineBreaks(el) {
-    const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
-    while (walker.nextNode()) if (walker.currentNode.data.includes("\n")) {
-      walker.currentNode.data = walker.currentNode.data.replace(/\n/g, walker.currentNode.previousSibling?.nodeName === "BR" ? "" : " ");
-    }
+    for (const text of textNodes(el)) if (text.data.includes("\n"))
+      text.data = text.data.replace(/\n/g, text.previousSibling?.nodeName === "BR" ? "" : " ");
   }
 
   function startWriting(el) {
-    const mark = markOf(el);
+    const mark = blockMark.get(el);
     if (!mark) return false;
     let ed = failed.get(el);
     if (ed) clearFailure(ed);
     else {
       dropLineBreaks(el);
-      ed = { el, mark, before: textOf(el), restore: snapshotOf(el), source: null };
-      // Kept for "Keep mine", which needs the Markdown this text came from.
-      postJson(`/__block?file=${encodeURIComponent(mark.dataset.file)}&h=${encodeURIComponent(mark.dataset.h)}`)
-        .then(({ ok, payload }) => { if (ok) ed.source = payload.markdown; })
-        .catch(() => {});
+      ed = { el, mark, before: textOf(el), restore: snapshotOf(el), source: null, asked: false };
     }
     ed.locked = [...el.querySelectorAll(`.pv-atom, ${OTHER_CHIPS}, ${NOT_TEXT}`)];
     for (const node of ed.locked) node.contentEditable = "false";
@@ -97,12 +92,23 @@
     return true;
   }
 
-  function stopWriting(ed) {
-    if (writing === ed) writing = null;
+  function stopWriting() {
+    const ed = writing;
+    writing = null;
     ed.el.removeAttribute("contenteditable");
     ed.el.classList.remove("pv-writing");
     for (const node of ed.locked) node.removeAttribute("contenteditable");
-    forgetText(ed.el);
+    forgetPageText();
+    return ed;
+  }
+
+  // "Keep mine" needs the Markdown this text came from, asked for when the typing starts.
+  function askSource(ed) {
+    ed.asked = true;
+    const { file, h: key } = ed.mark.dataset;
+    postJson(`/__block?file=${encodeURIComponent(file)}&h=${encodeURIComponent(key)}`)
+      .then(({ ok, payload }) => { if (ok) ed.source = payload.markdown; })
+      .catch(() => {});
   }
 
   function clearFailure(ed) {
@@ -122,15 +128,13 @@
       result = { ok: false, status: 0, payload: { error: "the preview server did not answer" } };
     }
     saves--;
-    return result;
+    if (result.ok && result.payload.saved) blockSaved(ed, result.payload);
+    else showFailure(ed, result.status, result.payload);
   }
 
-  async function saveBlock(ed, extra) {
+  function saveBlock(ed, extra) {
     const after = textOf(ed.el);
-    if (after === ed.before && !failed.has(ed.el)) return;
-    const { ok, status, payload } = await sendBlock(ed, { before: ed.before, after, ...extra });
-    if (ok && payload.saved) blockSaved(ed, payload);
-    else showFailure(ed, status, payload);
+    if (after !== ed.before || failed.has(ed.el)) sendBlock(ed, { before: ed.before, after, ...extra });
   }
 
   function blockSaved(ed, payload) {
@@ -144,8 +148,14 @@
   function discardWriting(ed) {
     clearFailure(ed);
     ed.restore();
-    forgetText(ed.el);
+    forgetPageText();
     showSaveState("", false);
+  }
+
+  function writeButton(text, run, disabled) {
+    const button = h("button", { type: "button", text, disabled });
+    button.addEventListener("click", run);
+    return button;
   }
 
   function showFailure(ed, status, payload) {
@@ -153,21 +163,16 @@
     failed.set(ed.el, ed);
     ed.el.classList.add("pv-write-failed");
     if (ed.bar) ed.bar.remove();
-    const button = (text, run, disabled) => {
-      const b = h("button", { type: "button", text, disabled });
-      b.addEventListener("click", run);
-      return b;
-    };
     const changed = status === 409;
     const text = changed ? "This paragraph changed on disk, so your text is not saved."
       : `Not saved: ${payload.refused || payload.error || "the server refused"}.`;
     ed.bar = h("div", { class: "pv-write-bar", role: "alert", contenteditable: "false" }, h("span", { text }),
       ...(changed
-        ? [button("Keep mine", () => saveBlock(ed, { mine: true, source: ed.source }), !ed.source),
-          button("Take the file's", () => discardWriting(ed)),
-          button("Open Markdown", () => openSourceAt(ed.el))]
-        : [button("Edit Markdown", () => editMarkdown(ed, payload.markdown), payload.markdown === undefined),
-          button("Discard", () => discardWriting(ed))]));
+        ? [writeButton("Keep mine", () => saveBlock(ed, { source: ed.source }), !ed.source),
+          writeButton("Take the file's", () => discardWriting(ed)),
+          writeButton("Open Markdown", () => openSourceAt(ed.el))]
+        : [writeButton("Edit Markdown", () => editMarkdown(ed, payload.markdown), payload.markdown === undefined),
+          writeButton("Discard", () => discardWriting(ed))]));
     if (ed.el.tagName === "LI") ed.el.append(ed.bar);
     else ed.el.after(ed.bar);
   }
@@ -178,26 +183,12 @@
     area.value = markdown;
     area.rows = Math.max(3, Math.ceil(markdown.length / 70));
     const close = () => { box.remove(); ed.el.hidden = false; };
-    const box = h("div", { class: "pv-write-box" }, area);
-    const saveButton = h("button", { type: "button", text: "Save" }), cancel = h("button", { type: "button", text: "Cancel" });
-    box.append(h("div", { class: "pv-actions" }, cancel, saveButton));
-    cancel.addEventListener("click", close);
-    saveButton.addEventListener("click", async () => {
-      const { ok, status, payload } = await sendBlock(ed, { markdown: area.value });
-      close();
-      if (ok && payload.saved) blockSaved(ed, payload);
-      else showFailure(ed, status, payload);
-    });
+    const box = h("div", { class: "pv-write-box" }, area, h("div", { class: "pv-actions" },
+      writeButton("Cancel", close),
+      writeButton("Save", () => { close(); sendBlock(ed, { markdown: area.value }); })));
     ed.el.hidden = true;
     ed.el.after(box);
     area.focus();
-  }
-
-  function leaveWriting() {
-    const ed = writing;
-    if (!ed) return;
-    stopWriting(ed);
-    saveBlock(ed);
   }
 
   document.addEventListener("mouseup", (e) => {
@@ -218,16 +209,18 @@
   page.addEventListener("focusout", (e) => {
     // Another window taking the focus is not leaving the paragraph.
     if (writing && e.target === writing.el && document.hasFocus()
-        && !(e.relatedTarget && writing.el.contains(e.relatedTarget))) leaveWriting();
+        && !(e.relatedTarget && writing.el.contains(e.relatedTarget))) saveBlock(stopWriting());
   });
-  page.addEventListener("input", () => { if (writing) fab.hidden = true; });
+  page.addEventListener("input", () => {
+    if (!writing) return;
+    fab.hidden = true;
+    if (!writing.asked) askSource(writing);
+  });
   document.addEventListener("keydown", (e) => {
     if (!writing) return;
     if (e.key === "Escape") {
       e.preventDefault();
-      const ed = writing;
-      stopWriting(ed);
-      discardWriting(ed);
+      discardWriting(stopWriting());
       getSelection().removeAllRanges();
     } else if (e.key === "Enter") {
       e.preventDefault();

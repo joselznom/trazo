@@ -20,9 +20,9 @@
   };
 
   // Whitespace-squashed text of an element, mapped back to its text nodes.
-  // The page text changes only where the author writes (forgetText), so it is
-  // computed once.
-  const flatCache = new WeakMap();
+  // The page text changes only when the author writes in it (forgetPageText),
+  // so it is computed once.
+  let flatCache = new WeakMap();
   function flatText(el) {
     let entry = flatCache.get(el);
     if (entry) return entry;
@@ -42,9 +42,11 @@
     return entry;
   }
 
-  function forgetText(el) {
-    flatCache.delete(el);
-    contextCache.delete(el);
+  // All of it: a paragraph's text is also part of its neighbours' context and of the word index.
+  function forgetPageText() {
+    flatCache = new WeakMap();
+    contextCache = new WeakMap();
+    wordIndexCache = new WeakMap();
   }
 
   const SURROUND = 32;
@@ -85,7 +87,7 @@
 
   // Locating every comment compares it with every labelled element, so an
   // element's context and its word sets are computed once, like flatText.
-  const contextCache = new WeakMap();
+  let contextCache = new WeakMap();
   const contextOf = (a, el) => {
     let entry = contextCache.get(el);
     if (entry) return entry;
@@ -138,7 +140,7 @@
   // many elements, so looking each word up per element dominates a pass. An
   // index from each word to the elements that have it counts the shared words
   // of every element in one walk over the comment's words.
-  const wordIndexCache = new WeakMap();  // analysis -> {lists: Map(word -> element indexes), sizes}
+  let wordIndexCache = new WeakMap();  // analysis -> {lists: Map(word -> element indexes), sizes}
   function wordIndexOf(a) {
     let index = wordIndexCache.get(a);
     if (index) return index;
