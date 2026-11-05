@@ -71,8 +71,7 @@
     `<div class="pv-resizer" role="separator" aria-orientation="vertical" aria-label="Resize review sidebar" tabindex="0"></div>` +
     `<div class="pv-rtabs" role="tablist" aria-label="Review panel">` +
     `<button type="button" role="tab" data-tab="comments" aria-selected="true">Comments <span class="pv-badge" hidden></span></button>` +
-    `<button type="button" role="tab" data-tab="source" aria-selected="false" tabindex="-1">Source <span class="dirty" hidden aria-label="unsaved changes">●</span></button>` +
-    `<button type="button" role="tab" data-tab="diff" aria-selected="false" tabindex="-1">Diff</button></div>` +
+    `<button type="button" role="tab" data-tab="source" aria-selected="false" tabindex="-1">Source <span class="dirty" hidden aria-label="unsaved changes">●</span></button></div>` +
     `<section class="pv-pane" data-pane="comments">` +
     `<div class="pv-csum"><div class="pv-cfilter" role="group" aria-label="Show comments">` +
     `<button type="button" data-filter="active" aria-pressed="true" title="Open and to check">Active <span class="n"></span></button>` +
@@ -81,7 +80,6 @@
     `<button type="button" class="pv-icon-btn" data-step="1" aria-label="Next open comment" title="Next open comment (j or ⌥↓)">${ICONS.down}</button></div></div>` +
     `<div class="pv-csum-text" aria-live="polite"></div><div class="pv-pane-scroll"></div></section>` +
     `<section class="pv-pane pv-source" data-pane="source" hidden></section>` +
-    `<section class="pv-pane pv-diffbox" data-pane="diff" hidden></section>` +
     `</aside></div>`;
   document.body.insertBefore(app, document.body.firstChild);
 
@@ -107,7 +105,6 @@
   const panel = $('[data-pane="comments"] .pv-pane-scroll', right);
   const summaryEl = $(".pv-csum-text", right);
   const srcBox = $('[data-pane="source"]', right);
-  const diffBox = $('[data-pane="diff"]', right);
   const paneEls = $$("[data-pane]", right);
 
   const docView = h("article", { class: "pv-doc-wrap pv-docview" }, page);
@@ -169,7 +166,7 @@
     left: prefs.left !== false, right: prefs.right !== false, narrow: mqNarrow.matches, drawer: null,
     lw: clamp(+prefs.lw || 290, 200, 460), rw: clamp(+prefs.rw || 360, 280, 600),
   };
-  let tab = ["source", "diff"].includes(prefs.tab) ? prefs.tab : "comments";
+  let tab = prefs.tab === "source" ? "source" : "comments";
   const rightOpen = () => (S.narrow ? S.drawer === "right" : S.right);
   let comments = [];
   var commentsReady = false, sourceReady = false;  // set later; read by early callers

@@ -37,7 +37,9 @@ so it starts with empty sections and no example files.
    `manuscript/supplementary/`. Use any text editor (VS Code, TextEdit in
    plain-text mode) or the preview's **Source** tab, or ask the agent.
 2. Read the result in the preview. Select text to leave a comment for the
-   agent; the **Diff** tab shows what changed since the last saved version.
+   agent. What the agent changed since your last review is marked in the
+   text: click a mark to accept or reject it, or use **Edits** above the
+   page to step through them or take them all at once.
 3. Build the Word files (ask the agent, or `scripts/trazo build`):
    `output/manuscript.docx` and `output/supplementary.docx`.
 4. Save a version when a piece of work is done:
@@ -46,8 +48,8 @@ so it starts with empty sections and no example files.
    git add -A && git commit -m "Draft of the methods"
    ```
 
-   Saved versions let you compare and undo, and the Diff tab compares
-   against the last one.
+   Saved versions let you compare and undo (`git diff` shows what changed
+   since the last one).
 
 Do not edit the Word file: it is rebuilt from the Markdown each time. Send
 it to coauthors, and bring their changes back into the Markdown (the agent
@@ -250,7 +252,7 @@ agent to update the paper (the plugin's `paper_update`). It brings the
 template's changes (AGENTS.md, skills, scripts, the trazo version) of the
 plugin's release into this project. A file you changed that the template
 changed too gets a `<file>.new` beside it; ask the agent to merge it. Review
-the changes in the Diff tab or with `git diff`.
+the changes with `git diff`.
 
 ## Problems
 

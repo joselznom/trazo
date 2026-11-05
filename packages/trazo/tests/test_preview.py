@@ -1,7 +1,6 @@
-"""Preview: builds, the diff without git and the full DOCX build."""
+"""Preview: builds and the full DOCX build."""
 
 import shutil
-import subprocess
 import tempfile
 import threading
 import time
@@ -202,19 +201,6 @@ class BuildTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-
-
-class NoGitTests(unittest.TestCase):
-    """Tests run in a copy of the fixture outside any git repository."""
-
-    def test_the_diff_says_history_is_off(self):
-        probe = subprocess.run(["git", "-C", str(_support.ROOT), "rev-parse"], capture_output=True)
-        self.assertNotEqual(probe.returncode, 0, "the test project must not be in a git repository")
-        with self.assertRaisesRegex(preview.GitError, "History is off: this folder is not a git repository"):
-            preview.diff_source("manuscript/main/01_introduction.md")
-        with patch.object(preview.subprocess, "run", side_effect=FileNotFoundError("git")), \
-             self.assertRaisesRegex(preview.GitError, "History is off: git is not installed"):
-            preview.diff_source("manuscript/main/01_introduction.md")
 
 
 class DocxBuildTests(unittest.TestCase):

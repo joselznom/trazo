@@ -43,10 +43,14 @@ Each command has `--help`.
 **Figures & Tables** and, for articles, a **Submission** menu in the top bar (the checklist and the
 declarations, title page and cover letter pages), an index of the headings with word
 counts and comment badges on the left (under the document's main-text words,
-figures, tables and references; see [Word counts](#word-counts)), and on the right the **Comments**,
-**Source** (the Markdown file of the section in view) and **Diff** (against
-git HEAD) tabs. Select text to add a review comment; click a paragraph
-marker (¶) to open its source. Keys: `[` and `]` fold the sidebars, `j` / `k`
+figures, tables and references; see [Word counts](#word-counts)), and on the right the **Comments**
+and **Source** (the Markdown file of the section in view) tabs. Select text to add a review comment; click a paragraph
+marker (¶) to open its source. Source edits since your
+last review are marked in the text: click one to accept or reject it (`a` / `r`),
+or use **Edits** above the page to step through them or take them all. Resolve or
+Reject on a comment the agent answered takes the edits next to its text. Undo save
+(Source tab) reverses a rejection; your own preview saves count as reviewed
+(`notes/review/edits.json`). Keys: `[` and `]` fold the sidebars, `j` / `k`
 step through open comments. Sidebars resize by dragging their inner edge;
 below 900 px they become drawers. The theme menu offers auto, light and dark
 modes and five colour palettes, shared with the table and diagram editors.

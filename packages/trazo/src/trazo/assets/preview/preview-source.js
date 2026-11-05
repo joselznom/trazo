@@ -30,11 +30,10 @@
     setTab(list[to].dataset.tab);
     e.preventDefault();
   });
-  // The Source and Diff tabs load when they are shown.
+  // The Source tab loads when it is shown.
   function syncRight() {
     if (!sourceReady) return;
     syncSource();
-    refreshDiff();
   }
 
   // ---------------------------------------------------------------- unsaved work
@@ -256,7 +255,6 @@
     else {
       b.base = sent; b.sha = payload.sha256; b.canUndo = payload.can_undo;
       fileMsg(file, "Saved. The preview rebuilds and reloads.");
-      refreshDiff();
     }
   }
 

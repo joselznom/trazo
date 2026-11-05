@@ -81,6 +81,7 @@ class SubmissionProject:
         stack.enter_context(patch.object(counts, "current_config", return_value=project.config))
         stack.enter_context(patch.object(preview, "DOCS", project.documents))
         stack.enter_context(patch.object(preview, "ROOT", self.root))
+        stack.enter_context(patch.object(preview, "EDITS_PATH", self.root / "notes/review/edits.json"))
         stack.enter_context(patch.object(preview, "PANDOC_FLAGS", [
             flag.replace("bibliography/csl/ieee.csl", "bibliography/ieee.csl")
             for flag in preview.PANDOC_FLAGS]))

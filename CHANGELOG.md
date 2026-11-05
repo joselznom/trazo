@@ -20,6 +20,13 @@ Internal changes (tests, CI, refactoring) stay out.
 
 ### New
 
+- The preview marks what changed in your text since you last reviewed it,
+  like tracked changes: inserted words in green, deleted ones struck
+  through, new paragraphs with a bar. Click a mark to accept or reject it,
+  or use **Edits** above the page to step through them or take them all at
+  once. Resolve on a comment the agent answered accepts its edits, and the
+  new Reject undoes them and reopens the comment. Your own saves from the
+  preview are accepted as you make them. Works without git (#16).
 - Tables typed by hand: **+ New table** in the table editor makes a table
   that is not computed from your data, empty or pasted from Excel, Word or
   Sheets, and adds it to the section you choose. Type in its cells, add rows
@@ -48,6 +55,11 @@ Internal changes (tests, CI, refactoring) stay out.
 ### Fixed
 
 - The table editor no longer shows "null" under a table without a note (#15).
+
+### Removed
+
+- The preview's Diff tab, which compared a file with the last git commit:
+  the marks in the text replace it (`git diff` still shows it) (#16).
 
 ## v1.2.0 (2026-11-02)
 

@@ -36,8 +36,10 @@ only existing .md files under manuscript/main or manuscript/supplementary,
 refuses with 409 if the file changed on disk since it was loaded, and keeps
 the previous text in notes/review/file_history.json for "Undo save" (also
 refused if the file changed since). The page reloads after the rebuild, but
-never while there are unsaved edits. The Diff tab shows the file against
-git HEAD (paragraphs aligned, word-level changes; GET /__diff). Substituted
+never while there are unsaved edits. Edits made to the sources since the
+author last reviewed them are marked in the page (inserted, deleted, new
+paragraphs) and accepted or rejected there, one at a time, per comment or
+all at once (GET/POST /__edits; see trazo.preview_edit_review). Substituted
 {{v:key}} values and in-text citations show tooltips (the preview build wraps
 values in spans; the Word build never does). Export > Full <document> runs that
 document's full build (`trazo build --doc NAME` by default) in the background
@@ -53,8 +55,8 @@ trazo.table_editor. A change under tables/specs or the table data folder
 re-renders the spec tables in-process (no project code runs), unless the
 project has its own tables stage (a `tables` step or [commands] entry): a
 spec change then reruns it before the rebuild, since it may read the specs.
-Endpoints: GET/POST /__source, /__table-caption and /__figure-text,
-GET /__diff, GET /__values, GET /__submission (the Submission view's report,
+Endpoints: GET/POST /__source, /__table-caption, /__figure-text and /__edits,
+GET /__values, GET /__submission (the Submission view's report,
 reused until what it reads changes; ?fields=0 leaves out the form fields,
 ?fresh=S makes it again if its check started over S seconds ago), POST /__locate,
 POST /__build-docx and /__cancel-docx, and the table and diagram editors'. The server listens on 127.0.0.1 only
@@ -89,8 +91,8 @@ The viewer makes no requests outside 127.0.0.1: its fonts (IBM Plex Sans and
 Mono, Source Serif 4; SIL OFL) ship with trazo in assets/preview/.
 
 This module holds the preview's paths and state, the routes and the CLI; the
-work lives in preview_comments, preview_sources (Source and Diff tabs),
-preview_captions, preview_render, preview_watch and preview_full_build, which
+work lives in preview_comments, preview_sources (the Source tab),
+preview_edit_review, preview_captions, preview_render, preview_watch and preview_full_build, which
 read that state from here when they run, and is imported back under its old
 names.
 
@@ -136,6 +138,7 @@ from .preview_comments import (  # noqa: F401
     load_comments,
     print_comments,
 )
+from .preview_edit_review import change_edits, edits_payload
 from .preview_full_build import (  # noqa: F401
     cancel_docx_build,
     docx_status,
@@ -149,11 +152,8 @@ from .preview_render import (  # noqa: F401
     table_spec_labels,
 )
 from .preview_sources import (  # noqa: F401
-    GitError,
     change_source,
-    diff_source,
     get_source,
-    git,
     locate_source,
     read_include_from,
     read_source,
@@ -179,6 +179,7 @@ OUT_DIR = PROJECT.path("build") / "preview"
 COMMENTS_PATH = REVIEW_DIR / "comments.json"
 HISTORY_PATH = REVIEW_DIR / "history.json"
 FILE_HISTORY_PATH = REVIEW_DIR / "file_history.json"
+EDITS_PATH = REVIEW_DIR / "edits.json"  # what the author last reviewed (preview_edit_review)
 FILE_HISTORY_LIMIT = 50
 FILE_HISTORY_BYTES = 20_000_000
 # The only files the page may read or write, and only if they already exist.
@@ -195,7 +196,7 @@ PREVIEW_ASSETS = ASSETS_DIR / "preview"
 VIEWER_SCRIPTS = (
     "preview-page.js", "preview-wordmark.js", "preview-shell.js", "preview-layout.js", "preview-navigation.js",
     "preview-comment-anchors.js", "preview-comment-list.js", "preview-comment-highlights.js",
-    "preview-source.js", "preview-diff.js", "preview-build.js", "preview-new-comments.js",
+    "preview-source.js", "preview-diff.js", "preview-edits.js", "preview-build.js", "preview-new-comments.js",
     "preview-captions.js", "preview-caption-editors.js", "preview-export.js", "preview-export-picker.js",
     "preview-figures.js", "preview-lightbox.js", "preview-submission.js", "preview.js",
 )
@@ -223,8 +224,10 @@ LOCK = threading.Lock()
 # the pages were built from (preview_watch); /__status reports it as `synced`.
 # It advances whether those builds succeeded or not: each page's `error`
 # (STATE, also set when a build raised) says whether it shows them or keeps
-# its last good version.
-WATCHER = {"synced": 0.0}
+# its last good version. `rebuild`: pages to build again although no source
+# changed (after edits were accepted); `outputs`: spec tables whose Markdown
+# is not what their spec makes (preview_edit_review.check_outputs).
+WATCHER = {"synced": 0.0, "rebuild": set(), "outputs": []}
 
 LOCATE_LOW = 0.45  # below this a match is not trusted
 DIAGRAM_NAME = re.compile(r"^[a-z0-9][a-z0-9_-]*$")
@@ -324,7 +327,7 @@ def get_route(path, query):
     first = lambda key: query.get(key, [None])[0]
     routes = {
         "/__status": status, "/__comments": lambda: comments_payload(first("doc")),
-        "/__diff": lambda: diff_source(first("file")), "/__values": values_info,
+        "/__edits": lambda: edits_payload(first("doc")), "/__values": values_info,
         "/__source": lambda: get_source(first("file")),
         "/__figure-text": lambda: get_figure_text(first("doc"), first("id")),
         "/__table-caption": lambda: get_table_caption(first("doc"), first("id")),
@@ -337,7 +340,7 @@ def get_route(path, query):
 
 
 def post_route(path, body):
-    route = {"/__comments": change_comments, "/__source": change_source,
+    route = {"/__comments": change_comments, "/__source": change_source, "/__edits": change_edits,
              "/__figure-text": change_figure_text,
              "/__table-caption": change_table_caption,
              "/__locate": locate_source,

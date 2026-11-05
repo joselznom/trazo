@@ -121,7 +121,8 @@ class McpAppViewTests(McpAppViewTestCase):
         self.assertEqual(self.frame("[v.TRAZO_VIEW.path, !!d.querySelector('.pv-bs-label')]"), ["/manuscript.html", True])
         self.evaluate("window.failBundle = 0")
         self.frame(link.format(other, ""))
-        self.wait_frame(f"v.TRAZO_VIEW.path === '/{other}.html' && d?.querySelector('.pv-bs-label')")
+        # Loaded: until then the viewer takes a fragment as the place to land on, and clears it.
+        self.wait_frame(f"v.TRAZO_VIEW.path === '/{other}.html' && d?.querySelector('.pv-bs-label') && d.readyState === 'complete'")
 
         # A link to a place in the page moves within it: the frame's URL takes the fragment.
         self.frame("(() => { const a = d.createElement('a'); a.href = '#intro'; d.body.append(a); a.click(); })()")

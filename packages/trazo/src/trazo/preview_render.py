@@ -8,7 +8,7 @@ import json
 import os
 import re
 
-from . import pandoc_run, table
+from . import pandoc_run, preview_edit_review, table
 from .expand import FENCE, ValuesError, expand_files
 from .numbering import metadata_file
 from .pandoc_options import mathml_flag
@@ -94,9 +94,11 @@ def render(name, out_dir, *, for_counts=False):
     sections = preview.PROJECT.document_files(name)
     out_dir.mkdir(parents=True, exist_ok=True)
     error, warnings = "", []
+    # The served page marks the pending edits (preview_edit_review); counts do not.
+    read, seen = (None, None) if for_counts else preview_edit_review.reader()
     try:
         files = doc_files(name)
-        text = expand_files(sections, mark=not for_counts, document=name)
+        text = expand_files(sections, mark=not for_counts, document=name, read=read)
     except (ValuesError, FileNotFoundError, RecursionError, ValueError) as exc:
         error = str(exc)
     else:
@@ -153,5 +155,7 @@ def render(name, out_dir, *, for_counts=False):
                             partial.write_text(content, encoding="utf-8")
                 if not error:
                     os.replace(partial, page)
+                    if seen:
+                        seen()
         partial.unlink(missing_ok=True)
     return error, warnings

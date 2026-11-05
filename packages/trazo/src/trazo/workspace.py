@@ -119,7 +119,10 @@ def status():
                                   "tables": tables}, sort_keys=True).encode())
     inputs = digest(json.dumps({str(p): stamp for p, stamp in snapshot().items()
                                if not p.is_relative_to(ASSETS_DIR)}, sort_keys=True).encode())
+    with preview.LOCK:
+        outputs = list(preview.WATCHER["outputs"])
     return {"documents": docs, "comments": preview.comments_stamp(), "docx": preview.docx_status(),
+            "outputs": outputs,
             "diagrams": diagrams, "tables": tables, "catalog": revision, "inputs": inputs,
             "review": review.revision(),
             "assets": fingerprint(p for p in ASSETS_DIR.rglob("*") if p.is_file())}

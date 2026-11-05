@@ -182,6 +182,20 @@ def fenced_lines(lines):
             yield line, False
 
 
+def markable_lines(lines):
+    """For each line, whether a Pandoc span may be inserted in it: not in
+    code blocks, front matter, display math, tables or the other lines
+    _markable_line refuses. The preview's value and edit marks share it."""
+    state = {"yaml": None, "math": False}  # yaml None: no line seen yet
+    in_table = table_lines(lines)
+    markable = []
+    for number, (line, literal) in enumerate(fenced_lines(lines)):
+        if state["yaml"] is None and not line.strip():
+            state["yaml"] = False  # front matter must start on the first line
+        markable.append(not literal and _markable_line(line, state) and number not in in_table)
+    return markable
+
+
 def substitute(text, values, mark=False):
     """Replace {{v:key}} outside inline code spans and fenced code blocks.
 
@@ -190,14 +204,11 @@ def substitute(text, values, mark=False):
     result (see _markable_line and UNMARKABLE); those get the plain text.
     """
     lines = []
-    state = {"yaml": None, "math": False}  # yaml None: no line seen yet
     all_lines = text.split("\n")
-    in_table = table_lines(all_lines) if mark else set()
+    markable = markable_lines(all_lines) if mark else None
     for number, (line, literal) in enumerate(fenced_lines(all_lines)):
-        if mark and state["yaml"] is None and not line.strip():
-            state["yaml"] = False  # front matter must start on the first line
         if not literal:
-            do_mark = mark and _markable_line(line, state) and number not in in_table
+            do_mark = markable is not None and markable[number]
             replace = _replace_marked if do_mark else _replace
             pieces, last = [], 0
             for code in INLINE_CODE.finditer(line):
@@ -231,7 +242,10 @@ def include_lines(text):
         yield line, parts[1] if len(parts) == 2 and not literal and line.startswith(INCLUDE_PREFIX) else None
 
 
-def expand_file(path, stack=None):
+def expand_file(path, stack=None, read=None):
+    """A file's text with its `!include` lines expanded. `read` (path ->
+    text) replaces reading the files; the preview passes one that adds the
+    marks of the agent's pending edits."""
     path = Path(path)
     stack = [] if stack is None else stack
     if path in stack:
@@ -239,10 +253,11 @@ def expand_file(path, stack=None):
         raise RecursionError(f"circular include detected: {chain}")
 
     lines = []
-    for line, target in include_lines(path.read_text(encoding="utf-8")):
+    text = read(path) if read else path.read_text(encoding="utf-8")
+    for line, target in include_lines(text):
         if target is not None:
             include_path = resolve_include(target, path)
-            lines.append(expand_file(include_path, [*stack, path]).rstrip())
+            lines.append(expand_file(include_path, [*stack, path], read).rstrip())
             lines.append("")
         else:
             lines.append(line)
@@ -272,7 +287,8 @@ def form_sections(text, mark=False):
     return "".join(lines)
 
 
-def expand_files(paths, values_path=VALUES_PATH, check_inputs=True, mark=False, document=None, with_authors=False):
+def expand_files(paths, values_path=VALUES_PATH, check_inputs=True, mark=False, document=None, with_authors=False,
+                 read=None):
     from .frontmatter import render
     paths = [Path(path) for path in paths]
     document = document or PROJECT.source_document(paths)
@@ -283,7 +299,7 @@ def expand_files(paths, values_path=VALUES_PATH, check_inputs=True, mark=False, 
     # Keep a blank line between source files. Without it, a trailing image can
     # merge with the next section heading and cease to be a standalone Pandoc
     # Figure, leaving its cross-reference undefined.
-    text = "\n\n".join(expand_file(path).rstrip() for path in paths) + "\n"
+    text = "\n\n".join(expand_file(path, read=read).rstrip() for path in paths) + "\n"
     text = form_sections(text, mark)
     if document is not None:
         text = render(text, document, with_authors)

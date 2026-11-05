@@ -1,4 +1,4 @@
-// Preview viewer: the source diff, opening the editor at a paragraph and the Diff tab.
+// Preview viewer: the Source tab's diff against the file on disk and opening the editor at a paragraph.
 // The parts of the viewer are classic scripts loaded in the order of
 // trazo.preview.VIEWER_SCRIPTS; their top-level names are shared globals.
   if (!window.PreviewModel) throw new Error("preview-model.js did not load");  // see preview-page.js
@@ -131,7 +131,7 @@
     followed = f.file;  // the section in view does not take the editor away
     if (!(await showFile(f.file))) return;
     const clone = el.cloneNode(true);
-    clone.querySelectorAll(".pv-para, .pv-src-mark, .pv-tbl-edit, button, .pv-diagram").forEach((n) => n.remove());
+    clone.querySelectorAll(".pv-para, .pv-src-mark, .pv-tbl-edit, button, .pv-diagram, .pv-edit-del").forEach((n) => n.remove());
     // Math: compare the TeX annotation with the source's $...$, not MathML glyphs.
     clone.querySelectorAll("math").forEach((m) => {
       const tex = m.querySelector("annotation");
@@ -165,53 +165,4 @@
       }
       editor2.focus();
     } catch (e) { setMsg("Could not reach the preview server: " + e.message); }
-  }
-
-  // Diff tab: the file of the section in view against git HEAD (word-level).
-  const viewFile = () => spyFile || cur || (FILES[0] && FILES[0].file) || null;
-  let diffSeq = 0;
-  async function refreshDiff() {
-    if (!sourceReady || !rightOpen() || tab !== "diff") return;
-    const seq = ++diffSeq, file = viewFile();
-    diffBox.textContent = "";
-    const head = document.createElement("div");
-    head.className = "pv-diff-head";
-    const label = document.createElement("span");
-    label.append((file || "no file") + " vs git HEAD");
-    const again = document.createElement("button");
-    again.type = "button";
-    again.className = "pv-btn sm";
-    again.textContent = "Refresh";
-    again.addEventListener("click", refreshDiff);
-    head.append(label, again);
-    const body = document.createElement("div");
-    body.className = "pv-diff-body";
-    diffBox.append(head, body);
-    const note = (t, cls) => { const d = document.createElement("div"); d.className = cls || "pv-diff-gap"; d.textContent = t; body.append(d); };
-    if (!file) { note("No source file maps to this view."); return; }
-    note("Loading…");
-    try {
-      const res = await fetch(`/__diff?file=${encodeURIComponent(file)}`, { cache: "no-store" });
-      const payload = await res.json().catch(() => ({}));
-      if (seq !== diffSeq) return;  // a newer request replaced this one
-      body.textContent = "";
-      if (!res.ok) { note(payload.error || `Error ${res.status}`, "pv-diff-error"); return; }
-      if (payload.status === "new") { note("New file, not in git HEAD."); return; }
-      if (payload.status === "clean") {
-        note(payload.note ? `No changes since git HEAD (${payload.note}).` : "No changes since git HEAD.");
-        return;
-      }
-      for (const hunk of payload.hunks) {
-        const d = document.createElement("div");
-        if (hunk.t === "gap") { d.className = "pv-diff-gap"; d.textContent = `⋯ ${hunk.n} unchanged paragraph${hunk.n > 1 ? "s" : ""}`; }
-        else if (hunk.t === "chg") {
-          d.className = "pv-diff-chg";
-          for (const [op, text] of hunk.words) {
-            if (op === "=") d.append(text);
-            else { const m = document.createElement(op === "-" ? "del" : "ins"); m.textContent = text; d.append(m); }
-          }
-        } else { d.className = "pv-diff-" + hunk.t; d.textContent = hunk.text; }
-        body.append(d);
-      }
-    } catch (e) { if (seq === diffSeq) { body.textContent = ""; note("Could not load the diff: " + e.message, "pv-diff-error"); } }
   }

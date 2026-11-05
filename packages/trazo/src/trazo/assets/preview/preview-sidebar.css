@@ -54,6 +54,7 @@
 .pv-actions button:hover { background: var(--pv-hover); color: var(--pv-ink); }
 .pv-actions button.line { border-color: var(--pv-line-strong); }
 .pv-actions button.pri { background: var(--pv-accent); color: var(--pv-on-accent); }
+.pv-actions button.no { color: var(--pv-err); }
 .pv-card button.pv-del { flex: none; display: inline-grid; place-items: center; width: 26px; height: 24px; padding: 0; color: var(--pv-muted); }
 .pv-card button.pv-del:hover { color: var(--pv-err); }
 .pv-card.done.compact {
@@ -97,15 +98,6 @@
 .pv-diff-add mark { background: var(--pv-add-strong); color: var(--pv-add-ink); }
 .pv-diff-eq { color: var(--pv-muted); }
 .pv-diff-gap { color: var(--pv-muted); font-size: 12px; text-align: center; }
-.pv-diff-body { flex: 1; min-height: 0; overflow-y: auto; padding: 10px 12px 28px; font: 14px/1.6 var(--pv-serif); }
-.pv-diff-body > div { margin-bottom: 10px; padding: 8px 10px; border-radius: 6px; white-space: pre-wrap; overflow-wrap: anywhere; }
-.pv-diff-body > .pv-diff-gap { padding: 0; margin-bottom: 12px; }
-.pv-diff-chg, .pv-diff-body > .pv-diff-eq { background: var(--pv-card); border: 1px solid var(--pv-line); }
-.pv-diff-body > .pv-diff-del { background: var(--pv-del-bg); color: var(--pv-del-ink); }
-.pv-diff-body > .pv-diff-add { background: var(--pv-add-bg); color: var(--pv-add-ink); }
-.pv-diff-error { background: var(--pv-err-soft); color: var(--pv-err); }
-.pv-diff-body del { background: var(--pv-del-strong); color: var(--pv-del-ink); text-decoration: none; border-radius: 2px; }
-.pv-diff-body ins { background: var(--pv-add-strong); color: var(--pv-add-ink); text-decoration: none; border-radius: 2px; }
 
 /* ---------- caption editors (tables and figures) ---------- */
 .pv-tf {

@@ -51,6 +51,20 @@
 .pv-p:hover > .pv-para, .pv-para:focus-visible, .pv-para.copied { opacity: 1; }
 .pv-para:hover { color: var(--pv-accent); }
 .pv-para.copied { color: var(--pv-ok); }
+/* Pending edits (preview-edits.js): inserted and deleted text, new and
+   changed blocks. Deleted text is not selectable, so quotes leave it out. */
+.pv-edit-ins { background: color-mix(in srgb, var(--pv-add-strong) 65%, transparent); box-shadow: inset 0 -1.5px 0 var(--pv-ok-dot); border-radius: 2px; cursor: pointer; }
+.pv-edit-del { margin: 0 0.2em; color: var(--pv-del-ink); font-size: 0.92em; text-decoration: line-through 1.5px var(--pv-err); cursor: pointer; user-select: none; }
+.pv-edit-del-block { display: block; margin: 0.4em 0; }
+.pv-edit-new, .pv-edit-changed { position: relative; cursor: pointer; }
+.pv-edit-new { background: color-mix(in srgb, var(--pv-add-bg) 55%, transparent); }
+.pv-edit-new::after, .pv-edit-changed::after { content: ""; position: absolute; left: -12px; top: 3px; bottom: 3px; width: 3px; border-radius: 2px; background: var(--pv-ok-dot); }
+.pv-edit-changed::after { background: var(--pv-warn-dot); }
+.pv-edit-cur { outline: 2px solid var(--pv-ok-dot); outline-offset: 2px; border-radius: 3px; }
+html.pv-edits-off .pv-edit-ins { background: none; box-shadow: none; cursor: auto; }
+html.pv-edits-off .pv-edit-del { display: none; }
+html.pv-edits-off .pv-edit-new, html.pv-edits-off .pv-edit-changed { background: none; cursor: auto; }
+html.pv-edits-off .pv-edit-new::after, html.pv-edits-off .pv-edit-changed::after { display: none; }
 @container pvdoc (max-width: 680px) { .pv-para { display: none; } }
 .pv-src-mark { color: var(--pv-page-muted); opacity: 0.55; font-size: 12px; margin-right: 0.4em; user-select: none; }
 .pv-src-mark:hover { opacity: 1; color: var(--pv-accent); }

@@ -7,7 +7,7 @@ there when it runs (preview.NAME), so patching them on trazo.preview reaches it.
 import subprocess
 import time
 
-from . import dependencies, labels, table
+from . import dependencies, labels, preview_edit_review, table
 from .build_lock import build_lock, child_env
 
 
@@ -114,6 +114,7 @@ def build_and_watch(stop_event):
                 return
             preview.build(name)
         numbers = numbered()
+    preview_edit_review.check_outputs()
     preview.watch(stop_event=stop_event, previous=before, numbers=numbers)
 
 
@@ -137,7 +138,9 @@ def watch(interval=0.5, stop_event=None, previous=None, numbers=None):
         try:
             checked = time.time()
             current = snapshot()
-            if current == previous:
+            with preview.LOCK:  # pages asked for although no source changed (accepted edits)
+                requested, preview.WATCHER["rebuild"] = preview.WATCHER["rebuild"], set()
+            if current == previous and not requested:
                 preview.WATCHER["synced"] = checked  # preview_start waits for it (trazo.preview_inputs)
                 continue
             changed = {p for p in current.keys() | previous.keys()
@@ -166,7 +169,8 @@ def watch(interval=0.5, stop_event=None, previous=None, numbers=None):
                 previous.update({p: stamp for p, stamp in snapshot().items() if generated(p)})
                 targets = list(preview.DOCS)
             else:
-                targets = changed_documents(changed)
+                targets = changed_documents(changed) if changed else []
+            targets += [name for name in preview.DOCS if name in requested and name not in targets]
             # One label index for the pages built now: an edit meanwhile
             # changes the snapshot, and the next pass rebuilds with a new one.
             with labels.once():
@@ -177,5 +181,8 @@ def watch(interval=0.5, stop_event=None, previous=None, numbers=None):
                 if (now := numbered()) != shown:
                     build_all([name for name in preview.DOCS if name not in targets])
             shown = now
+            # A spec or data change re-rendered the outputs above; only an output changed by itself may differ.
+            if any(p.is_relative_to(table.OUTPUT_DIR) for p in changed):
+                preview_edit_review.check_outputs()
         except Exception as exc:  # keep watching whatever happens
             print(f"[preview] watcher error: {exc!r}", flush=True)

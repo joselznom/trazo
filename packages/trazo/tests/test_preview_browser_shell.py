@@ -85,12 +85,14 @@ class ShellTests(PreviewBrowserTestCase):
                             {"visibility": "visible", "opacity": "1", "animations": 0})
                         if native:
                             # The fade runs into the built, visible shell. A loaded machine can reveal
-                            # the page while the body is still hidden; app.js then skips the fade.
+                            # the page while the body is still hidden: app.js then skips the fade, or
+                            # Chrome made none. Either way no fade runs into a hidden page.
                             self.wait_for("window.reveal && (window.reveal.outcome || !window.reveal.transition)")
                             seen = self.evaluate("window.reveal")
+                            hidden = ({"shown": False, "transition": True, "outcome": "skipped"} if seen["transition"]
+                                      else {"shown": False, "transition": False})
                             self.assertEqual(seen, {"shown": True, "transition": True, "outcome": "ran",
-                                                    "visible": True, "built": True} if seen["shown"] else
-                                             {"shown": False, "transition": True, "outcome": "skipped"})
+                                                    "visible": True, "built": True} if seen["shown"] else hidden)
                 finally:
                     self.chrome.call("Page.removeScriptToEvaluateOnNewDocument", {"identifier": script}, self.session)
 
@@ -106,7 +108,10 @@ class ShellTests(PreviewBrowserTestCase):
             self.chrome.call("Page.navigate", {"url": self.url.replace("/manuscript.html", path)}, session)
             self.wait_for(f"document.querySelector({json.dumps(ready)}) && document.readyState === 'complete'", session)
             peers.append(session)
-        themed = "document.documentElement.dataset.theme === 'dark' && document.documentElement.dataset.palette === 'polar'"
+        # The tab that resets the theme gets no event for it and keeps the old look, so the
+        # look alone would pass before the new saves reach it: the first of them drops the palette.
+        themed = ("document.documentElement.dataset.theme === 'dark' && document.documentElement.dataset.palette === 'polar'"
+                  " && JSON.parse(localStorage.getItem('trazo-preview'))?.palette === 'polar'")
         reset = "!document.documentElement.hasAttribute('data-theme') && !document.documentElement.hasAttribute('data-palette')"
         for operation in ("removeItem('trazo-preview')", "clear()"):
             self.evaluate("""document.querySelector('.pv-theme').click();
