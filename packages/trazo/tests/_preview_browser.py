@@ -192,11 +192,17 @@ class PreviewBrowserTestCase(unittest.TestCase):
             data = path.read_bytes() if path.exists() else None
             self.addCleanup(lambda p=path, d=data: p.write_bytes(d) if d is not None else p.unlink(missing_ok=True))
 
+    def table_settled(self):
+        """The table's comments came and redrew it: a click in that redraw would be lost."""
+        self.wait_for("document.readyState === 'complete' && performance.getEntriesByType('resource')"
+                      ".some(e => e.name.includes('/__review?scope=table'))")
+        self.evaluate("new Promise(resolve => setTimeout(resolve, 100))")
+
     def open_table(self):
         self.chrome.call("Page.navigate", {"url": self.url.replace("/manuscript.html", "/tables#results")},
                          self.session)
         self.wait_for("document.querySelector('thead th[data-id=\"method\"]')")
-        self.wait_for("document.readyState === 'complete'")
+        self.table_settled()
 
     # ---- Submission view (articles)
     REPORT = {

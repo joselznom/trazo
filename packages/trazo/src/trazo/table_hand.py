@@ -169,7 +169,8 @@ def check(checker: Checker, spec: dict[str, Any]) -> list[dict[str, Any]]:
     if not checker.keys(spec, SPEC_KEYS, "spec", ("schema_version", "title", "columns", "body")):
         return checker.issues
     checker.version(spec, "spec", True)
-    checker.string(spec, "title", "spec", empty=False)
+    # A legend alone is enough: a Markdown table's caption stays as it was.
+    checker.string(spec, "title", "spec", empty=bool(spec.get("legend")))
     checker.string(spec, "legend", "spec")
     checker.string(spec, "note", "spec")
     check_body(checker, spec.get("body"), check_columns(checker, spec.get("columns")))
@@ -317,6 +318,13 @@ def prune(spec: dict[str, Any]) -> None:
 
 
 # -------------------------------------------------- new tables
+
+
+def include_line(label: str) -> str:
+    """The line of a document that shows a table."""
+    from .expand import INCLUDE_PREFIX
+    from .table import output_path, rel
+    return f"{INCLUDE_PREFIX}{rel(output_path(label))}"
 
 
 def new_spec(title: str, rows: list[list[str]] | None) -> dict[str, Any]:

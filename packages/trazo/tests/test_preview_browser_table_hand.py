@@ -3,8 +3,10 @@
 import json
 import unittest
 
-import _support  # noqa: F401  (sets TRAZO_ROOT before trazo loads)
+import _support
 from _preview_browser import PreviewBrowserTestCase
+
+from trazo import preview
 
 SPEC = {"schema_version": 1, "title": "Included studies.",
         "columns": [{"id": "study", "header": "Study"}, {"id": "patients", "header": "Patients"}],
@@ -20,7 +22,8 @@ class HandTableTests(PreviewBrowserTestCase):
         self.keep_files(path, table.HISTORY_PATH, table.output_path("studies"))
         path.write_text(json.dumps(SPEC), encoding="utf-8")
         self.chrome.call("Page.navigate", {"url": self.url.replace("/manuscript.html", "/tables#studies")}, self.session)
-        self.wait_for("document.querySelector('td[data-row]') && document.readyState === 'complete'")
+        self.wait_for("document.querySelector('td[data-row]')")
+        self.table_settled()
         return path
 
     def saved(self, path):
@@ -159,6 +162,48 @@ class HandTableTests(PreviewBrowserTestCase):
         self.wait_for("location.hash === '#my-new-table' && document.querySelector('td[data-row]')")
         self.assertTrue(made.is_file())
         self.assertIn("!include tables/output/md/my-new-table.md", doc.read_text(encoding="utf-8"))
+
+
+class MakeEditableTests(PreviewBrowserTestCase):
+    MARKDOWN = ("# One\n\n| Outcome | n |\n|---|---:|\n| Response | 12 |\n\n"
+                "Table: Outcomes. {#tbl:outcomes}\n")
+
+    def open_paper(self, text):
+        from trazo import table
+        doc = _support.ROOT / "manuscript/main/01_introduction.md"
+        made = table.spec_path("outcomes")
+        self.keep_files(doc, made, table.output_path("outcomes"), table.HISTORY_PATH)
+        doc.write_bytes(text.encode("utf-8"))  # "\n" on Windows too: captions are found by line
+        page = preview.OUT_DIR / "manuscript.html"
+        page.write_text(page.read_text().replace('</section><script>',
+            '<table id="tbl:outcomes"><caption>Table 1. Outcomes.</caption><tbody><tr><td>1</td></tr></tbody></table>'
+            '</section><script>'))
+        self.open()
+        self.wait_for("Array.from(document.querySelectorAll('.pv-tbl-edit')).some(b => b.textContent === 'Make editable')")
+        return doc, made
+
+    def press_make_editable(self):
+        self.evaluate("Array.from(document.querySelectorAll('.pv-tbl-edit')).find(b => b.textContent === 'Make editable').click()")
+        self.wait_for("document.querySelector('.pk-confirm')")
+
+    def test_a_table_is_made_editable_and_can_be_undone(self):
+        doc, made = self.open_paper(self.MARKDOWN)
+        self.press_make_editable()
+        self.evaluate("Array.from(document.querySelectorAll('.pk-confirm button')).find(b => b.textContent === 'Make editable').click()")
+        self.wait_for("location.pathname === '/tables' && document.querySelector('td[data-row]')")
+        self.assertEqual(self.evaluate("document.querySelector('#te-kindb').textContent"), "Typed by hand")
+        self.assertIn("!include", doc.read_text(encoding="utf-8"))
+        self.wait_for("!document.querySelector('#te-banner').hidden")
+        self.evaluate("Array.from(document.querySelectorAll('#te-banner button')).find(b => b.textContent === 'Undo').click()")
+        self.wait_for("location.pathname !== '/tables'")
+        self.assertEqual(doc.read_text(encoding="utf-8"), self.MARKDOWN)
+        self.assertFalse(made.exists())
+
+    def test_a_table_that_cannot_be_converted_says_why(self):
+        self.open_paper(self.MARKDOWN.replace("12", "`code`"))
+        self.press_make_editable()
+        self.wait_for("document.querySelector('.pk-confirm').textContent.includes('a cell has code')")
+        self.assertIn("Edit source", self.evaluate("document.querySelector('.pk-confirm').textContent"))
 
 
 if __name__ == "__main__":

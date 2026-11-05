@@ -125,14 +125,11 @@ def is_table(plain, span):
                             or (len(first) > 1 and RULE.match(first[1]) is not None))
 
 
-def table_note(text, identifier):
-    """The ::: table-note block that follows a captioned Markdown table.
-
-    The caption may come before or after its table; the note follows both.
-    Returns (note, end): the editable (start, end) span of the note's text,
-    or None, and the offset after the table and caption, where a new note
-    goes. Returns None when the table caption is not found once.
-    """
+def locate_table(text, identifier):
+    """Where a captioned Markdown table sits, or None when its caption is not found
+    once: {start, end} of the table and caption (either may come first), {note}, the
+    editable span of the ::: table-note that follows them or None, and {stop}, the
+    offset after that note's closing fence, or `end` without a note."""
     spans = list(table_captions(text, identifier))
     if len(spans) != 1:
         return None
@@ -141,11 +138,14 @@ def table_note(text, identifier):
     at = next((i for i, (start, end) in enumerate(found) if start <= spans[0][0] < end), None)
     if at is None:
         return None
-    # The caption follows its table when the block before it is a table.
-    group_end = at if at > 0 and is_table(plain, found[at - 1]) else at + 1
+    # The caption follows its table when the block before it is a table, or in
+    # the same block, right under the last row.
+    joined = bool(plain[found[at][0]:spans[0][0]].strip(" \t:Table").strip())
+    follows = not joined and at > 0 and is_table(plain, found[at - 1])
+    group_end = at if follows or joined else at + 1
     if group_end >= len(found):
         return None
-    end = found[group_end][1]
+    start, end = found[at - 1 if follows else at][0], found[group_end][1]
     following = found[group_end + 1] if group_end + 1 < len(found) else None
     if following:
         first = plain[following[0]:].split("\n", 1)[0]
@@ -154,6 +154,19 @@ def table_note(text, identifier):
             body_start = offset = following[0] + len(first) + 1
             for line in plain[body_start:].splitlines(keepends=True):
                 if NOTE_CLOSE.match(line.rstrip("\n")):
-                    return (body_start, max(body_start, offset - 1)), end
+                    return {"start": start, "end": end, "stop": offset + len(line.rstrip("\n")),
+                            "note": (body_start, max(body_start, offset - 1))}
                 offset += len(line)
-    return None, end
+    return {"start": start, "end": end, "stop": end, "note": None}
+
+
+def table_note(text, identifier):
+    """The ::: table-note block that follows a captioned Markdown table.
+
+    The caption may come before or after its table; the note follows both.
+    Returns (note, end): the editable (start, end) span of the note's text,
+    or None, and the offset after the table and caption, where a new note
+    goes. Returns None when the table caption is not found once.
+    """
+    found = locate_table(text, identifier)
+    return (found["note"], found["end"]) if found else None

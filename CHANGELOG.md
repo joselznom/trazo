@@ -24,6 +24,9 @@ Internal changes (tests, CI, refactoring) stay out.
   that is not computed from your data, empty or pasted from Excel, Word or
   Sheets, and adds it to the section you choose. Type in its cells, add rows
   and columns, and format text; it goes to Word like any table (#17).
+- **Make editable** on a Markdown table turns it into a table typed by hand,
+  with its caption, note and cross-references. A table that would lose
+  something says why and keeps **Edit source** (#18).
 
 ### Changed
 

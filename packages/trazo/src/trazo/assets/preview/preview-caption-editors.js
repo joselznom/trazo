@@ -9,6 +9,33 @@
   const TABLE_SPECS = window.PREVIEW_TABLE_SPECS || [];
   const tableHref = (label) => App.editorLink("/tables", label);
   const tableTitle = (label) => `Open tables/specs/${label}.json in the table editor`;
+  // Make editable: a Markdown table becomes a table typed by hand (trazo.table_convert).
+  // The answer opens in `host`, under the button; the table editor offers to undo it.
+  async function makeEditable(doc, id, host) {
+    host.querySelector(":scope > .pk-confirm")?.remove();
+    const check = await App.api("/__table/convert", { op: "check", doc, id });
+    const box = h("div", { class: "pk-confirm", role: "alertdialog", "aria-label": "Make editable" });
+    const cancel = h("button", { type: "button", class: "pv-btn sm", text: check.ok ? "Cancel" : "Close" });
+    cancel.addEventListener("click", () => box.remove());
+    box.addEventListener("keydown", (e) => { if (e.key === "Escape") { e.stopPropagation(); box.remove(); } });
+    const acts = h("div", { class: "pk-confirm-acts" }, cancel);
+    if (check.ok) {
+      box.append(h("b", { text: "Make this table editable?" }), "It moves to its own file and the text keeps a line that includes it. Its caption, note and cross-references stay as they are.");
+      const confirm = h("button", { type: "button", class: "pv-btn sm primary", text: "Make editable" });
+      confirm.addEventListener("click", async () => {
+        const done = await App.api("/__table/convert", { op: "convert", doc, id });
+        if (!done.ok) { box.replaceChildren(h("b", { text: "Not done" }), done.data.error || "The table changed.", acts); return; }
+        try { sessionStorage.setItem("trazo.converted", JSON.stringify({ ...done.data, doc })); } catch (e) { /* no undo offer */ }
+        location.href = tableHref(done.data.label);
+      });
+      acts.append(confirm);
+    } else {
+      box.append(h("b", { text: "This table cannot become editable" }), `${check.data.error || "It could not be read"}. Use Edit source to change it.`);
+    }
+    box.append(acts);
+    host.append(box);
+    cancel.focus();
+  }
   let tableComments = {};  // label -> open table comments (GET /__tables)
   const tableEditors = new Map();  // "caption:" + label -> editor state
   unsavedChecks.push(() => [...tableEditors.values()].some((t) => t.frame.unsaved()));
@@ -168,6 +195,11 @@
     host.append(btn);
     if (TABLE_SPECS.includes(label)) host.append(h("a", { class: "pv-tbl-edit", href: tableHref(label),
       title: tableTitle(label), text: "Edit table" }));
+    else {
+      const convert = h("button", { type: "button", class: "pv-tbl-edit", text: "Make editable", title: "Edit this table cell by cell in the table editor" });
+      convert.addEventListener("click", () => makeEditable(doc, `tbl:${label}`, host));
+      host.append(convert);
+    }
   }
   // Reopen after live reload or a gallery action in another document.
   {
