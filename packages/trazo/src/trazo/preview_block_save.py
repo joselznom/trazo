@@ -9,8 +9,11 @@ literally. The result is then checked: built alone, the block must read
 exactly what the author left on the page, keep its kind, and keep the source
 of its chips. If not, nothing is written and the answer says why ({refused,
 markdown}). {file, h, markdown} replaces the block with Markdown the author
-wrote, unchecked. A block that changed on disk answers 409; a save goes through
-change_source, so it has an undo and counts as the author's own change.
+wrote, unchecked. A block that changed on disk answers 409, unless the author
+chose to keep their text ({keep: true}): the edit is then made to the Markdown
+the key stood for (trazo.preview_blocks.SOURCES) and merged into the block most
+like it. A save goes through change_source, so it has an undo and counts as the
+author's own change.
 """
 
 from __future__ import annotations
@@ -23,9 +26,9 @@ from typing import Any
 
 from . import pandoc_run
 from .counts import VOID
-from .edit_diff import Lines, changes
+from .edit_diff import Lines, changes, merge
 from .local_server import Conflict, RequestError
-from .preview_blocks import PROTECTED, QUOTE, Block, atoms, atoms_in, blocks_of, escaped
+from .preview_blocks import PROTECTED, QUOTE, SOURCES, Block, atoms, atoms_in, blocks_of, escaped
 from .preview_sources import change_source, get_source, source_path
 
 CHIP_FIRST, OTHER_CHIP_FIRST, CHIP_LAST = 0xE000, 0xF000, 0xF8FE
@@ -40,6 +43,7 @@ DEFINITION = re.compile(r"(?m)^ {0,3}\[([^\]^]+)\]:.*$")
 SHORTCUT_LINK = re.compile(r"\[([^\[\]]+)\](?![(\[{:])")
 QUOTE_LINE = re.compile(rf"(?m)^{QUOTE.pattern}")
 CHECK_TIMEOUT = 30  # seconds; Pandoc takes a few hundredths for one block
+SAME_BLOCK = 0.5    # how alike a changed block and the one the author started from must be
 
 
 def _is_chip(ch: str) -> bool:
@@ -248,11 +252,9 @@ def _find(text: str, key: Any, sha256: str) -> tuple[Block, Lines]:
     raise Conflict("this paragraph changed on disk", sha256=sha256)
 
 
-def _rewritten(request: dict[str, Any], text: str, block: Block, lines: Lines) -> tuple[str | None, str]:
-    """The block's new Markdown, or None and why not."""
+def _rewritten(request: dict[str, Any], text: str, source: str, spans: list[tuple[int, int]]) -> tuple[str | None, str]:
+    """`source` with the author's edit, or None and why not. `text` is its file."""
     before, after = _squashed(request, "before"), _squashed(request, "after")
-    source = text[block.at:block.end]
-    spans = [(start - block.at, end - block.at) for start, end, _ in atoms_in(text, block, lines)]
     references = {m[1].lower() for m in DEFINITION.finditer(text)}
     patched = patch(before, after, source, spans, references)
     if patched is None:
@@ -262,6 +264,38 @@ def _rewritten(request: dict[str, Any], text: str, block: Block, lines: Lines) -
     return (None, why) if why else (patched, "")
 
 
+def _spans(text: str, block: Block, lines: Lines) -> list[tuple[int, int]]:
+    return [(start - block.at, end - block.at) for start, end, _ in atoms_in(text, block, lines)]
+
+
+def _kept_mine(request: dict[str, Any], text: str, sha256: str) -> tuple[Block, str | None, str]:
+    """The block most like the one the author started from, with their edit
+    merged in, or None and why not: where both changed the same words, theirs stay."""
+    source = SOURCES.get(request.get("h"))
+    if source is None:
+        raise Conflict("the preview no longer knows this paragraph", sha256=sha256)
+    matcher = SequenceMatcher(None, autojunk=False)
+    matcher.set_seq2(source.split())
+
+    def likeness(block: Block) -> float:
+        matcher.set_seq1(text[block.at:block.end].split())
+        return matcher.ratio()
+    block = max(blocks_of(text), key=likeness, default=None)
+    if block is None or likeness(block) < SAME_BLOCK:
+        raise Conflict("this paragraph is no longer in the file", sha256=sha256)
+    alone = Block(0, len(source), "")
+    patched, why = (_markdown(request), "") if "markdown" in request else (
+        _rewritten(request, text, source, _spans(source, alone, Lines(source))))
+    return block, None if patched is None else merge(source, text[block.at:block.end], patched), why
+
+
+def _markdown(request: dict[str, Any]) -> str:
+    markdown = request["markdown"]
+    if not isinstance(markdown, str):
+        raise RequestError("markdown must be a string")
+    return markdown
+
+
 def change_block(request: Any) -> dict[str, Any]:
     """Write an edit of one block; see the module's docstring."""
     if not isinstance(request, dict):
@@ -269,17 +303,18 @@ def change_block(request: Any) -> dict[str, Any]:
     _, file = source_path(request.get("file"))
     state = get_source(file)
     text = state["text"]
-    block, lines = _find(text, request.get("h"), state["sha256"])
-    source = text[block.at:block.end]
-    if "markdown" in request:
-        new = request["markdown"]
-        if not isinstance(new, str):
-            raise RequestError("markdown must be a string")
+    try:
+        block, lines = _find(text, request.get("h"), state["sha256"])
+    except Conflict:
+        if not request.get("keep"):
+            raise
+        block, new, why = _kept_mine(request, text, state["sha256"])
     else:
-        patched, why = _rewritten(request, text, block, lines)
-        if patched is None:
-            return {"refused": why, "file": file, "markdown": source}
-        new = patched
+        new, why = (_markdown(request), "") if "markdown" in request else (
+            _rewritten(request, text, text[block.at:block.end], _spans(text, block, lines)))
+    source = text[block.at:block.end]
+    if new is None:
+        return {"refused": why, "file": file, "markdown": source}
     if new == source:
         return {"saved": True, "file": file, "markdown": new, "h": block.key}
     changed = text[:block.at] + new + text[block.end:]

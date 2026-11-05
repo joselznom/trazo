@@ -182,6 +182,10 @@ class MarksTests(unittest.TestCase):
         found, text = self.marked("1. Old Two\n", "1. New words:\n   - Two\n")
         self.assertIn("<ul>", html(text))
 
+    def test_an_edit_across_the_end_of_a_bold_keeps_it(self):
+        found, text = self.marked("**Abc.** one\n", "**Abc!** two\n")
+        self.assertIn("<strong>", html(text))
+
     def test_a_new_file_marks_its_paragraphs_as_new(self):
         found, text = self.marked("", "# Methods\n\nWe did it.\n\nTwice.\n")
         self.assertEqual(len(found), 1)

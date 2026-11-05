@@ -201,7 +201,7 @@ VIEWER_SCRIPTS = (
     "preview-comment-anchors.js", "preview-comment-list.js", "preview-comment-highlights.js",
     "preview-source.js", "preview-diff.js", "preview-edits.js", "preview-build.js", "preview-new-comments.js",
     "preview-captions.js", "preview-caption-editors.js", "preview-export.js", "preview-export-picker.js",
-    "preview-figures.js", "preview-lightbox.js", "preview-submission.js", "preview.js",
+    "preview-figures.js", "preview-lightbox.js", "preview-submission.js", "preview-writing.js", "preview.js",
 )
 WATCHED = tuple(PROJECT.config["preview"]["watch"])
 PANDOC_FLAGS = [
