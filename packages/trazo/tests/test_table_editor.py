@@ -6,7 +6,7 @@ import threading
 import unittest
 from unittest.mock import Mock, patch
 
-import _support  # noqa: F401  (sets TRAZO_ROOT first)
+import _support
 from test_table import DATA, SPECS, Restore, spec
 
 from trazo import preview, table
@@ -82,6 +82,30 @@ class EditorTests(Restore):
         self.assertEqual(state["data"]["inputs"], ["data/results.csv"])
         self.assertEqual(state["map_usage"]["cohort"], [{"label": "cohorts", "own": ["test", "train"]}])
         self.assertNotIn("method", state["map_usage"])
+
+    def test_a_new_table_is_saved_and_included_at_the_end_of_its_section(self):
+        path = _support.ROOT / "manuscript/main/01_introduction.md"
+        self.addCleanup(path.write_bytes, path.read_bytes())
+        path.write_text("# One\n\nText.\n\n## Sub\n\nMore.\n\n# Two\n\nEnd.\n", encoding="utf-8")
+        status, data = self.call("/__table/sections")
+        self.assertEqual(status, 200, data)
+        found = [s for d in data["documents"] for s in d["sections"] if s["title"] == "One"][0]
+        status, data = self.call("/__table/new", {"title": "Included studies.", "file": found["file"], "line": found["line"],
+                                                  "rows": [["Study", "n"], ["A", "10"]]})
+        self.assertEqual(status, 200, data)
+        self.assertEqual(data, {"label": "included-studies"})
+        self.assertEqual(path.read_text(encoding="utf-8"), "# One\n\nText.\n\n## Sub\n\nMore.\n\n"
+                         "!include tables/output/md/included-studies.md\n\n# Two\n\nEnd.\n")
+        self.assertEqual(self.state("included-studies")["spec"]["columns"][1]["align"], "right")
+        self.assertIn("Included studies.", table.output_path("included-studies").read_text())
+        self.assertEqual({t["label"]: t["kind"] for t in self.call("/__tables")[1]}["included-studies"], "hand")
+        self.assertIsNone(self.state("included-studies")["undo"])
+
+    def test_a_new_table_needs_a_title_and_a_known_section(self):
+        self.assertEqual(self.call("/__table/new", {"title": " ", "file": "x.md"})[0], 400)
+        file = "manuscript/main/01_introduction.md"
+        self.assertEqual(self.call("/__table/new", {"title": "T", "file": file, "line": 99999})[0], 409)
+        self.assertFalse((SPECS / "t.json").exists())
 
     def test_preview_does_not_write(self):
         before = (SPECS / "results.json").read_bytes()

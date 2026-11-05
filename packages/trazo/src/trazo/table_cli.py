@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any
 
 from . import table as _table
+from . import table_hand
 from .build_lock import exclusive
 from .review_storage import StoreError, write_atomic
 from .table import (
@@ -102,10 +103,15 @@ def cmd_render(names: list[str]) -> int:
     return 1 if failed else 0
 
 
-def cmd_new(label: str, data_name: str) -> None:
+def cmd_new(label: str, data_name: str | None) -> None:
     path = spec_path(label)
     if path.exists():
         raise TableError(f"{rel(path)} already exists")
+    if data_name is None:
+        HISTORY.write_file(path, dump_spec(table_hand.new_spec(f"TODO: title of {label}.", None)), f"new {label}")
+        print(f"created {rel(path)} (typed by hand: three columns, three rows)")
+        print(f"next: trazo table describe {label}")
+        return
     if not NAME_RE.match(data_name):
         raise TableError(f"invalid data name {data_name!r}")
     data, _ = read_json(data_path(data_name), "table data")
@@ -148,6 +154,12 @@ def cmd_describe(label: str) -> int:
     status = "FAIL" if table.errors else "ok"
     print(f"{label}: {rel(table.path)} -> {rel(output_path(label))} ({status}: "
           f"{len(table.errors)} error(s), {len(table.warnings)} warning(s))")
+    if table.hand and table.filled:
+        print(f"typed by hand: {len(table.rows)} row(s), leaf ids "
+              + ", ".join(leaf.spec["id"] for leaf in table.all_leaves)
+              + "; row ids " + ", ".join(row["key"]["row"] for row in table.rows))
+        print(table.markdown or "", end="")
+        return 0
     if not table.fields:
         report(table)
         return 1
@@ -271,7 +283,9 @@ def main(argv: list[str] | None = None) -> int:
     sub = parser.add_subparsers(dest="command", required=True)
     p = sub.add_parser("new", help="scaffold a spec with one column per data field")
     p.add_argument("label")
-    p.add_argument("--data", required=True, help="data file name in the table data folder")
+    source = p.add_mutually_exclusive_group(required=True)
+    source.add_argument("--data", help="data file name in the table data folder")
+    source.add_argument("--hand", action="store_true", help="a table typed by hand (trazo.table_hand)")
     for name, about in (("render", "write the Markdown table (refuses on check errors)"),
                         ("check", "check spec, data and formats (non-zero exit on error)")):
         p = sub.add_parser(name, help=about)

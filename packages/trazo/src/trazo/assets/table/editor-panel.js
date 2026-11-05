@@ -32,6 +32,8 @@
     const btn = (text, onclick, cls) => h("button", { type: "button", class: "pv-btn sm" + (cls ? " " + cls : ""), text, onclick });
 
     function propsPanel() {
+      if (E.hand && E.sel.kind === "block") return E.handUI.blockProps();
+      if (E.hand && E.sel.kind === "table") return E.handUI.tableProps();
       if (E.sel.kind === "cell") return cellProps();
       if (E.sel.kind === "block") return labelProps(E.sel.label, null);
       if (E.sel.kind === "column") return C.columnProps();
@@ -45,10 +47,7 @@
       const out = [ctx("Table · from your data", E.label, "Settings for the whole table. Click a header or a label to rename it.")];
       const values = Object.entries(E.st.data.values || {});
       out.push(h("div", { class: "te-sec" }, h("h4", { text: "Caption" }),
-        row("Title", textField(spec.title, "title", { label: "Title", ids: ["title", "spec"] })),
-        row("Legend", textField(spec.legend, "legend", { label: "Legend", multiline: true, empty: null, ids: ["legend"] }), true),
-        row("Note", textField(spec.note, "note", { label: "Note", multiline: true, empty: null, ids: ["note"],
-          placeholder: "Below the table: abbreviations, symbols, sources. A blank line starts a paragraph." }), true),
+        ...K.captionRows(spec),
         values.length ? row("Values", h("div", { class: "te-chips" }, values.map(([k, v]) =>
           h("span", { class: "te-chip", title: `Write {${k}} in the title, legend or note`, text: `{${k}} = ${typeof v === "object" ? E.show(v) : v}` })))) : null));
       const rowsSec = h("div", { class: "te-sec" }, h("h4", { text: "Rows" }),
@@ -152,6 +151,7 @@
     function cellProps() {
       const sel = E.sel, at = E.selectedCell();
       if (!at) return [ctx("Cell", sel.id, "Not in the table any more.")];
+      if (E.hand) return E.handUI.cellProps(at);
       const { item, cell } = at;
       if (cell.label) return labelProps(cell.label, { item, cell });
       const col = E.colAt(E.leafPath(sel.id)), raw = cell.raw;

@@ -74,6 +74,16 @@
     // Whether a change to something shared goes to _shared.json: when nothing
     // else uses it, or when the author chose "everywhere".
     const toShared = (shared, others, scope) => shared && (!others.length || scope === "everywhere");
+    // The title, legend and note of a table.
+    const captionRows = (spec) => [
+      row("Title", textField(spec.title, "title", { label: "Title", ids: ["title", "spec"] })),
+      row("Legend", textField(spec.legend, "legend", { label: "Legend", multiline: true, empty: null, ids: ["legend"] }), true),
+      row("Note", textField(spec.note, "note", { label: "Note", multiline: true, empty: null, ids: ["note"],
+        placeholder: "Below the table: abbreviations, symbols, sources. A blank line starts a paragraph." }), true)];
+    // A button of the format bar. Pressing it keeps the focus in the cell being typed in.
+    const icon = (text, label, on, disabled, onclick) => h("button", { type: "button", class: "te-icon te-tool" + (on ? " on" : ""),
+      "aria-label": label, title: label, "aria-pressed": String(!!on), disabled: disabled ? "" : null,
+      onmousedown: (e) => e.preventDefault(), onclick }, text);
     function ctx(kind, what, where) {
       return h("div", { class: "te-ctx" }, h("div", { class: "te-kind", text: kind }),
         h("div", { class: "te-what", text: what }), where ? h("div", { class: "te-where" }, where) : null);
@@ -105,6 +115,6 @@
         h("div", { class: "te-data-wrap" }, h("table", { class: "te-data" }, h("tr", null, names.map((n) => h("th", { text: n }))),
           d.records.map((r) => h("tr", null, names.map((n) => h("td", { text: compact(r[n] === undefined ? null : r[n]) }))))))];
     }
-    return { row, textField, switchCtl, selectCtl, orderList, scopeChoice, toShared, ctx, issuesPanel, dataPanel };
+    return { row, textField, switchCtl, selectCtl, orderList, scopeChoice, toShared, captionRows, icon, ctx, issuesPanel, dataPanel };
   };
 })();

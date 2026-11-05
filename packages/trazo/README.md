@@ -244,6 +244,17 @@ pivots, the bold-the-best rule and the Data tab. Comment with `C`; undo with
 so it is validated, saved, rendered and undoable like one. Agents answer its
 comments with `trazo table comments` and `trazo table resolve`.
 
+A table can also be **typed by hand**: **+ New table** in the editor asks for
+a title, a document and a section, starts empty or from a pasted range
+(its first row is the headers), and adds the `!include` at the end of that
+section. Its cells live in the spec (`body` instead of `data` and `rows`,
+documented in `src/trazo/table_hand.py`), so there is no data and no script.
+Double-click a cell to type; the bar adds rows, block rows and columns, and
+formats bold, italic, superscript and subscript. Pasting a range from Excel,
+Word or Sheets fills from the selected cell and grows the table; a new
+column of numbers is aligned right. Text is published as typed: nothing is
+calculated.
+
 The diagram editor is also part of the preview, at `/diagrams#<name>`
 (**Edit diagram** on a figure, **All diagrams** in Figures & Tables). It
 needs Google Chrome or Chromium for checks and exports; its endpoints are

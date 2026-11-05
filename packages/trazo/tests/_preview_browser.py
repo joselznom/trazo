@@ -57,7 +57,8 @@ class PreviewBrowserTestCase(unittest.TestCase):
                 + "".join(f'<script src="/__assets/preview/{script}"></script>' for script in preview.VIEWER_SCRIPTS)
                 + '</body></html>',
                 encoding="utf-8")
-        server = LocalServer(("127.0.0.1", 0), preview.Handler)
+        server = self.server = LocalServer(("127.0.0.1", 0), preview.Handler)
+        server.daemon_threads = False  # server_close waits for the requests in flight
         self.addCleanup(server.server_close)
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
@@ -66,7 +67,7 @@ class PreviewBrowserTestCase(unittest.TestCase):
         self.url = f"http://127.0.0.1:{server.server_port}/manuscript.html"
         context = self.chrome.call("Target.createBrowserContext")["browserContextId"]
         self.context = context
-        self.addCleanup(self.chrome.call, "Target.disposeBrowserContext", {"browserContextId": context})
+        self.addCleanup(self.close_page)
         target = self.chrome.call("Target.createTarget", {"url": "about:blank", "browserContextId": context})["targetId"]
         self.session = self.chrome.call("Target.attachToTarget", {"targetId": target, "flatten": True})["sessionId"]
         self.chrome.call("Emulation.setDeviceMetricsOverride", {
@@ -145,6 +146,21 @@ class PreviewBrowserTestCase(unittest.TestCase):
             "button": "left", "buttons": 0 if kind == "mouseReleased" else 1,
             "clickCount": 1}, self.session)
 
+    def mouse_double_click(self, x, y):
+        for count in (1, 2):
+            for kind in ("mousePressed", "mouseReleased"):
+                self.chrome.call("Input.dispatchMouseEvent", {
+                    "type": kind, "x": x, "y": y, "button": "left", "clickCount": count,
+                    "buttons": 0 if kind == "mouseReleased" else 1}, self.session)
+
+    def double_click(self, selector, text):
+        """A real double click on the element with this text: the first click may redraw it."""
+        self.mouse_double_click(*self.evaluate(f"""(() => {{
+          const el = Array.from(document.querySelectorAll({json.dumps(selector)})).find(x => x.textContent.trim() === {json.dumps(text)});
+          const box = el.getBoundingClientRect();
+          return [box.left + box.width / 2, box.top + box.height / 2];
+        }})()"""))
+
     def click_text(self, selector):
         self.evaluate("Promise.all(document.getAnimations().filter(a => a.effect.getComputedTiming().iterations !== Infinity).map(a => a.finished.catch(() => {})))")
         # A layout change (a sidebar toggled, say) refits the page from a
@@ -158,6 +174,17 @@ class PreviewBrowserTestCase(unittest.TestCase):
         }})()""")
         self.mouse("mousePressed", *point)
         self.mouse("mouseReleased", *point)
+
+    def close_page(self):
+        context, self.context = self.context, None
+        if context:
+            self.chrome.call("Target.disposeBrowserContext", {"browserContextId": context})
+
+    def tearDown(self):
+        # Before the cleanups delete files: Windows refuses to delete one a request is reading.
+        self.close_page()
+        self.server.shutdown()
+        self.server.server_close()
 
     def keep_files(self, *paths):
         """Restore these files (or remove them) after the test."""
