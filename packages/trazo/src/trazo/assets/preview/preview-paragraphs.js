@@ -86,6 +86,7 @@
     const el = newParagraph(ed, above ? "" : restOf(ed, true).extractContents(), above);
     // The space at the break goes, as it does in the saved text.
     const start = textNodes(el)[0], end = textNodes(ed.el).pop();
+    const gap = (start && /^\s/.test(start.data)) || (end && /\s$/.test(end.data)) ? " " : "";
     if (start) start.data = start.data.trimStart();
     if (end) end.data = end.data.trimEnd();
     const left = textOf(ed.el), right = textOf(el);
@@ -98,16 +99,17 @@
       saveBlock(first);
       second.draftOf = first;
       second.above = above;
-      return;
+      return gap;
     }
     sendBlock(first, { before: first.before, after: left + BREAK + right }, {
       group: [first, second],
       refused: (...failure) => {  // the text goes back in one paragraph, where the failure shows
         if (writing === second) stopWriting();
-        takeText(first.el, second);
+        takeText(first.el, second, gap);
         showFailure(...failure);
       },
     });
+    return gap;
   }
 
   function joinTo(ed, previous, payload) {
@@ -160,9 +162,10 @@
     e.preventDefault();
     const pieces = e.clipboardData.getData("text/plain").split(/\r?\n[ \t]*\r?\n\s*/)
       .map((piece) => piece.replace(/\s+/g, " ")).filter((piece) => piece.trim());
+    let gap = "";  // the space before the text that follows, kept after the last piece
     pieces.forEach((piece, i) => {
-      if (i) breakParagraph();
-      document.execCommand("insertText", false, piece);
+      if (i) gap = breakParagraph() || gap;
+      document.execCommand("insertText", false, i === pieces.length - 1 ? piece + gap : piece);
     });
   });
   document.addEventListener("keydown", (e) => {
