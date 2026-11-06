@@ -34,7 +34,7 @@ COMMON = ("replace", "typo", "delete", "join", "multi", *INSERTS)
 FORMATS = {"bold": ("strong", None), "italic": ("em", None), "unbold": ("strong", 1), "unitalic": ("em", 2),
            "bold-italic": ("strong", 2), "italic-bold": ("em", 1)}
 KINDS = (*COMMON, "chip", "rewrite", "split", *PREFIXES, *FORMATS)
-BREAK = ""
+BREAK = "\uf8ff"
 
 
 @dataclass

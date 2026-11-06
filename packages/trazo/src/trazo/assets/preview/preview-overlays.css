@@ -91,3 +91,8 @@
 }
 .pk-abbreviations th, .pk-abbreviations td { text-align: left; }
 abbr[title] { text-decoration: underline dotted; text-underline-offset: 3px; }
+.pv-at-menu { position: fixed; z-index: 60; display: grid; width: 340px; max-width: calc(100vw - 16px); padding: 3px; border: 1px solid var(--pv-line); border-radius: 8px; background: var(--pv-card); color: var(--pv-ink); box-shadow: var(--pv-shadow-pop); font: 12.5px/1.35 var(--pv-sans); }
+.pv-at-menu button { display: flex; gap: 8px; padding: 4px 7px; border-radius: 6px; text-align: left; }
+.pv-at-menu button[aria-selected="true"], .pv-at-menu button:hover { background: var(--pv-hover); }
+.pv-at-menu b { flex: none; max-width: 45%; overflow: hidden; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.pv-at-menu span { overflow: hidden; color: var(--pv-muted); text-overflow: ellipsis; white-space: nowrap; }

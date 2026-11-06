@@ -11,7 +11,7 @@
   // Chips the build did not wrap, and what is on the page but not in the block.
   const OTHER_CHIPS = ".citation, .pv-val, span.math, math, code, .footnote-ref, a[href^='#'], img, svg";
   const NOT_TEXT = ".pv-src, .pv-para, .pv-src-mark, .pv-edit-del, .pv-write-bar, button, ul, ol, dl, blockquote";
-  const CHIP = 0xE000, OTHER_CHIP = 0xF000, BREAK = "";
+  const CHIP = 0xE000, NEW_CHIP = 0xE800, OTHER_CHIP = 0xF000, BREAK = "\uF8FF";
   const browserWrites = (() => {
     const probe = document.createElement("div");
     try { probe.contentEditable = "plaintext-only"; } catch (e) { return false; }
@@ -39,6 +39,8 @@
   }
   for (const [el, mark] of blockMark) if (mark) el.classList.add("pv-can-write");
 
+  const chipChar = (chip) => String.fromCharCode(chip.dataset.new === undefined ? CHIP + Number(chip.dataset.i) : NEW_CHIP + Number(chip.dataset.new));
+
   // The paragraph's text as the server reads it, each chip one character.
   function textOf(el) {
     let others = 0;
@@ -46,7 +48,7 @@
       if (child.nodeType === 3) return child.data;
       if (child.nodeType !== 1 || child.matches(NOT_TEXT)) return "";
       if (child.tagName === "BR") return " ";
-      if (child.matches(".pv-atom")) return String.fromCharCode(CHIP + Number(child.dataset.i));
+      if (child.matches(".pv-atom")) return chipChar(child);
       if (child.matches(OTHER_CHIPS)) return String.fromCharCode(OTHER_CHIP + others++);
       return walk(child);
     }).join("");
@@ -142,14 +144,14 @@
       if (!after) { dropParagraph(ed); return; }
       ed.before = after;
       const parts = ed.above ? [ed, anchor] : [anchor, ed];
-      sendBlock(ed, () => ({ before: anchor.before, after: parts.map((part) => part.before).join(BREAK), ...extra }), {
+      sendBlock(ed, () => ({ before: anchor.before, after: parts.map((part) => part.before).join(BREAK), ...mentionsIn(ed.el), ...extra }), {
         group: parts,
         block: anchor,
         refused: (...failure) => { ed.draftOf = anchor; showFailure(...failure); },
       });
     } else if (after !== ed.before || failed.has(ed.el)) {
       ed.sent = after;
-      sendBlock(ed, { before: ed.before, after, ...extra });
+      sendBlock(ed, { before: ed.before, after, ...mentionsIn(ed.el), ...extra });
     }
   }
 
@@ -160,9 +162,23 @@
     if (item && item.tagName === "LI" && !item.querySelector("p, ul, ol, dl")) item.remove();
   }
 
-  // Until the page reloads, the chips of a paragraph are numbered as its Markdown is.
-  function numberChips(el) {
-    $$(".pv-atom", el).filter((chip) => chip.closest("p, li") === el).forEach((chip, i) => { chip.dataset.i = String(i); });
+  // The chips the @ menu added to these paragraphs, for the save that takes them to the Markdown.
+  function mentionsIn(...els) {
+    const chips = els.flatMap((el) => $$("[data-new]", el));
+    return chips.length ? { mentions: Object.fromEntries(chips.map((chip) => [chipChar(chip), { kind: chip.dataset.kind, key: chip.dataset.key }])) } : {};
+  }
+
+  // Until the page reloads, the chips of a paragraph are numbered as its Markdown
+  // is. The text a paragraph being written is compared with changes with them.
+  function numberChips(el, ed) {
+    const renamed = new Map();
+    $$(".pv-atom", el).filter((chip) => chip.closest("p, li") === el).forEach((chip, i) => {
+      const before = chipChar(chip);
+      delete chip.dataset.new;
+      chip.dataset.i = String(i);
+      renamed.set(before, chipChar(chip));
+    });
+    if (ed) ed.before = [...ed.before].map((ch) => renamed.get(ch) || ch).join("");
   }
 
   function blockSaved(ed, payload, group) {
@@ -171,7 +187,7 @@
     if (ed.sent !== undefined) ed.before = ed.sent;
     group.forEach((part, i) => { if (payload.parts[i]) part.mark.dataset.h = payload.parts[i]; });
     if (!payload.parts.length) dropParagraph(ed);
-    else if (ed !== writing) numberChips(ed.el);
+    else for (const part of group) numberChips(part.el, part);
     showSaveState("Saved", true);
   }
 

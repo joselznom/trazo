@@ -15,7 +15,8 @@ the key stood for (trazo.preview_blocks.SOURCES) and merged into the block most
 like it. A save goes through change_source, so it has an undo and counts as the
 author's own change.
 
-U+F8FF in `after` is a paragraph break: the block becomes several, each checked
+Characters from U+E800 in `after` are new chips, named by {mentions}
+(trazo.preview_mentions). U+F8FF in `after` is a paragraph break: the block becomes several, each checked
 alone (in a list, new items). An empty `after` deletes the block. {into, previous}
 joins the block to the one before it, whose key and text they are. The answer's
 `parts` are the keys of the blocks the edit left.
@@ -34,10 +35,11 @@ from .counts import VOID
 from .edit_diff import Lines, changes, merge
 from .local_server import Conflict, RequestError
 from .preview_blocks import ITEM, PROTECTED, QUOTE, SOURCES, Block, atoms, atoms_in, blocks_of, escaped
+from .preview_mentions import sources
 from .preview_sources import change_source, get_source, source_path
 
 CHIP_FIRST, OTHER_CHIP_FIRST, CHIP_LAST = 0xE000, 0xF000, 0xF8FE
-BREAK = ""
+BREAK = "\uf8ff"
 # Between two blocks that can join: blank lines and the markers of the second.
 GAP = re.compile(r"[\s>]*(?:(?:[-*+]|\d+[.)]|#[.)])[ \t]+)?")
 BLANK_LINE = re.compile(r"[ \t]*\r?\n")
@@ -144,7 +146,7 @@ def patch(before: str, after: str, source: str, spans: list[tuple[int, int]],
           references: set[str] | None = None) -> str | None:
     """`source` with the change from `before` to `after`, or None if some
     change has no place in it. `spans` are the block's atoms."""
-    kept = [ch for ch in after if _is_chip(ch)]
+    kept = [ch for ch in after if _is_chip(ch) and ch in before]  # the others are new: typed text for now
     remaining = iter(ch for ch in before if _is_chip(ch))
     if not all(ch in remaining for ch in kept):
         return None  # a chip moved
@@ -286,7 +288,12 @@ def _rewritten(request: dict[str, Any], text: str, source: str, spans: list[tupl
     definitions = "\n".join(m[0] for m in DEFINITION.finditer(text))
     shown, written = lead
     why = check(shown + before, shown + after, written + source, written + patched, definitions)
-    return (None, why) if why else (written + patched, "")
+    if why:
+        return None, why
+    patched = written + patched
+    for ch, mention in sources(request).items():
+        patched = patched.replace(ch, mention)
+    return patched, ""
 
 
 def _spans(text: str, block: Block, lines: Lines) -> list[tuple[int, int]]:
