@@ -1,7 +1,8 @@
 """How the trazo MCP server (trazo.mcp) runs a tool call: the
 project it names, and `trazo` subprocesses in the project folder, each
 in its own process group, killed on notifications/cancelled or when the
-server exits."""
+server exits. Each subprocess call has a finite deadline (1200 seconds by
+default; TRAZO_MCP_TIMEOUT sets positive finite seconds)."""
 
 from __future__ import annotations
 
@@ -81,6 +82,12 @@ class Calls:
     def run(self, key, where: Project | Path, *argv: str, env=None) -> subprocess.CompletedProcess:
         """`trazo ARGV` for the call `key`, with `env` added, in the project
         folder, or in the folder `where` (outside any project: paper_create)."""
+        try:
+            timeout = float(os.environ.get("TRAZO_MCP_TIMEOUT", "1200"))
+        except ValueError:
+            raise ToolError("TRAZO_MCP_TIMEOUT must be a positive finite number of seconds") from None
+        if not 0 < timeout < float("inf"):
+            raise ToolError("TRAZO_MCP_TIMEOUT must be a positive finite number of seconds")
         cwd, base = (where.root, project_env(where)) if isinstance(where, Project) else (where, os.environ)
         with self.lock:
             if self.closed or self.cancelled.get(key):
@@ -90,7 +97,27 @@ class Calls:
                                        encoding="utf-8", errors="replace", **portable.group_options())
             self.processes[key] = process
         try:
-            stdout, stderr = process.communicate()
+            try:
+                stdout, stderr = process.communicate(timeout=timeout)
+            except subprocess.TimeoutExpired:
+                portable.kill_group(process.pid)
+                try:
+                    stdout, stderr = process.communicate(timeout=5)
+                except subprocess.TimeoutExpired as exc:
+                    # A descendant that detached itself may still hold a pipe open.
+                    stdout, stderr = exc.stdout, exc.stderr
+                    process.kill()
+                    process.wait(timeout=5)
+                finally:
+                    if os.name != "nt":  # Windows reader threads own these streams until EOF.
+                        process.stdout.close()
+                        process.stderr.close()
+                output = [value.decode("utf-8", "replace") if isinstance(value, bytes) else value or ""
+                          for value in (stderr, stdout)]
+                message = (f"trazo {' '.join(argv)} timed out after {timeout:g} s; "
+                           "the call was stopped. Fix the blocked command and retry, or increase "
+                           "TRAZO_MCP_TIMEOUT for a deliberately longer operation")
+                raise ToolError((message + "\n" + "\n".join(output)).strip()) from None
         finally:
             with self.lock:
                 self.processes.pop(key, None)
