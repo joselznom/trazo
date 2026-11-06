@@ -38,7 +38,13 @@
   function toggleStyle(style) {
     const ed = writing, selection = getSelection();
     if (!ed || selection.isCollapsed || !ed.el.contains(selection.anchorNode) || !ed.el.contains(selection.focusNode)) return;
-    const range = selection.getRangeAt(0);
+    // A double click takes the space after the word on some systems: a style stops at the word.
+    const range = selection.getRangeAt(0).cloneRange();
+    while (range.endContainer.nodeType === 3 && range.endOffset && /\s/.test(range.endContainer.data[range.endOffset - 1]))
+      range.setEnd(range.endContainer, range.endOffset - 1);
+    while (range.startContainer.nodeType === 3 && /\s/.test(range.startContainer.data[range.startOffset] || ""))
+      range.setStart(range.startContainer, range.startOffset + 1);
+    if (range.collapsed) return;
     const head = range.cloneRange(), upTo = range.cloneRange();
     head.collapse(true);
     head.setStart(ed.el, 0);

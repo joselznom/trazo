@@ -96,6 +96,19 @@ class FormatTests(WritingCase):
         self.assertEqual(self.source(), text)
         self.assertFalse(self.evaluate("!!document.querySelector('.pv-page strong')"))
 
+    def test_a_style_stops_at_the_word_when_the_selection_takes_a_space(self):
+        self.build("A quick brown fox.\n")
+        self.select("quick")
+        self.evaluate("""(() => {
+          const node = document.querySelector('.pv-writing .pv-src').nextSibling;
+          const range = document.createRange();
+          range.setStart(node, 1); range.setEnd(node, 8);  // " quick "
+          const selection = getSelection(); selection.removeAllRanges(); selection.addRange(range);
+        })()""")
+        self.chord("b", 66)
+        self.wait_for("document.querySelector('.pv-writing strong')?.textContent === 'quick'")
+        self.saved("A **quick** brown fox.\n")
+
     def test_the_selection_is_counted_in_characters(self):
         self.build("A 😀🧪 quick brown fox.\n")
         self.select("quick")
