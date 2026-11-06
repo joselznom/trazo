@@ -68,6 +68,8 @@ Internal changes (tests, CI, refactoring) stay out.
 
 ### Fixed
 
+- Broken table data or specs now show an error in the preview and keep the last
+  good page. Fixing them refreshes the page, including manuscript edits made meanwhile.
 - The table editor no longer shows "null" under a table without a note (#15).
 
 ### Removed
