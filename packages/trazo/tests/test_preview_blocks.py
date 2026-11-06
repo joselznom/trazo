@@ -89,6 +89,9 @@ class BlockTests(unittest.TestCase):
                      "\\begin{equation}\n\\begin{aligned}\nx\n\\end{aligned}\n+ z\n\\end{equation}\n",
                      "- A <pre>\n  <pre>\n  - x\n  </pre>\n",
                      "- > <pre>\n  > - raw one\n  > + raw two</pre>\n",
+                     "a. > <pre>\n   > - raw one\n   > + raw two</pre>\n",
+                     "a. <pre>\n   - raw one\n   + raw two</pre>\n",
+                     "- [ ] <pre>\n  - raw one\n  + raw two</pre>\n",
                      "- Use `\\begin{a}` then \\begin{equation}\n  y\n  + a\n  \\end{equation}\n"):
             self.assertEqual(self.blocks(text), [], text)
         self.assertEqual(self.blocks("\\begin{equation}\ny\n\\end{equation}\n\nNext item.\n"), ["Next item."])
@@ -108,6 +111,7 @@ class BlockTests(unittest.TestCase):
         text = "- The strain of\n  E. coli was used.\n"
         self.assertEqual(self.blocks(text), ["The strain of\n  E. coli was used."])
         self.assertEqual(self.blocks("E. coli grew.\n"), ["E. coli grew."])
+        self.assertEqual(self.blocks("E. <b>coli</b> grew.\n"), ["E. <b>coli</b> grew."])
 
     def test_a_roman_numeral_or_a_tab_makes_a_marker(self):
         for text in ("II. Second point.\n", "A.\tFirst.\n"):

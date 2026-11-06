@@ -162,6 +162,14 @@ B.	Second lettered item.
   > - raw one
   > + raw two</pre>
 
+a. > <pre>
+   > - raw three
+   > + raw four</pre>
+
+- [ ] <pre>
+  - raw five
+  + raw six</pre>
+
 - An item.
 
   \begin{equation}

@@ -43,7 +43,9 @@ PROTECTED = re.compile(r"""
 """, re.X | re.S)
 QUOTE = re.compile(r"[ \t]{0,3}(?:>[ \t]?)+")
 # One capital, a period and one space are prose to Pandoc: `E. coli`, and not `II. Next`.
-ITEM = re.compile(r"[ \t]*(?![A-Z]\. \S)(?:[-*+]|\(?\d+[.)]|\(?#[.)]|\(@\w*\)|\(?[A-Za-z][.)]|\(?[ivxlcdmIVXLCDM]+[.)])[ \t]+")
+# A marker has one reading here, so a pattern that repeats it cannot backtrack.
+MARKER = r"(?![A-Z]\. \S)(?:[-*+]|\(?\d+[.)]|\(?#[.)]|\(@\w*\)|\(?[A-Za-z][.)]|\(?[ivxlcdmIVXLCDM]{2,}[.)])"
+ITEM = re.compile(rf"[ \t]*{MARKER}[ \t]+")
 # Where a block's text would start, text that only reads as it does at the start
 # of a block: task boxes, example lists, line blocks, a lone attribute,
 # definitions, raw HTML and raw TeX environments.
@@ -51,9 +53,8 @@ NOT_TEXT = re.compile(r"\[[ xX]\][ \t]|\(@\w*\)[ \t]|\|[ \t]|\{[^}]*\}[ \t\r]*$|
 RULE = re.compile(r"[ \t]{0,3}(?:(?:-[ \t]*){3,}|(?:\*[ \t]*){3,}|(?:_[ \t]*){3,})\r?")
 SETEXT = re.compile(r"[ \t]*(?:=+|-+)[ \t\r]*")
 COMMENT_LINE = re.compile(r"[ \t]*<!--.*-->[ \t\r]*")
-# An HTML tag at the start of a line, after any mix of quote and list markers. Each
-# step takes one marker or one character, so a long run of them cannot backtrack.
-RAW_TAG = re.compile(r"(?:[ \t>]|(?:[-*+]|\d+[.)])[ \t])*<[A-Za-z!/?]")
+# An HTML tag at the start of a line, after any mix of quote marks, list markers and task boxes.
+RAW_TAG = re.compile(rf"(?:[ \t>]|(?:{MARKER}|\[[ xX]\])[ \t])*<[A-Za-z!/?]")
 RAW_TEX = re.compile(r"\\begin\{")
 # Groups: the marker, the text, closing marks, the attributes. Other braces at the
 # end of a heading are text, or belong to the span before them.
