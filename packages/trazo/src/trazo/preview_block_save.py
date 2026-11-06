@@ -34,7 +34,7 @@ from . import pandoc_run
 from .counts import VOID
 from .edit_diff import Lines, changes, merge
 from .local_server import Conflict, RequestError
-from .preview_blocks import ITEM, PROTECTED, QUOTE, SOURCES, Block, atoms, atoms_in, blocks_of, escaped
+from .preview_blocks import ITEM, PROTECTED, QUOTE, SOURCES, Block, atoms, atoms_in, blocks_of, editable, escaped
 from .preview_mentions import sources
 from .preview_sources import change_source, get_source, source_path
 
@@ -266,7 +266,7 @@ def _squashed(request: dict[str, Any], key: str) -> str:
 
 def _find(text: str, key: Any, sha256: str) -> tuple[Block, Lines]:
     lines = Lines(text)
-    for block in blocks_of(text, lines):
+    for block in editable(text, lines):
         if block.key == key:
             return block, lines
     raise Conflict("this paragraph changed on disk", sha256=sha256)
@@ -312,7 +312,8 @@ def _kept_mine(request: dict[str, Any], text: str, sha256: str) -> tuple[Block, 
     def likeness(block: Block) -> float:
         matcher.set_seq1(text[block.at:block.end].split())
         return matcher.ratio()
-    block = max(blocks_of(text), key=likeness, default=None)
+    candidates = [block for block in editable(text) if block.heading == str(request.get("h")).startswith("h")]
+    block = max(candidates, key=likeness, default=None)
     if block is None or likeness(block) < SAME_BLOCK:
         raise Conflict("this paragraph is no longer in the file", sha256=sha256)
     alone = Block(0, len(source), "")
@@ -389,6 +390,8 @@ def change_block(request: Any) -> dict[str, Any]:
             new, why = (_markdown(request), "") if "markdown" in request else (
                 _rewritten(request, text, text[block.at:block.end], _spans(text, block, lines)))
     source = text[block.at:block.end]
+    if block.heading and new is not None and (not new.strip() or BREAK in new or "\n" in new):
+        new, why = None, "a heading stays one line of text"
     if new is None:
         return {"refused": why, "file": file, "markdown": source}
     if new == source:
@@ -397,5 +400,5 @@ def change_block(request: Any) -> dict[str, Any]:
     written = new.replace(BREAK, _between(text, block))
     changed = text[:start] + written + text[end:]
     change_source({"file": file, "text": changed, "base_sha256": state["sha256"]})
-    parts = [b.key for b in blocks_of(changed) if start <= b.at < start + len(written)]
+    parts = [b.key for b in editable(changed) if start <= b.at < start + len(written)]
     return {"saved": True, "file": file, "markdown": written, "parts": parts}

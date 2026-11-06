@@ -252,7 +252,7 @@ class CommentStore:
     def entry(self, changes: list[tuple[Comment, Comment | None]], label: str) -> dict[str, Any]:
         """The history entry of one change, which may touch several comments."""
         names = {item.get(self.scope) for item, _ in changes}
-        return {"id": uuid.uuid4().hex[:12], "time": now(), "kind": "comments",
+        return {"id": uuid.uuid4().hex[:12], "time": now(), "at": time.time_ns(), "kind": "comments",
                 self.scope: names.pop() if len(names) == 1 else None,
                 "label": self.label(changes, label),
                 "changes": [{"id": item["id"], "before": before, "after": copy(item)}

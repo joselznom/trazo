@@ -10,7 +10,7 @@
   // ---------------------------------------------------------------- writing
   // Chips the build did not wrap, and what is on the page but not in the block.
   const OTHER_CHIPS = ".citation, .pv-val, span.math, math, code, .footnote-ref, a[href^='#'], img, svg";
-  const NOT_TEXT = ".pv-src, .pv-para, .pv-src-mark, .pv-edit-del, .pv-write-bar, button, ul, ol, dl, blockquote";
+  const NOT_TEXT = ".pv-src, .pv-para, .pv-src-mark, .pv-edit-del, .pv-write-bar, .header-section-number, button, ul, ol, dl, blockquote";
   const CHIP = 0xE000, NEW_CHIP = 0xE800, OTHER_CHIP = 0xF000, BREAK = "\uF8FF";
   const browserWrites = (() => {
     const probe = document.createElement("div");
@@ -32,12 +32,16 @@
   }
 
   // Each paragraph with the block it is: one with two is not one block, and takes no writing.
+  const HEADINGS = "h1, h2, h3, h4, h5, h6";
   const blockMark = new Map();
   if (browserWrites) for (const mark of $$(".pv-src", page)) {
     const el = mark.closest("p, li");
     if (el && !el.closest("nav, table, figure")) blockMark.set(el, blockMark.has(el) ? null : mark);
   }
+  // A heading's mark is an attribute on it, which its <section> gets too.
+  if (browserWrites) for (const el of $$(`:is(${HEADINGS}).pv-head`, page)) blockMark.set(el, el);
   for (const [el, mark] of blockMark) if (mark) el.classList.add("pv-can-write");
+  const isHeading = (el) => el.matches(HEADINGS);
 
   const chipChar = (chip) => String.fromCharCode(chip.dataset.new === undefined ? CHIP + Number(chip.dataset.i) : NEW_CHIP + Number(chip.dataset.new));
 
@@ -193,6 +197,19 @@
     if (!payload.parts.length) dropParagraph(ed);
     else for (const part of group) numberChips(part.el, part, mentions);
     showSaveState("Saved", true);
+    // A heading without an id of its own gets one from its text: a link to the old one breaks.
+    const anchor = ed.el.closest("section")?.id || ed.el.id;
+    if (isHeading(ed.el) && ed.mark.dataset.auto && anchor && $$(`a[href="#${CSS.escape(anchor)}"]`, page).length)
+      toast("A link in the text points to this heading by its old name: give the heading an id or update the link.");
+  }
+
+  // Outside the text, Cmd+Z undoes the latest change, a saved paragraph or a comment.
+  async function undoLatest() {
+    const { ok, payload } = await postJson(`/__undo?doc=${encodeURIComponent(doc)}`);
+    if (ok && payload.kind === "comment" && undoLabel) send({ op: "undo" }, `Undone: ${undoLabel}`);
+    if (!ok || payload.kind !== "file") return;
+    const { ok: undone, payload: answer } = await postJson("/__source", { op: "undo", file: payload.file });
+    toast(undone ? `Undone: the last save of ${payload.file}` : `Not undone: ${refusal(answer)}.`);
   }
 
   function discardWriting(ed) {

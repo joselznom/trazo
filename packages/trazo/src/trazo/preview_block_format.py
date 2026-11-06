@@ -26,7 +26,7 @@ from .preview_block_save import (
     _squashed,
     alone_html,
 )
-from .preview_blocks import atoms, blocks_of
+from .preview_blocks import atoms, editable
 from .preview_sources import change_source, get_source, source_path
 
 MARKER = {"strong": "**", "em": "*"}
@@ -172,5 +172,5 @@ def change_format(request: Any) -> dict[str, Any]:
         return {"refused": why, "file": file}
     changed = text[:block.at] + new + text[block.end:]
     change_source({"file": file, "text": changed, "base_sha256": state["sha256"]})
-    parts = [b.key for b in blocks_of(changed) if b.at == block.at]
+    parts = [b.key for b in editable(changed) if b.at == block.at]
     return {"saved": True, "file": file, "on": on, "parts": parts}
