@@ -205,7 +205,7 @@ def change_edits(request: Any) -> dict[str, Any]:
                 continue
             new = edit_diff.reject(text, chosen).encode("utf-8")
             history = read_list(preview.FILE_HISTORY_PATH) if history is None else history
-            history.append({"time": time.strftime("%Y-%m-%d %H:%M:%S"), "file": name, "kind": "reject",
+            history.append({"time": time.strftime("%Y-%m-%d %H:%M:%S"), "at": time.time_ns(), "file": name, "kind": "reject",
                             "before_text": text, "before_sha": sha256_of(data), "after_sha": sha256_of(new)})
             write_atomic(path, new)
         if history is not None:

@@ -83,6 +83,34 @@ class StructureTests(SaveCase):
             preview.change_comments({**comment, "doc": "manuscript"})  # as like as not in the second of the save
             self.assertEqual(preview.latest_change("manuscript")["kind"], "comment")
 
+    def test_successive_cmd_z_go_back_through_both_histories_in_order(self):
+        comment = {"op": "add", "doc": "manuscript", "quote": "Text", "para": "x", "section": "", "comment": "Look"}
+
+        def save(text):
+            preview.change_source({"file": CHAPTER, "text": text, "base_sha256": preview.get_source(CHAPTER)["sha256"]})
+        with patch.object(preview, "COMMENTS_PATH", self.folder / "comments.json"), \
+                patch.object(preview, "HISTORY_PATH", self.folder / "history.json"), \
+                patch("time.strftime", return_value="2026-11-06 10:00:00"):
+            self.chapter.write_text("Text.\n", encoding="utf-8")
+            save("One.\n")
+            preview.change_comments(comment)
+            save("Two.\n")
+            self.assertEqual(preview.latest_change("manuscript")["kind"], "file")
+            preview.change_source({"op": "undo", "file": CHAPTER})
+            self.assertEqual(preview.latest_change("manuscript")["kind"], "comment")
+            preview.change_comments({"op": "undo", "doc": "manuscript"})
+            self.assertEqual(preview.latest_change("manuscript")["kind"], "file")
+
+    def test_a_change_to_comments_of_other_documents_is_not_undone_here(self):
+        comment = {"op": "add", "quote": "Text", "para": "x", "section": "", "comment": "Look", "kind": "underline"}
+        with patch.object(preview, "COMMENTS_PATH", self.folder / "comments.json"), \
+                patch.object(preview, "HISTORY_PATH", self.folder / "history.json"):
+            first = preview.change_comments({**comment, "doc": "supplementary"})["comments"][0]["id"]
+            self.chapter.write_text("Text.\n", encoding="utf-8")
+            preview.change_source({"file": CHAPTER, "text": "New.\n", "base_sha256": preview.get_source(CHAPTER)["sha256"]})
+            preview.change_comments({"op": "delete", "ids": [first]})
+            self.assertEqual(preview.latest_change("manuscript"), {"kind": "file", "file": CHAPTER})
+
     def test_an_empty_paragraph_leaves_the_file(self):
         for text, expected in (("One.\n\nGone.\n\nThree.\n", "One.\n\nThree.\n"), ("- One.\n- Gone.\n- Three.\n", "- One.\n- Three.\n"),
                                ("One.\n\nGone.\n", "One.\n\n")):

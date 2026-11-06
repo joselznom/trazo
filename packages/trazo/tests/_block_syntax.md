@@ -81,6 +81,14 @@ A double tick ``a`b`` and a price of $5 and $6 are not what they seem here.
 
 Highlighted `print(1)`{.python} and an image in parentheses ![a](a(b).png) keep their syntax.
 
+## Quoted attribute {#sec:quoted title='hello world' .x}
+
+## Empty attributes {}
+
+## Literal braces {literal}
+
+## Inline span [word]{.smallcaps}
+
 Setext title
 ============
 

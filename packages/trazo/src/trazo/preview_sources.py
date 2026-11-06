@@ -126,7 +126,7 @@ def change_source(request):
                                sha256=current)
             new = text.encode("utf-8")
             if new != data:
-                entries.append({"time": time.strftime("%Y-%m-%d %H:%M:%S"), "file": file,
+                entries.append({"time": time.strftime("%Y-%m-%d %H:%M:%S"), "at": time.time_ns(), "file": file,
                                 "before_text": old, "before_sha": current,
                                 "after_sha": sha256_of(new)})
                 save_file_history(entries)
@@ -140,14 +140,14 @@ def latest_change(doc):
     """What Cmd+Z outside the text undoes in a document: the most recent of a
     save and a comment change, each with its own undo. {kind: file|comment|"", file}."""
     from . import preview
-    from .preview_comments import PreviewHistory
+    from .preview_comments import PreviewComments, PreviewHistory
     files = set(preview_edit_review.page_files(doc))
     with review_lock():
         saves = [e for e in read_list(preview.FILE_HISTORY_PATH) if e.get("file") in files]
-        comments = [e for e in PreviewHistory(preview.HISTORY_PATH).load() if e.get("doc") in (doc, None)]
-        # Their times are in seconds: within one, the history written last has the latest.
-        latest = [(entries[-1].get("time", ""), path.stat().st_mtime_ns) if entries else ("", 0)
-                  for entries, path in ((saves, preview.FILE_HISTORY_PATH), (comments, preview.HISTORY_PATH))]
+        history = PreviewHistory(preview.HISTORY_PATH).load()
+        comments = [history[i] for i in PreviewComments().history_of(history, doc)]
+    # `at` tells apart two changes of one second; older entries have only `time`.
+    latest = [(entries[-1].get("time", ""), entries[-1].get("at", 0)) if entries else ("", 0) for entries in (saves, comments)]
     if saves and latest[0] >= latest[1]:
         return {"kind": "file", "file": saves[-1].get("file", "")}
     return {"kind": "comment" if comments else "", "file": ""}
