@@ -186,6 +186,11 @@ class MarksTests(unittest.TestCase):
         found, text = self.marked("**Abc.** one\n", "**Abc!** two\n")
         self.assertIn("<strong>", html(text))
 
+    def test_an_edit_that_ends_inside_a_run_of_markers_keeps_the_emphasis(self):
+        lines = edit_diff.Lines("x ***a*** y\n")
+        self.assertTrue(lines.inline(2, 9))
+        self.assertFalse(lines.inline(2, 7))  # 4 markers in all, but the closing run is cut
+
     def test_a_new_file_marks_its_paragraphs_as_new(self):
         found, text = self.marked("", "# Methods\n\nWe did it.\n\nTwice.\n")
         self.assertEqual(len(found), 1)

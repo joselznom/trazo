@@ -109,23 +109,28 @@
     ed.bar = null;
   }
 
+  const refusal = (payload) => payload.refused || payload.error || "the server refused";
+
   // One at a time and in order: a save may need the key the one before it got.
   // `group` are the paragraphs the block becomes, the first being the one sent.
   let saveQueue = Promise.resolve();
-  function sendBlock(ed, body, { group = [ed], block = group[0], refused = showFailure, done = null } = {}) {
+  function sendBlock(ed, body, { path = "/__block", group = [ed], block = group[0], refused = showFailure, done = null, when = null } = {}) {
     saves++;
     showSaveState("Saving…");
     saveQueue = saveQueue.then(async () => {
+      if (when && !when()) { saves--; return; }
       const { file, h: key } = block.mark.dataset;
       let result;
       try {
-        result = await postJson("/__block", { file, h: key, ...(typeof body === "function" ? body() : body) });
+        result = await postJson(path, { file, h: key, ...(typeof body === "function" ? body() : body) });
       } catch (e) {
         result = { ok: false, status: 0, payload: { error: "the preview server did not answer" } };
       }
       saves--;
-      if (!result.ok || !result.payload.saved) refused(ed, result.status, result.payload);
-      else if (done) { showSaveState("Saved", true); done(result.payload); }
+      if (!result.ok || !result.payload.saved) {
+        showSaveState("", false);
+        refused(ed, result.status, result.payload);
+      } else if (done) { showSaveState("Saved", true); done(result.payload); }
       else blockSaved(ed, result.payload, group);
     });
   }
@@ -192,7 +197,7 @@
     if (ed.bar) ed.bar.remove();
     const changed = status === 409;
     const text = changed ? "This paragraph changed on disk, so your text is not saved."
-      : `Not saved: ${payload.refused || payload.error || "the server refused"}.`;
+      : `Not saved: ${refusal(payload)}.`;
     ed.bar = h("div", { class: "pv-write-bar", role: "alert", contenteditable: "false" }, h("span", { text }),
       ...(changed
         ? [writeButton("Keep mine", () => (ed.area ? sendBlock(ed, { keep: true, markdown: ed.area.value }) : saveBlock(ed, { keep: true }))),

@@ -30,7 +30,10 @@ INSERTS = {"insert": "Zqxnew ", "active": "p<0.05, 5*3, a_b, $5 and [x] @y ~z^ "
            "sentence": "A brand new clause, with commas; and “quotes”. ", "typed": "don't say \"this\" -- or that... "}
 # Most common first: test_preview_blocks.py holds these to a stricter rate.
 COMMON = ("replace", "typo", "delete", "join", "multi", *INSERTS)
-KINDS = (*COMMON, "chip", "rewrite", "split", *PREFIXES)
+# Bold and italic: the style, and the text it goes on: a word, or text with this style (1 bold, 2 italic).
+FORMATS = {"bold": ("strong", None), "italic": ("em", None), "unbold": ("strong", 1), "unitalic": ("em", 2),
+           "bold-italic": ("strong", 2), "italic-bold": ("em", 1)}
+KINDS = (*COMMON, "chip", "rewrite", "split", *PREFIXES, *FORMATS)
 BREAK = ""
 
 
@@ -91,25 +94,30 @@ def _other_chip(node: Node) -> bool:
             or (node.tag == "a" and node.attrs.get("href", "").startswith("#")))
 
 
-def flat(node: Node, count: list[int] | None = None) -> str:
-    """A block's text as the viewer sends it: each chip one private-use character."""
+def styled_text(node: Node, count: list[int] | None = None, strong: bool = False, em: bool = False) -> list[tuple[str, bool, bool]]:
+    """A block's text as the viewer sends it, each chip one private-use
+    character, and with each character its bold and italic."""
     count = [0] if count is None else count
-    out = []
+    out: list[tuple[str, bool, bool]] = []
     for child in node.children:
         if isinstance(child, str):
-            out.append(child)
+            out += [(ch, strong, em) for ch in child]
         elif "pv-src" in child.classes or child.tag in NESTED_BLOCKS or "pv-edit-del" in child.classes:
             continue
         elif child.tag == "br":
-            out.append(" ")
+            out.append((" ", strong, em))
         elif "pv-atom" in child.classes:
-            out.append(chr(CHIP + int(child.attrs["data-i"])))
+            out.append((chr(CHIP + int(child.attrs["data-i"])), strong, em))
         elif _other_chip(child):
-            out.append(chr(OTHER_CHIP + count[0]))
+            out.append((chr(OTHER_CHIP + count[0]), strong, em))
             count[0] += 1
         else:
-            out.append(flat(child, count))
-    return "".join(out)
+            out += styled_text(child, count, strong or child.tag == "strong", em or child.tag == "em")
+    return out
+
+
+def flat(node: Node) -> str:
+    return "".join(ch for ch, _, _ in styled_text(node))
 
 
 def squash(text: str) -> str:
@@ -129,6 +137,40 @@ def page_blocks(html: str) -> dict[tuple[str, str], Node]:
             if host is not None and host.closest("nav", "table", "figure") is None:
                 found[node.attrs["data-file"], node.attrs["data-h"]] = host
     return found
+
+
+def squeezed(chars: list[tuple[str, bool, bool]]) -> list[tuple[str, bool, bool]]:
+    """styled_text with the spaces of squash."""
+    out: list[tuple[str, bool, bool]] = []
+    for char in chars:
+        if not char[0].isspace():
+            out.append(char)
+        elif out and out[-1][0] != " ":
+            out.append((" ", char[1], char[2]))
+    return out[:-1] if out and out[-1][0] == " " else out
+
+
+def shown(chars: list[tuple[str, bool, bool]]) -> list[tuple[str, bool, bool]]:
+    """The characters whose style can be compared: no spaces, chips or smart typography."""
+    return [(plain, strong, em) for ch, strong, em in chars if not ch.isspace() and ord(ch) < CHIP
+            for plain in ch.translate(SMART)]
+
+
+def format_span(target: int | None, chars: list[tuple[str, bool, bool]], rng: random.Random) -> tuple[int, int] | None:
+    """What a format edit selects: a word, or a run of text with style `target`."""
+    if target is None:
+        found = list(re.finditer(r"[^\W\d_]{3,}", "".join(ch for ch, _, _ in chars)))
+    else:
+        found = list(re.finditer("x+", "".join("x" if char[target] else "." for char in chars)))
+    return rng.choice(found).span() if found else None
+
+
+def toggled(chars: list[tuple[str, bool, bool]], span: tuple[int, int], slot: int) -> list[tuple[str, bool, bool]]:
+    """The characters with a style toggled on `span`: text that all has it loses it."""
+    selected = shown(chars[span[0]:span[1]])
+    on = not (selected and all(char[slot] for char in selected))
+    return shown([(ch, *((on if i + 1 == slot and span[0] <= n < span[1] else flag) for i, flag in enumerate(flags)))
+                  for n, (ch, *flags) in enumerate(chars)])
 
 
 def edited(kind: str, text: str, rng: random.Random) -> str | None:
@@ -170,9 +212,9 @@ def edited(kind: str, text: str, rng: random.Random) -> str | None:
     return text[:first.start()] + "Zqxone" + text[first.end():second.start()] + "Zqxtwo" + text[second.end():]
 
 
-def run(doc: str, rounds: int, out_dir: Path) -> tuple[Counter, list[tuple[str, str, str]]]:
+def run(doc: str, rounds: int, out_dir: Path, kinds: tuple[str, ...] = KINDS) -> tuple[Counter, list[tuple[str, str, str]]]:
     """(count by (kind, right|refused|WRONG), the wrong ones as (kind, typed, on the page))."""
-    from trazo import preview, preview_block_save, preview_edit_review, preview_render
+    from trazo import preview, preview_block_format, preview_block_save, preview_edit_review, preview_render
     from trazo.local_server import Conflict
 
     def build(where: Path) -> str:
@@ -191,27 +233,45 @@ def run(doc: str, rounds: int, out_dir: Path) -> tuple[Counter, list[tuple[str, 
             blocks = page_blocks(build(out_dir / "before"))
             saved = []
             for index, ((file, key), node) in enumerate(sorted(blocks.items(), key=lambda item: item[0])):
-                before = squash(flat(node))
-                kind = KINDS[(number + index) % len(KINDS)]
-                after = edited(kind, before, rng) if before else None
-                if after is None:
-                    continue
+                chars = squeezed(styled_text(node))
+                before = "".join(ch for ch, _, _ in chars)
+                kind = kinds[(number + index) % len(kinds)]
+                request = {"file": file, "h": key, "before": before}
+                if kind in FORMATS:
+                    style, target = FORMATS[kind]
+                    span = format_span(target, chars, rng)
+                    if span is None:
+                        continue
+                    wanted = [toggled(chars, span, 1 if style == "strong" else 2)]
+                    send = preview_block_format.change_format
+                    request |= {"style": style, "from": span[0], "to": span[1]}
+                else:
+                    after = edited(kind, before, rng) if before else None
+                    if after is None:
+                        continue
+                    wanted = after.split(BREAK)
+                    send = preview_block_save.change_block
+                    request["after"] = after
                 try:
-                    answer = preview_block_save.change_block({"file": file, "h": key, "before": before, "after": after})
+                    answer = send(request)
                 except Conflict:  # a key of equal blocks: the page has not caught up with this round's saves
                     results["why", "the file changed"] += 1
                     continue
                 if answer.get("saved"):
-                    saved.extend((file, part, kind, text) for part, text in zip(answer["parts"], after.split(BREAK)))
+                    saved.extend((file, part, kind, want) for part, want in zip(answer["parts"], wanted))
                 else:
                     results[kind, "refused"] += 1
                     results["why", answer["refused"]] += 1
             page = page_blocks(build(out_dir / "after"))
-            shown = {comparable(flat(node)) for node in page.values()}
+            on_page = {comparable(flat(node)) for node in page.values()}
             for file, key, kind, after in saved:
                 node = page.get((file, key))  # blocks that ended up equal have other keys
                 got = squash(flat(node)) if node is not None else "(not on the page)"
-                good = comparable(got) == comparable(after) or (node is None and comparable(after) in shown)
+                if isinstance(after, list):
+                    good = node is not None and shown_styles(node) == after
+                    after = "".join(ch for ch, _, _ in after)
+                else:
+                    good = comparable(got) == comparable(after) or (node is None and comparable(after) in on_page)
                 results[kind, "right" if good else "WRONG"] += 1
                 if not good:
                     wrong.append((kind, after, got))
@@ -223,6 +283,10 @@ def run(doc: str, rounds: int, out_dir: Path) -> tuple[Counter, list[tuple[str, 
     return results, wrong
 
 
+def shown_styles(node: Node) -> list[tuple[str, bool, bool]]:
+    return shown(styled_text(node))
+
+
 def _hide(text: str) -> str:
     return re.sub(r"\d", "0", re.sub(r"[^\W\d_]", "x", text))
 
@@ -232,6 +296,7 @@ def main() -> None:
     parser.add_argument("paper", type=Path)
     parser.add_argument("--doc", default="manuscript")
     parser.add_argument("--rounds", type=int, default=len(KINDS))
+    parser.add_argument("--format", action="store_true", help="only bold and italic")
     args = parser.parse_args()
     with tempfile.TemporaryDirectory(prefix="trazo-round-trip-") as folder:
         root = Path(folder) / "paper"
@@ -243,7 +308,7 @@ def main() -> None:
         from trazo import expand
         load = expand.load_entries
         expand.load_entries = lambda path=expand.VALUES_PATH, check_inputs=True: load(path, False)  # a copy has new dates
-        results, wrong = run(args.doc, args.rounds, Path(folder) / "pages")
+        results, wrong = run(args.doc, args.rounds, Path(folder) / "pages", tuple(FORMATS) if args.format else KINDS)
     print(f"{'edit':14} {'right':>6} {'refused':>8} {'WRONG':>6}")
     for kind in KINDS:
         print(f"{kind:14} {results[kind, 'right']:6} {results[kind, 'refused']:8} {results[kind, 'WRONG']:6}")
