@@ -1,0 +1,365 @@
+{
+  "measured_commit": "ee13ca0a8c835749b9575a784171ce7a7007dde4",
+  "date": "2026-11-06",
+  "machine": {
+    "platform": "macOS-27.2-arm64-arm-64bit",
+    "cpu": "Apple M4",
+    "memory_bytes": "17179869184",
+    "python": "3.12.13 (main, Mar 25 2026, 03:16:06) [Clang 22.1.1 ]",
+    "pandoc": "pandoc 3.9.0.2",
+    "uv": "uv 0.11.3 (Homebrew 2026-04-01 aarch64-apple-darwin)",
+    "chrome": {
+      "protocolVersion": "1.3",
+      "product": "Chrome/156.0.8078.80",
+      "revision": "@fb096c0011f9d50f0a264a9376420cdea9c421e3",
+      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/156.0.0.0 Safari/537.36",
+      "jsVersion": "15.6.75.27"
+    },
+    "renderer_sha256": "41dd04c3e8a95b79c8a404fb97a51f0b5a25e902f0b100adde44ee06023e0599"
+  },
+  "method": "20 observations per operation and regime; median p50 and nearest-rank p95; uninstrumented runs; application cold, not OS-cache cold.",
+  "budgets_seconds": {
+    "preview_start": {
+      "cold": 2,
+      "warm": 1
+    },
+    "save_visible": {
+      "cold": 1.5,
+      "warm": 1
+    },
+    "table_open": {
+      "cold": 0.25,
+      "warm": 0.25
+    },
+    "diagram_open": {
+      "cold": 0.25,
+      "warm": 0.25
+    },
+    "word_full": {
+      "example": 1,
+      "load": 2
+    },
+    "word_unchanged": {
+      "cold": 0.25,
+      "warm": 0.25
+    },
+    "mcp_check": {
+      "example": 0.75,
+      "load": 1.5
+    }
+  },
+  "papers": {
+    "example": {
+      "fixture": {
+        "seed": 20261106,
+        "kind": "example",
+        "base": "trazo new with example=true",
+        "markdown_words": 691,
+        "figures": 2,
+        "table_specs": 1,
+        "diagram_specs": 1,
+        "cited_keys": 1,
+        "bibliography_entries": 1
+      },
+      "counts_report": "Manuscript\n  Main text             308 words\n  Abstract               66 words\n  Figures                 2\n  Tables                  1\n  References              1\n  Not in the main text: Abstract (66), Abbreviations (0), Declarations (110)\nSupplementary\n  Main text              25 words\n  Figures                 0\n  Tables                  0\n  References              0\nCover letter\n  Total                  77 words\n",
+      "summary": [
+        {
+          "operation": "preview_start",
+          "mode": "cold",
+          "n": 20,
+          "p50": 1.4549496659892611,
+          "p95": 1.4778441250091419,
+          "min": 1.4178738750051707,
+          "max": 1.4860765420016833,
+          "stdev": 0.016804187270437112
+        },
+        {
+          "operation": "preview_start",
+          "mode": "warm",
+          "n": 20,
+          "p50": 0.4179125000082422,
+          "p95": 0.6666779170045629,
+          "min": 0.3828697499993723,
+          "max": 0.9331878750235774,
+          "stdev": 0.15885568790379015
+        },
+        {
+          "operation": "save_visible",
+          "mode": "cold",
+          "n": 20,
+          "p50": 1.0647757915139664,
+          "p95": 1.0985962089907844,
+          "min": 1.034408458013786,
+          "max": 2.1830907500116155,
+          "stdev": 0.2503379700156596
+        },
+        {
+          "operation": "save_visible",
+          "mode": "warm",
+          "n": 20,
+          "p50": 1.080536541499896,
+          "p95": 1.11274375001085,
+          "min": 1.046416458004387,
+          "max": 1.1139650830009487,
+          "stdev": 0.017612115679612038
+        },
+        {
+          "operation": "table_open",
+          "mode": "cold",
+          "n": 20,
+          "p50": 0.06717691650555935,
+          "p95": 0.06931583298137411,
+          "min": 0.06567920799716376,
+          "max": 0.06958012501127087,
+          "stdev": 0.0010548745076051807
+        },
+        {
+          "operation": "table_open",
+          "mode": "warm",
+          "n": 20,
+          "p50": 0.06280522949236911,
+          "p95": 0.06422233302146196,
+          "min": 0.04717966599855572,
+          "max": 0.06693079200340435,
+          "stdev": 0.003763306938157219
+        },
+        {
+          "operation": "diagram_open",
+          "mode": "cold",
+          "n": 20,
+          "p50": 0.06715289599378593,
+          "p95": 0.06975183301256038,
+          "min": 0.06507641600910574,
+          "max": 0.08205491700209677,
+          "stdev": 0.003484580210220246
+        },
+        {
+          "operation": "diagram_open",
+          "mode": "warm",
+          "n": 20,
+          "p50": 0.0637017709959764,
+          "p95": 0.08001599999261089,
+          "min": 0.06114674999844283,
+          "max": 0.08015195798361674,
+          "stdev": 0.00807432932280217
+        },
+        {
+          "operation": "word_full",
+          "mode": "cold",
+          "n": 20,
+          "p50": 0.504527478988166,
+          "p95": 0.5283313750114758,
+          "min": 0.49249770800815895,
+          "max": 0.529566666984465,
+          "stdev": 0.010680574037198
+        },
+        {
+          "operation": "word_full",
+          "mode": "warm",
+          "n": 20,
+          "p50": 0.3932342704938492,
+          "p95": 0.4011890410038177,
+          "min": 0.3838858340168372,
+          "max": 0.40283904201351106,
+          "stdev": 0.005166481764022743
+        },
+        {
+          "operation": "word_unchanged",
+          "mode": "cold",
+          "n": 20,
+          "p50": 0.11853891699865926,
+          "p95": 0.1212933330098167,
+          "min": 0.11256366700399667,
+          "max": 0.12145004098420031,
+          "stdev": 0.002821452796021789
+        },
+        {
+          "operation": "word_unchanged",
+          "mode": "warm",
+          "n": 20,
+          "p50": 0.11867922899546102,
+          "p95": 0.12143245799234137,
+          "min": 0.11456358301802538,
+          "max": 0.1217564590042457,
+          "stdev": 0.0024164775015383055
+        },
+        {
+          "operation": "mcp_check",
+          "mode": "cold",
+          "n": 20,
+          "p50": 0.4716366874927189,
+          "p95": 0.4845919999934267,
+          "min": 0.4597154159855563,
+          "max": 0.49398283299524337,
+          "stdev": 0.008357735700694587
+        },
+        {
+          "operation": "mcp_check",
+          "mode": "warm",
+          "n": 20,
+          "p50": 0.47141599950555246,
+          "p95": 0.4779539589944761,
+          "min": 0.4547883330087643,
+          "max": 0.4784089579770807,
+          "stdev": 0.007024970525219629
+        }
+      ]
+    },
+    "load": {
+      "fixture": {
+        "seed": 20261106,
+        "kind": "load",
+        "base": "trazo new with example=true",
+        "markdown_words": 11121,
+        "figures": 12,
+        "table_specs": 10,
+        "diagram_specs": 1,
+        "cited_keys": 81,
+        "bibliography_entries": 81
+      },
+      "counts_report": "Manuscript\n  Main text          10,636 words\n  Abstract               66 words\n  Figures                12\n  Tables                 10\n  References             81\n  Not in the main text: Abstract (66), Abbreviations (0), Declarations (110)\nSupplementary\n  Main text              25 words\n  Figures                 0\n  Tables                  0\n  References              0\nCover letter\n  Total                  77 words\n",
+      "summary": [
+        {
+          "operation": "preview_start",
+          "mode": "cold",
+          "n": 20,
+          "p50": 1.5191549374867463,
+          "p95": 1.541822625003988,
+          "min": 1.4892054999945685,
+          "max": 1.5693399579904508,
+          "stdev": 0.018047864634106275
+        },
+        {
+          "operation": "preview_start",
+          "mode": "warm",
+          "n": 20,
+          "p50": 0.43370264599798247,
+          "p95": 0.6975211660028435,
+          "min": 0.3951556249812711,
+          "max": 1.2175966250069905,
+          "stdev": 0.19976421603439243
+        },
+        {
+          "operation": "save_visible",
+          "mode": "cold",
+          "n": 20,
+          "p50": 2.33191866701236,
+          "p95": 2.3659504590032157,
+          "min": 2.2987445420003496,
+          "max": 2.379067791014677,
+          "stdev": 0.019934497810934405
+        },
+        {
+          "operation": "save_visible",
+          "mode": "warm",
+          "n": 20,
+          "p50": 1.1465986250113929,
+          "p95": 1.2031119159946684,
+          "min": 1.1113075419852976,
+          "max": 1.213856999995187,
+          "stdev": 0.02843924670691984
+        },
+        {
+          "operation": "table_open",
+          "mode": "cold",
+          "n": 20,
+          "p50": 0.15044912550365552,
+          "p95": 0.18387537501985207,
+          "min": 0.10062404198106378,
+          "max": 0.19996416702633724,
+          "stdev": 0.019088104854053475
+        },
+        {
+          "operation": "table_open",
+          "mode": "warm",
+          "n": 20,
+          "p50": 0.09564058350224514,
+          "p95": 0.11337412500870414,
+          "min": 0.07784912499482743,
+          "max": 0.1311629580159206,
+          "stdev": 0.013302845243173267
+        },
+        {
+          "operation": "diagram_open",
+          "mode": "cold",
+          "n": 20,
+          "p50": 0.10151427098026033,
+          "p95": 0.1184384580119513,
+          "min": 0.06578816700493917,
+          "max": 0.13363454199861735,
+          "stdev": 0.015524306104603525
+        },
+        {
+          "operation": "diagram_open",
+          "mode": "warm",
+          "n": 20,
+          "p50": 0.07655658350267913,
+          "p95": 0.0951617079845164,
+          "min": 0.06176229100674391,
+          "max": 0.10007845901418477,
+          "stdev": 0.012246421229044499
+        },
+        {
+          "operation": "word_full",
+          "mode": "cold",
+          "n": 20,
+          "p50": 0.7919781874952605,
+          "p95": 0.8398750420019496,
+          "min": 0.7783445829991251,
+          "max": 0.8571675000130199,
+          "stdev": 0.020985330783822382
+        },
+        {
+          "operation": "word_full",
+          "mode": "warm",
+          "n": 20,
+          "p50": 0.6146828960045241,
+          "p95": 0.6267119580006693,
+          "min": 0.6029950419906527,
+          "max": 0.6293266249995213,
+          "stdev": 0.007735282474952501
+        },
+        {
+          "operation": "word_unchanged",
+          "mode": "cold",
+          "n": 20,
+          "p50": 0.13235999998869374,
+          "p95": 0.13592324999626726,
+          "min": 0.13029954201192595,
+          "max": 0.1365482920082286,
+          "stdev": 0.0017913229666551812
+        },
+        {
+          "operation": "word_unchanged",
+          "mode": "warm",
+          "n": 20,
+          "p50": 0.134629270498408,
+          "p95": 0.13732154198805802,
+          "min": 0.13287695799954236,
+          "max": 0.1376001250173431,
+          "stdev": 0.0014027848447174345
+        },
+        {
+          "operation": "mcp_check",
+          "mode": "cold",
+          "n": 20,
+          "p50": 1.0509535000019241,
+          "p95": 1.065774542017607,
+          "min": 1.0311313330021221,
+          "max": 1.0663171669875737,
+          "stdev": 0.010892302542719732
+        },
+        {
+          "operation": "mcp_check",
+          "mode": "warm",
+          "n": 20,
+          "p50": 1.048198937511188,
+          "p95": 1.0623448340047617,
+          "min": 1.024953790998552,
+          "max": 1.0750645409862045,
+          "stdev": 0.011952075973862775
+        }
+      ]
+    }
+  }
+}
