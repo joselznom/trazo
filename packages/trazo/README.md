@@ -115,7 +115,7 @@ use the same editor; saving closes it. A table's **Note** field edits the
 note below it (abbreviations, symbols, sources): the spec's `note`, or in
 a Markdown table the `::: {.table-note custom-style="Table Note"}` block
 right after the table and its caption. Word gives it the Table Note style;
-DOCX and Markdown table exports keep it. Saves reject concurrent source edits;
+Word and Markdown exports keep it. Saves reject changes found at the initial read;
 **Undo save** restores the preceding save to that Markdown file. Generated table words belong in
 **Edit table** (the JSON spec), so regeneration retains them. Tables without a
 spec offer **Edit source** to open their Markdown.
