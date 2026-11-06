@@ -112,14 +112,14 @@
   // One at a time and in order: a save may need the key the one before it got.
   // `group` are the paragraphs the block becomes, the first being the one sent.
   let saveQueue = Promise.resolve();
-  function sendBlock(ed, body, { group = [ed], block = group[0], refused = showFailure, done = null } = {}) {
+  function sendBlock(ed, body, { path = "/__block", group = [ed], block = group[0], refused = showFailure, done = null } = {}) {
     saves++;
     showSaveState("Saving…");
     saveQueue = saveQueue.then(async () => {
       const { file, h: key } = block.mark.dataset;
       let result;
       try {
-        result = await postJson("/__block", { file, h: key, ...(typeof body === "function" ? body() : body) });
+        result = await postJson(path, { file, h: key, ...(typeof body === "function" ? body() : body) });
       } catch (e) {
         result = { ok: false, status: 0, payload: { error: "the preview server did not answer" } };
       }

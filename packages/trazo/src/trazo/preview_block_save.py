@@ -217,8 +217,8 @@ def _comparable(text: str) -> str:
     return " ".join("".join(ch for ch in text if not _is_chip(ch)).translate(TYPED).split())
 
 
-def _alone(block: str, definitions: str) -> tuple[str, list[str]]:
-    """What a block without its atoms reads built alone, and its kind."""
+def alone_html(block: str, definitions: str) -> str:
+    """The HTML of a block without its atoms, built alone."""
     from . import preview
     source = _without_atoms(QUOTE_LINE.sub("", block))
     result = pandoc_run.run(["--from=markdown", "--to=html", "--wrap=none"],
@@ -226,8 +226,13 @@ def _alone(block: str, definitions: str) -> tuple[str, list[str]]:
                             command=preview.PROJECT.command("pandoc"), cwd=preview.ROOT)
     if result.returncode:
         raise OSError(pandoc_run.decode(result.stderr))
+    return pandoc_run.decode(result.stdout)
+
+
+def _alone(block: str, definitions: str) -> tuple[str, list[str]]:
+    """What a block without its atoms reads built alone, and its kind."""
     page = _Page()
-    page.feed(pandoc_run.decode(result.stdout))
+    page.feed(alone_html(block, definitions))
     return _comparable("".join(page.text)), page.kinds
 
 
