@@ -122,9 +122,10 @@
     saveQueue = saveQueue.then(async () => {
       if (when && !when()) { saves--; return; }
       const { file, h: key } = block.mark.dataset;
+      const sent = typeof body === "function" ? body() : body;
       let result;
       try {
-        result = await postJson(path, { file, h: key, ...(typeof body === "function" ? body() : body) });
+        result = await postJson(path, { file, h: key, ...sent });
       } catch (e) {
         result = { ok: false, status: 0, payload: { error: "the preview server did not answer" } };
       }
@@ -133,7 +134,7 @@
         showSaveState("", false);
         refused(ed, result.status, result.payload);
       } else if (done) { showSaveState("Saved", true); done(result.payload); }
-      else blockSaved(ed, result.payload, group);
+      else blockSaved(ed, result.payload, group, Object.keys(sent.mentions || {}));
     });
   }
 
@@ -169,10 +170,13 @@
   }
 
   // Until the page reloads, the chips of a paragraph are numbered as its Markdown
-  // is. The text a paragraph being written is compared with changes with them.
-  function numberChips(el, ed) {
+  // is: those a save took there (`saved`) join the numbers, and any added since
+  // wait for theirs. The text a paragraph being written is compared with changes
+  // with them.
+  function numberChips(el, ed, saved = []) {
     const renamed = new Map();
-    $$(".pv-atom", el).filter((chip) => chip.closest("p, li") === el).forEach((chip, i) => {
+    const chips = $$(".pv-atom", el).filter((chip) => chip.closest("p, li") === el);
+    chips.filter((chip) => chip.dataset.new === undefined || saved.includes(chipChar(chip))).forEach((chip, i) => {
       const before = chipChar(chip);
       delete chip.dataset.new;
       chip.dataset.i = String(i);
@@ -181,13 +185,13 @@
     if (ed) ed.before = [...ed.before].map((ch) => renamed.get(ch) || ch).join("");
   }
 
-  function blockSaved(ed, payload, group) {
+  function blockSaved(ed, payload, group, mentions) {
     clearFailure(ed);
     closeMarkdown(ed);
     if (ed.sent !== undefined) ed.before = ed.sent;
     group.forEach((part, i) => { if (payload.parts[i]) part.mark.dataset.h = payload.parts[i]; });
     if (!payload.parts.length) dropParagraph(ed);
-    else for (const part of group) numberChips(part.el, part);
+    else for (const part of group) numberChips(part.el, part, mentions);
     showSaveState("Saved", true);
   }
 

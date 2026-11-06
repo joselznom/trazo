@@ -78,6 +78,40 @@ class MentionTests(WritingCase):
         self.leave()
         self.saved("Plain words [@smith2020].\n")
 
+    def test_a_chip_added_while_a_save_is_on_its_way_is_saved_as_itself(self):
+        self.at_the_end_of("Plain words here.\n")
+        self.caret_after("Plain")
+        self.evaluate("""(() => {
+          const fetch = window.fetch;
+          window.held = [];
+          window.fetch = (url, options) => {
+            if (!String(url).includes('/__block') || window.released) return fetch(url, options);
+            return new Promise((resolve) => window.held.push(() => resolve(fetch(url, options))));
+          };
+        })()""")
+        self.key("Enter", 13)
+        self.wait_for("window.held.length === 1")
+        self.type("@cohort")
+        self.menu()
+        self.key("Enter", 13)
+        self.evaluate("window.released = true; window.held.splice(0).forEach((go) => go())")
+        self.wait_for("saves === 0")
+        self.leave()
+        self.saved("Plain\n\n{{v:cohort.n}}words here.\n")
+
+    def test_a_new_paragraph_with_a_chip_joins_the_one_before_it(self):
+        self.at_the_end_of("Plain words.\n")
+        self.caret_after("words.")
+        self.key("Enter", 13)
+        self.wait_for("document.querySelector('.pv-writing')?.textContent === ''")
+        self.type("More @cohort")
+        self.menu()
+        self.key("Enter", 13)
+        self.evaluate("getSelection().collapse(document.querySelector('.pv-writing'), 1)")
+        self.key("Backspace", 8)
+        self.wait_for("!saves && document.querySelector('.pv-writing')?.textContent.includes('Plain words. More')")
+        self.assertEqual(self.source(), "Plain words. More {{v:cohort.n}}\n")
+
     def test_a_chip_added_before_another_keeps_the_numbers_right(self):
         self.build("Plain words and [@smith2020] end.\n")
         self.write_in("words")

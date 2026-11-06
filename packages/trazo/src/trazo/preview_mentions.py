@@ -11,12 +11,12 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from . import labels
 from .citations import BIB_RE, BIBLIOGRAPHY, bibliography_keys
 from .local_server import RequestError
 
 NEW_CHIP_FIRST, NEW_CHIP_LAST = 0xE800, 0xEFFF
 FIELD = r"(?im)^\s*{}\s*=\s*[{{\"]+(.+?)[}}\"]+\s*,?\s*$"
-OBJECT_KEY = re.compile(r"(?:fig|tbl):[\w:.\-]+")
 
 
 def _field(entry: str, name: str) -> str:
@@ -45,7 +45,7 @@ def _source(mention: Any) -> str:
         raise RequestError("a mention needs a kind and a key")
     if kind == "reference" and key in bibliography_keys():
         return f"[@{key}]"
-    if kind == "object" and OBJECT_KEY.fullmatch(key):
+    if kind == "object" and any(key in entry["labels"] for entry in labels.index(preview.PROJECT).values()):
         return f"[@{key}]"
     if kind == "value" and key in preview.values_info():
         return f"{{{{v:{key}}}}}"

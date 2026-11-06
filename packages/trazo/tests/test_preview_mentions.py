@@ -60,7 +60,7 @@ class SavedMentionTests(unittest.TestCase):
 
     def test_what_does_not_exist_is_not_inserted(self):
         for mention in ({"kind": "reference", "key": "nobody2020"}, {"kind": "value", "key": "no.such"},
-                        {"kind": "object", "key": "x"}, {"kind": "other", "key": "smith2020"}, "smith2020"):
+                        {"kind": "object", "key": "fig:no-such"}, {"kind": "other", "key": "smith2020"}, "smith2020"):
             with self.assertRaises(RequestError):
                 self.save(mention)
             self.assertEqual(self.source(), "Plain words.\n")

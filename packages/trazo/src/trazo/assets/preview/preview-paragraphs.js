@@ -122,6 +122,7 @@
     const at = previous.childNodes.length;
     blockMark.get(previous).dataset.h = payload.parts[0];
     stopWriting();
+    numberChips(ed.el, null, Object.keys(mentionsIn(ed.el).mentions || {}));  // the join saved them
     takeText(previous, ed, " ");
     startWriting(previous);
     previous.focus({ preventScroll: true });
@@ -140,11 +141,10 @@
       return;
     }
     if (ed.draftOf) saveBlock(ed);
-    const after = textOf(ed.el);
     // What is typed before the answer would be lost with this paragraph.
     ed.joining = true;
     ed.el.contentEditable = "false";
-    sendBlock(ed, () => ({ before: ed.before, after, previous: textOf(previous), into: mark.dataset.h, ...mentionsIn(ed.el) }), {
+    sendBlock(ed, () => ({ before: ed.before, after: textOf(ed.el), previous: textOf(previous), into: mark.dataset.h, ...mentionsIn(ed.el) }), {
       done: (payload) => joinTo(ed, previous, payload),
       refused: (_, status, payload) => {
         ed.joining = false;
