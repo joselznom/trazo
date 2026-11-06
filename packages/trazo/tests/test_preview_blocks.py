@@ -82,13 +82,16 @@ class BlockTests(unittest.TestCase):
         text = "1. Item:\n\n   \\begin{equation}\n   y\n   + a\n   \\end{equation}\n\n2. Next.\n"
         self.assertEqual(self.blocks(text), ["Item:", "Next."])
 
-    def test_an_equation_under_a_lead_in_line_stays_whole(self):
-        text = "- The model is:\n  \\begin{equation}\n  y\n  + a\n  \\end{equation}\n"
-        self.assertEqual(self.blocks(text), [text[2:].rstrip()])
+    def test_lines_with_raw_content_get_no_marks_at_all(self):
+        for text in ("- The model is:\n  \\begin{equation}\n  y\n  + a\n  \\end{equation}\n- Next item.\n",
+                     "- Use the\n  \\begin{equation} command.\n- Second item.\n",
+                     "- The model is \\begin{equation}\n  y\n  + a\n  \\end{equation}\n",
+                     "\\begin{equation}\n\\begin{aligned}\nx\n\\end{aligned}\n+ z\n\\end{equation}\n",
+                     "- A <pre>\n  <pre>\n  - x\n  </pre>\n"):
+            self.assertEqual(self.blocks(text), [], text)
+        self.assertEqual(self.blocks("\\begin{equation}\ny\n\\end{equation}\n\nNext item.\n"), ["Next item."])
 
-    def test_an_item_after_an_equation_or_a_code_span_is_an_item(self):
-        text = "- The model is:\n  \\begin{equation}\n  y\n  \\end{equation}\n- Next item.\n"
-        self.assertEqual(self.blocks(text)[-1], "Next item.")
+    def test_a_code_span_opens_no_raw_content(self):
         text = "- First item\n  mentions `\\begin{equation}`.\n- Second item.\n"
         self.assertEqual(self.blocks(text), ["First item\n  mentions `\\begin{equation}`.", "Second item."])
 

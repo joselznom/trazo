@@ -51,7 +51,8 @@ NOT_TEXT = re.compile(r"\[[ xX]\][ \t]|\(@\w*\)[ \t]|\|[ \t]|\{[^}]*\}[ \t\r]*$|
 RULE = re.compile(r"[ \t]{0,3}(?:(?:-[ \t]*){3,}|(?:\*[ \t]*){3,}|(?:_[ \t]*){3,})\r?")
 SETEXT = re.compile(r"[ \t]*(?:=+|-+)[ \t\r]*")
 COMMENT_LINE = re.compile(r"[ \t]*<!--.*-->[ \t\r]*")
-RAW_OPENING = re.compile(r"[ \t]*(?:<[A-Za-z!/?]|\\begin\{)")
+# An HTML tag at the start of a line, after any quote or list marker.
+RAW_LINE = re.compile(r"[ \t>]*(?:(?:[-*+]|\d+[.)])[ \t]+)*<[A-Za-z!/?]")
 # Groups: the marker, the text, closing marks, the attributes. Other braces at the
 # end of a heading are text, or belong to the span before them.
 ATTRIBUTE = r"""(?:[#.][\w:.\-]+|-|[\w:.\-]+=(?:"[^"]*"|'[^']*'|[^\s}]*))"""
@@ -89,13 +90,14 @@ def _indented(line: str) -> bool:
     return (line[quote.end():] if quote else line)[:1] in (" ", "\t")
 
 
-def _in_environment(lines: edit_diff.Lines, i: int, inside: bool) -> bool:
-    """Whether line i leaves a TeX environment open, where `+ a` is no list item."""
+def _raw(lines: edit_diff.Lines, i: int) -> bool:
+    """Whether line i opens raw content: a TeX environment, or an HTML tag at its start."""
     line = lines.lines[i]
-    opening = line.find("\\begin{")
-    if opening >= 0 and not lines.hidden[lines.starts[i] + opening]:
-        inside = True
-    return inside and "\\end{" not in line
+    begin = line.find("\\begin{")
+    if begin >= 0 and not lines.hidden[lines.starts[i] + begin]:
+        return True
+    start = RAW_LINE.match(line)
+    return bool(start) and not lines.hidden[lines.starts[i] + start.end() - 1]
 
 
 def _starts_item(line: str) -> bool:
@@ -110,6 +112,15 @@ def blocks_of(text: str, lines: edit_diff.Lines | None = None) -> list[Block]:
     i, count = 0, len(lines.lines)
     listed = False  # in a list: an item, or a paragraph of the item before it
     while i < count:
+        # Lines with raw content between blank lines get no marks at all: only Pandoc
+        # knows where such content ends, and a mark inside it would show on the page.
+        if not i or blank(lines.lines[i - 1]):
+            end = i
+            while end < count and not blank(lines.lines[end]):
+                end += 1
+            if any(_raw(lines, line) for line in range(i, end)):
+                i, listed = end, False
+                continue
         # A heading, a comment line or a div's fence ends with itself: the next line starts afresh.
         if (blank(lines.lines[i]) or edit_diff.HEADING.match(lines.lines[i]) or COMMENT_LINE.fullmatch(lines.lines[i])
                 or edit_diff.FENCED_DIV.match(lines.lines[i])):
@@ -121,13 +132,11 @@ def blocks_of(text: str, lines: edit_diff.Lines | None = None) -> list[Block]:
                  and not ITEM.match(text, at) and not RULE.fullmatch(lines.lines[i]))
         listed = _starts_item(lines.lines[i]) or (listed and _indented(lines.lines[i]))
         # In a list a line like an item starts one. In a paragraph it goes on with the text.
-        raw = RAW_OPENING.match(lines.lines[i]) or (at is not None and RAW_OPENING.match(text, at))
-        last, items, environment = i, listed and not raw, False
+        last = i
         while (last + 1 < count and not blank(lines.lines[last + 1]) and not FENCE.match(lines.lines[last + 1])
                and not edit_diff.FENCED_DIV.match(lines.lines[last + 1])
-               and not (items and not environment and _starts_item(lines.lines[last + 1]))):
+               and not (listed and _starts_item(lines.lines[last + 1]))):
             last += 1
-            environment = _in_environment(lines, last, environment)
         if prose and not (last > i and SETEXT.fullmatch(lines.lines[i + 1])):
             found.append((at, lines.starts[last] + len(lines.lines[last].rstrip("\r"))))
         i = last + 1
