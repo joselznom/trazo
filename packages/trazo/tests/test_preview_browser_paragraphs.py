@@ -68,6 +68,22 @@ class ParagraphTests(WritingCase):
         self.assertEqual(self.source(), "One **bold words** here.\n")
         self.assertIn("bold words", self.evaluate("document.querySelector('.pv-write-failed').textContent"))
 
+    def test_a_refused_paste_of_paragraphs_keeps_all_its_text_in_one_paragraph(self):
+        self.build("One **bold words** here.\n")
+        self.write_in("bold")
+        self.caret_after("bold")
+        self.evaluate("""(() => {
+          const data = new DataTransfer();
+          data.setData('text/plain', ' first\\n\\nsecond\\n\\nthird');
+          document.activeElement.dispatchEvent(new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true }));
+        })()""")
+        self.wait_for("document.querySelector('.pv-write-bar') && !saves")
+        self.assertEqual(self.source(), "One **bold words** here.\n")
+        text = self.evaluate("document.querySelector('.pv-write-failed').textContent")
+        for word in ("first", "second", "third", "words here."):
+            self.assertIn(word, text)
+        self.assertTrue(self.evaluate("document.querySelector('.pv-write-bar').isConnected"))
+
     def test_backspace_at_the_start_joins_the_paragraph_before(self):
         self.build("One *word*.\n\nTwo words.\n")
         self.write_in("Two")

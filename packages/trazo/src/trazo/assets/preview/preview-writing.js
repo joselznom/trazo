@@ -148,15 +148,17 @@
       ed.draftOf = null;
       if (!after) { dropParagraph(ed); return; }
       ed.before = after;
-      const parts = ed.above ? [ed, anchor] : [anchor, ed];
-      sendBlock(ed, () => ({ before: anchor.before, after: parts.map((part) => part.before).join(BREAK), ...mentionsIn(ed.el), ...extra }), {
+      const parts = ed.above ? [ed, anchor] : [anchor, ed], mentions = mentionsIn(ed.el);
+      sendBlock(ed, () => ({ before: anchor.before, after: parts.map((part) => part.before).join(BREAK), ...mentions, ...extra }), {
         group: parts,
         block: anchor,
         refused: (...failure) => { ed.draftOf = anchor; showFailure(...failure); },
       });
-    } else if (after !== ed.before || failed.has(ed.el)) {
+    } else if (after !== (ed.sent ?? ed.before) || failed.has(ed.el)) {
+      // What a save goes from is what the one before it left, known only when it is sent.
+      const mentions = mentionsIn(ed.el);
       ed.sent = after;
-      sendBlock(ed, { before: ed.before, after, ...mentionsIn(ed.el), ...extra });
+      sendBlock(ed, () => ({ before: ed.before, after, ...mentions, ...extra }));
     }
   }
 
@@ -169,24 +171,18 @@
 
   // The chips the @ menu added to these paragraphs, for the save that takes them to the Markdown.
   function mentionsIn(...els) {
-    const chips = els.flatMap((el) => $$("[data-new]", el));
+    const chips = els.flatMap((el) => $$("[data-new]:not([data-saved])", el));
     return chips.length ? { mentions: Object.fromEntries(chips.map((chip) => [chipChar(chip), { kind: chip.dataset.kind, key: chip.dataset.key }])) } : {};
   }
 
-  // Until the page reloads, the chips of a paragraph are numbered as its Markdown
-  // is: those a save took there (`saved`) join the numbers, and any added since
-  // wait for theirs. The text a paragraph being written is compared with changes
-  // with them.
-  function numberChips(el, ed, saved = []) {
-    const renamed = new Map();
-    const chips = $$(".pv-atom", el).filter((chip) => chip.closest("p, li") === el);
-    chips.filter((chip) => chip.dataset.new === undefined || saved.includes(chipChar(chip))).forEach((chip, i) => {
-      const before = chipChar(chip);
-      delete chip.dataset.new;
-      chip.dataset.i = String(i);
-      renamed.set(before, chipChar(chip));
-    });
-    if (ed) ed.before = [...ed.before].map((ch) => renamed.get(ch) || ch).join("");
+  // A chip's number only names it in its paragraph: the server goes by their order.
+  // Two paragraphs joined need new names.
+  function numberChips(el) {
+    $$(".pv-atom", el).filter((chip) => chip.closest("p, li") === el && (chip.dataset.new === undefined || chip.dataset.saved !== undefined))
+      .forEach((chip, i) => {
+        delete chip.dataset.new;
+        chip.dataset.i = String(i);
+      });
   }
 
   function blockSaved(ed, payload, group, mentions) {
@@ -195,7 +191,7 @@
     if (ed.sent !== undefined) ed.before = ed.sent;
     group.forEach((part, i) => { if (payload.parts[i]) part.mark.dataset.h = payload.parts[i]; });
     if (!payload.parts.length) dropParagraph(ed);
-    else for (const part of group) numberChips(part.el, part, mentions);
+    else for (const part of group) for (const chip of $$("[data-new]", part.el)) if (mentions.includes(chipChar(chip))) chip.dataset.saved = "";
     showSaveState("Saved", true);
     // A heading without an id of its own gets one from its text: a link to the old one breaks.
     const anchor = ed.el.closest("section")?.id || ed.el.id;

@@ -116,6 +116,23 @@ class FormatTests(WritingCase):
         self.wait_for("document.querySelector('.pv-writing strong')?.textContent === 'quick'")
         self.saved("A 😀🧪 **quick** brown fox.\n")
 
+    def test_saves_in_a_row_keep_the_chips_that_stay(self):
+        self.build("A[@smith2020] and {{v:cohort.n}} end.\n")
+        self.write_in("end")
+        self.evaluate("""(() => {
+          document.querySelector('.pv-writing .pv-atom').remove();
+          const word = [...document.querySelector('.pv-writing').childNodes].filter(n => n.nodeType === 3).pop();
+          const range = document.createRange();
+          range.setStart(word, word.data.indexOf('end')); range.setEnd(word, word.data.indexOf('end') + 3);
+          const selection = getSelection(); selection.removeAllRanges(); selection.addRange(range);
+        })()""")
+        self.chord("b", 66)
+        self.type("final")
+        self.leave()
+        self.wait_for("!saves && !document.querySelector('.pv-writing')")
+        self.assertIn("{{v:cohort.n}}", self.source())
+        self.assertNotIn("smith2020", self.source())
+
     def test_a_refused_format_says_so_and_leaves_the_text(self):
         text = "A **quick** fox.\n"
         self.build(text)

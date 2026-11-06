@@ -98,7 +98,6 @@
     if (end) end.data = end.data.trimEnd();
     const left = textOf(ed.el), right = textOf(el), mentions = mentionsIn(ed.el, el);
     const first = stopWriting();
-    numberChips(el);
     const second = startWriting(el);
     el.focus({ preventScroll: true });
     selection.collapse(el, 1);
@@ -108,11 +107,16 @@
       second.above = above;
       return spaceAfter;
     }
-    sendBlock(first, { before: first.before, after: left + BREAK + right, ...mentions }, {
+    first.brokenInto = second;
+    second.gap = gap;
+    sendBlock(first, () => ({ before: first.before, after: left + BREAK + right, ...mentions }), {
       group: [first, second],
+      when: () => first.el.isConnected,  // a break it came from was refused
       refused: (...failure) => {  // the text goes back in one paragraph, where the failure shows
-        if (writing === second) stopWriting();
-        takeText(first.el, second, gap);
+        for (let part = second; part; part = part.brokenInto) {
+          if (writing === part) stopWriting();
+          takeText(first.el, part, part.gap);
+        }
         showFailure(...failure);
       },
     });
@@ -123,7 +127,7 @@
     const at = previous.childNodes.length;
     blockMark.get(previous).dataset.h = payload.parts[0];
     stopWriting();
-    numberChips(ed.el, null, Object.keys(mentionsIn(ed.el).mentions || {}));  // the join saved them
+    for (const chip of $$("[data-new]", ed.el)) chip.dataset.saved = "";  // the join took them to the Markdown
     takeText(previous, ed, " ");
     startWriting(previous);
     previous.focus({ preventScroll: true });

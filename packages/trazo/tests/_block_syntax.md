@@ -89,6 +89,24 @@ Highlighted `print(1)`{.python} and an image in parentheses ![a](a(b).png) keep 
 
 ## Inline span [word]{.smallcaps}
 
+## 1. Numbered title
+
+(1) A first hypothesis here.
+(2) A second hypothesis here.
+
+Paragraph before a fence.
+```python
+keep_this_code()
+```
+
+A linked [section name](#sec:awkward) in a sentence.
+
+**[@smith2020]** in bold, and [@smith2020] - a dash after it.
+
+> A quoted paragraph.
+>
+> A second quoted paragraph.
+
 Setext title
 ============
 

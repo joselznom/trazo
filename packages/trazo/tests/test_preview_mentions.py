@@ -58,6 +58,22 @@ class SavedMentionTests(unittest.TestCase):
             self.assertTrue(self.save(mention)["saved"])
             self.assertEqual(self.source(), f"Plain words {written}.\n")
 
+    def test_a_parenthesis_after_a_new_chip_stays_text(self):
+        self.chapter.write_text("Plain words.\n", encoding="utf-8")
+        self.assertEqual(preview_mentions.sources({"mentions": {CHIP: {"kind": "reference", "key": "smith2020"}}}), {CHIP: "[@smith2020]"})
+        answer = self.save({"kind": "object", "key": "tbl:example"}, "Plain words(a).\n")
+        self.assertTrue(answer.get("saved"), answer)
+        self.assertEqual(self.source(), "Plain words [@tbl:example]\\(a).\n")
+
+    def test_a_chip_with_no_mention_is_refused(self):
+        self.chapter.write_text("Plain words.\n", encoding="utf-8")
+        self.assertEqual(preview_render.render("manuscript", self.folder / "page")[0], "")
+        html = (self.folder / "page" / "manuscript.html").read_text(encoding="utf-8")
+        key = next(k for (file, k) in roundtrip.page_blocks(html) if file == CHAPTER)
+        answer = preview.post_route("/__block", lambda: {"file": CHAPTER, "h": key, "before": "Plain words.", "after": f"Plain {CHIP} words."})()
+        self.assertIn("refused", answer)
+        self.assertEqual(self.source(), "Plain words.\n")
+
     def test_what_does_not_exist_is_not_inserted(self):
         for mention in ({"kind": "reference", "key": "nobody2020"}, {"kind": "value", "key": "no.such"},
                         {"kind": "object", "key": "fig:no-such"}, {"kind": "other", "key": "smith2020"}, "smith2020"):

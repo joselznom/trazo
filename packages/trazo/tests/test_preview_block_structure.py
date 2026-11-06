@@ -60,6 +60,69 @@ class StructureTests(SaveCase):
             self.assertIn("refused", answer)
             self.assertEqual(self.chapter.read_text(encoding="utf-8"), text)
 
+    def test_keeping_mine_is_refused_between_equal_paragraphs(self):
+        text = "Same words here.\n\nOther.\n\nSame words here.\n"
+        key, rendered = self.block(text, "Same")
+        self.chapter.write_text("Same words here.\n\nChanged.\n\nSame words here.\n", encoding="utf-8")
+        with self.assertRaises(preview.Conflict):
+            preview.post_route("/__block", lambda: {"file": CHAPTER, "h": key, "before": rendered,
+                                                    "after": "Mine words here.", "keep": True})()
+        self.assertEqual(self.chapter.read_text(encoding="utf-8"), "Same words here.\n\nChanged.\n\nSame words here.\n")
+
+    def test_keeping_mine_is_refused_if_the_merge_would_read_wrong(self):
+        text = "A big brown fox jumps over the lazy dog.\n"
+        key, rendered = self.block(text, "brown")
+        changed = "A **big brown** fox jumps over the lazy dog.\n"
+        self.chapter.write_text(changed, encoding="utf-8")
+        answer = preview.post_route("/__block", lambda: {"file": CHAPTER, "h": key, "before": rendered,
+                                                         "after": "A fox jumps over the lazy dog.", "keep": True})()
+        self.assertIn("refused", answer)
+        self.assertEqual(self.chapter.read_text(encoding="utf-8"), changed)
+
+    def test_a_list_item_that_holds_more_cannot_be_emptied(self):
+        for text in ("- Gone.\n  - Child.\n- Next.\n", "1. Gone.\n\n   More of it.\n\n2. Next.\n"):
+            key, rendered = self.block(text, "Gone")
+            self.assertIn("refused", self.save(key, rendered, ""))
+            self.assertEqual(self.chapter.read_text(encoding="utf-8"), text)
+
+    def test_only_what_the_page_showed_can_be_deleted(self):
+        text = "Gone here.\n"
+        key, _ = self.block(text, "Gone")
+        self.assertIn("refused", self.save(key, "Something else.", ""))
+        self.assertEqual(self.chapter.read_text(encoding="utf-8"), text)
+
+    def test_a_paragraph_before_a_fence_leaves_the_code(self):
+        key, rendered = self.block("Gone here.\n```python\nkeep()\n```\n\nNext.\n", "Gone")
+        self.save(key, rendered, "")
+        self.assertIn("keep()", self.chapter.read_text(encoding="utf-8"))
+
+    def test_a_break_that_leaves_text_the_page_cannot_write_in_is_refused(self):
+        text = "One to split[^1] here.\n\n[^1]: A note.\n"
+        key, rendered = self.block(text, "split")
+        at = next(i for i, ch in enumerate(rendered) if ord(ch) >= 0xE000)
+        answer = self.save(key, rendered, rendered[:at] + roundtrip.BREAK + rendered[at:])
+        self.assertIn("refused", answer)
+        self.assertEqual(self.chapter.read_text(encoding="utf-8"), text)
+
+    def test_a_quote_of_two_paragraphs_breaks_into_keys_of_their_own(self):
+        answer = self.split("> One to split. Two.\n", "Two", "> One to split.\n>\n> Two.\n")
+        self.assertEqual(len(answer["parts"]), 2)
+
+    def test_a_title_that_reads_as_a_list_alone_takes_new_text(self):
+        key, rendered = self.block("## 1. Old title\n\nText.\n", "Old title")
+        self.assertTrue(self.save(key, rendered, rendered.replace("Old", "New"))["saved"])
+        self.assertEqual(self.chapter.read_text(encoding="utf-8"), "## 1. New title\n\nText.\n")
+
+    def test_emphasis_that_holds_only_a_chip_does_not_stop_a_save(self):
+        key, rendered = self.block("**[@smith2020]** said words.\n", "said")
+        self.assertTrue(self.save(key, rendered, rendered.replace("said", "wrote"))["saved"])
+        self.assertEqual(self.chapter.read_text(encoding="utf-8"), "**[@smith2020]** wrote words.\n")
+
+    def test_a_link_in_the_page_is_a_chip_that_does_not_stop_a_save(self):
+        key, rendered = self.block("See [the methods](#sec:x) for words.\n", "words")
+        self.assertTrue(self.save(key, rendered, rendered.replace("words", "more"))["saved"])
+        self.assertEqual(self.chapter.read_text(encoding="utf-8"), "See [the methods](#sec:x) for more.\n")
+
     def test_keeping_a_heading_goes_to_a_heading(self):
         text = "# The quick brown fox\n\nThe quick brown fox.\n"
         key, rendered = self.block(text, "The quick brown fox")

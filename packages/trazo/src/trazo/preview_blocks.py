@@ -23,6 +23,7 @@ from collections.abc import Iterator
 from dataclasses import dataclass
 
 from . import edit_diff
+from .expand import FENCE
 
 # Text the alignment must not treat as prose. `atom` is what a chip stands for.
 PROTECTED = re.compile(r"""
@@ -34,13 +35,14 @@ PROTECTED = re.compile(r"""
       | !\[[^\]]*\]\((?:[^()]|\([^()]*\))*\)(?:\{[^{}]*\})?
       | \^\[(?:[^\[\]]|\[[^\]]*\])*\]
       | \[\^[^\]]+\]
+      | \[[^\[\]]*\]\(\#[^)]*\)
       | \[[^\[\]]*@[^\[\]]*\](?![(\[{])
       | (?<![\w@\\])-?@[\w:.\#$%&+?<>~/-]*\w(?:[ ]\[[^\[\]]*\](?![(\[]))?
     )
   | \]\([^)]*\) | \]\[[^\]]*\] | \{[^{}]*\} | <[^>\n]+> | \\[A-Za-z]+(?:\{[^{}]*\})*
 """, re.X | re.S)
 QUOTE = re.compile(r"[ \t]{0,3}(?:>[ \t]?)+")
-ITEM = re.compile(r"[ \t]*(?:[-*+]|\d+[.)]|#[.)]|\(@\w*\)|\(?[A-Za-z][.)]|\(?[ivxIVX]+[.)])[ \t]+")
+ITEM = re.compile(r"[ \t]*(?:[-*+]|\(?\d+[.)]|\(?#[.)]|\(@\w*\)|\(?[A-Za-z][.)]|\(?[ivxlcdmIVXLCDM]+[.)])[ \t]+")
 # Where a block's text would start, text that only reads as it does at the start
 # of a block: task boxes, example lists, line blocks, a lone attribute,
 # definitions, raw HTML and raw TeX environments.
@@ -74,6 +76,11 @@ def _digest(text: str) -> str:
     return hashlib.sha1(text.encode("utf-8")).hexdigest()[:12]
 
 
+def _blank(line: str) -> bool:
+    """Whether a line separates paragraphs: empty, or only quote marks."""
+    return not line.strip() or bool(QUOTE.fullmatch(line.rstrip()))
+
+
 def _starts_item(line: str) -> bool:
     quote = QUOTE.match(line)
     return bool(ITEM.match(line[quote.end():] if quote else line))
@@ -85,11 +92,12 @@ def blocks_of(text: str, lines: edit_diff.Lines | None = None) -> list[Block]:
     found: list[tuple[int, int]] = []
     i, count = 0, len(lines.lines)
     while i < count:
-        if not lines.lines[i].strip():
+        if _blank(lines.lines[i]):
             i += 1
             continue
         last = i
-        while last + 1 < count and lines.lines[last + 1].strip() and not _starts_item(lines.lines[last + 1]):
+        while (last + 1 < count and not _blank(lines.lines[last + 1]) and not _starts_item(lines.lines[last + 1])
+               and not FENCE.match(lines.lines[last + 1])):
             last += 1
         at = lines.block_mark_at(lines.starts[i])
         if (at is not None and lines.line_of(at) == i and not lines.hidden[at]

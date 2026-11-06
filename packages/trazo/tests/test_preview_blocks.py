@@ -8,7 +8,7 @@ from unittest.mock import patch
 import _block_roundtrip as roundtrip
 from _preview_saving import CHAPTER, SaveCase
 
-from trazo import edit_diff, preview, preview_block_save, preview_blocks, preview_edit_review
+from trazo import edit_diff, preview, preview_block_patch, preview_blocks, preview_edit_review
 
 SYNTAX = Path(__file__).with_name("_block_syntax.md")
 
@@ -60,13 +60,17 @@ class BlockTests(unittest.TestCase):
             marked = edit_diff.with_marks(text, preview_blocks.marks(text, "a.md"))
             self.assertRegex(marked, r'^# A .*\} \{\.pv-head data-file="a\.md" data-h="h\w+" data-auto="1"\}\n$')
 
+    def test_a_block_ends_at_a_fence_and_at_a_line_of_quote_marks(self):
+        self.assertEqual(self.blocks("Text.\n```\ncode\n```\n"), ["Text."])
+        self.assertEqual(self.blocks("> One.\n>\n> Two.\n"), ["One.", "Two."])
+
     def test_a_line_ending_is_not_part_of_a_block_in_a_windows_file(self):
         self.assertEqual(self.blocks("One\r\ntwo.\r\n\r\nThree.\r\n"), ["One\r\ntwo.", "Three."])
 
 
 class PatchTests(unittest.TestCase):
     def patched(self, before, after, source, spans=()):
-        return preview_block_save.patch(before, after, source, list(spans))
+        return preview_block_patch.patch(before, after, source, list(spans))
 
     def test_only_the_words_that_changed_change(self):
         self.assertEqual(self.patched("A big dog ran.", "A small dog ran.", "A *big*\ndog ran."), "A *small*\ndog ran.")
@@ -79,6 +83,21 @@ class PatchTests(unittest.TestCase):
         source = "See [@a] here."
         self.assertEqual(self.patched(f"See {chip} here.", f"Look {chip} here.", source, [(4, 8)]), "Look [@a] here.")
         self.assertEqual(self.patched(f"See {chip} here.", "See  here.", source, [(4, 8)]), "See  here.")
+
+    def test_a_chip_is_its_place_among_the_chips_not_its_number(self):
+        chip = chr(0xE005)
+        self.assertEqual(self.patched(f"See {chip} here.", f"Look {chip} here.", "See [@a] here.", [(4, 8)]), "Look [@a] here.")
+
+    def test_every_chip_kept_must_still_be_there(self):
+        chip = chr(0xE000)
+        self.assertIsNone(self.patched(f"A {chip} b", f"A {chip} b c", "A b", []))
+
+    def test_a_parenthesis_after_a_chip_stays_text(self):
+        chip = chr(0xE000)
+        self.assertEqual(self.patched(f"See {chip} now.", f"See {chip}(a) now.", "See [@a] now.", [(4, 8)]), r"See [@a]\(a) now.")
+
+    def test_a_change_across_an_inline_comment_is_refused(self):
+        self.assertIsNone(self.patched("Foo bar baz.", "Qux baz.", "Foo <!-- keep me --> bar baz."))
 
     def test_a_chip_cannot_move(self):
         a, b = chr(0xE000), chr(0xE001)

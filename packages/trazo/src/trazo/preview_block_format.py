@@ -16,16 +16,8 @@ from html.parser import HTMLParser
 from typing import Any
 
 from .local_server import RequestError
-from .preview_block_save import (
-    DEFINITION,
-    _comparable,
-    _find,
-    _masked,
-    _Offsets,
-    _spans,
-    _squashed,
-    alone_html,
-)
+from .preview_block_patch import Offsets, masked
+from .preview_block_save import DEFINITION, _comparable, _definitions, _find, _spans, _squashed, alone_html
 from .preview_blocks import atoms, editable
 from .preview_sources import change_source, get_source, source_path
 
@@ -62,9 +54,9 @@ class _Styled(HTMLParser):
         self.chars += [(ch, styles) for ch in _letters(data)]
 
 
-def _styled(block: str, definitions: str) -> list[tuple[str, frozenset[str]]]:
+def _styled(block: str, definitions: str, heading: bool) -> list[tuple[str, frozenset[str]]]:
     page = _Styled()
-    page.feed(alone_html(block, definitions))
+    page.feed(alone_html(block, definitions, heading))
     return page.chars
 
 
@@ -82,7 +74,7 @@ def _pairs(masked: str) -> list[tuple[re.Match[str], re.Match[str]]]:
 
 def _with_style(source: str, at: int, end: int, style: str) -> str:
     """`source` with source[at:end] in the style, without the same style inside it."""
-    inner = [run for pair in _pairs(_masked(source)) for run in pair
+    inner = [run for pair in _pairs(masked(source)) for run in pair
              if at <= pair[0].start() and pair[1].end() <= end and style in STYLES[len(pair[0][0])]]
     out, last = [], at
     for run in sorted(inner, key=lambda run: run.start()):
@@ -100,7 +92,7 @@ def _kept(run: str, style: str) -> str:
 def _without_style(source: str, at: int, end: int, style: str) -> str | None:
     """`source` with the emphasis around source[at:end] closed before it and open
     again after it, or None if none holds it whole."""
-    holding = [(a, b) for a, b in _pairs(_masked(source))
+    holding = [(a, b) for a, b in _pairs(masked(source))
                if a.end() <= at and end <= b.start() and style in STYLES[len(a[0])]]
     if not holding:
         return None
@@ -125,7 +117,8 @@ def _range(request: dict[str, Any], before: str) -> tuple[int, int]:
     return start, end
 
 
-def _toggled(request: dict[str, Any], text: str, source: str, spans: list[tuple[int, int]]) -> tuple[str | None, bool, str]:
+def _toggled(request: dict[str, Any], text: str, source: str, spans: list[tuple[int, int]],
+             heading: bool) -> tuple[str | None, bool, str]:
     """`source` with the style toggled, whether the style is now on, and why not."""
     style = request.get("style")
     if style not in MARKER:
@@ -135,13 +128,13 @@ def _toggled(request: dict[str, Any], text: str, source: str, spans: list[tuple[
     if start == end:
         return None, False, "there is no text selected"
     references = {m[1].lower() for m in DEFINITION.finditer(text)}
-    offsets = _Offsets(before, source, spans, references)
+    offsets = Offsets(before, source, spans, references)
     at, stop = offsets.at(start), offsets.after(end - 1)
     if at is None or stop is None or stop <= at:
         return None, False, "this text has no place in the Markdown"
-    definitions = "\n".join(m[0] for m in DEFINITION.finditer(text))
+    definitions = _definitions(text)
     try:
-        chars = _styled(source, definitions)
+        chars = _styled(source, definitions, heading)
         first, last = len(_letters(before[:start])), len(_letters(before[:end]))
         if len(chars) != len(_letters(before)):
             return None, False, "this paragraph has more on the page than its Markdown shows"
@@ -150,7 +143,7 @@ def _toggled(request: dict[str, Any], text: str, source: str, spans: list[tuple[
         changed = {style}
         wanted = [(ch, (styles | changed if on else styles - changed) if first <= n < last else styles)
                   for n, (ch, styles) in enumerate(chars)]
-        if patched is None or _styled(patched, definitions) != wanted:
+        if patched is None or _styled(patched, definitions, heading) != wanted:
             return None, on, "select all of the formatted text, or none of it"
     except (OSError, subprocess.SubprocessError) as exc:
         return None, False, f"could not check the result: {exc}"
@@ -167,7 +160,7 @@ def change_format(request: Any) -> dict[str, Any]:
     state = get_source(file)
     text = state["text"]
     block, lines = _find(text, request.get("h"), state["sha256"])
-    new, on, why = _toggled(request, text, text[block.at:block.end], _spans(text, block, lines))
+    new, on, why = _toggled(request, text, text[block.at:block.end], _spans(text, block, lines), block.heading)
     if new is None:
         return {"refused": why, "file": file}
     changed = text[:block.at] + new + text[block.end:]
