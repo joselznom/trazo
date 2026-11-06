@@ -23,6 +23,8 @@ Code can pass one axis and fail the other.
 - **Works on macOS, breaks on Linux.** Timestamps too coarse for the watcher, Chrome refusing to start as root (CHANGELOG v0.1.2), headless Chrome left running (9d8b5d1).
 - **Two writers, one file.** `steps.json` overwritten by a concurrent run (f66983e); review comments and history are written under a lock for the same reason.
 - **The preview server and its clients.** A tab closed mid-reply printed tracebacks (a2fd5c1); reset connections under load (1f0023d).
+- **Saves that overtake each other.** The editors save in the background, so a reply can land after newer typing: it dropped what came later, or a queued save went from the state before the one ahead of it (#24, #27).
+- **A test that hides the bug.** A synthetic `dblclick` that a real double click never produced, a timestamp rewritten to force the order the test wanted (#15, #25). Where the bug is in how input or time arrive, the test drives the real thing.
 
 ## Always check
 
