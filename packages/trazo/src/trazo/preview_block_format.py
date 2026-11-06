@@ -129,6 +129,8 @@ def _toggled(request: dict[str, Any], text: str, source: str, spans: list[tuple[
         return None, False, "there is no text selected"
     references = {m[1].lower() for m in DEFINITION.finditer(text)}
     offsets = Offsets(before, source, spans, references)
+    if len(offsets.chips) != len(spans):
+        return None, False, "this paragraph changed on the page"
     at, stop = offsets.at(start), offsets.after(end - 1)
     if at is None or stop is None or stop <= at:
         return None, False, "this text has no place in the Markdown"

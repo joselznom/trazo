@@ -133,6 +133,38 @@ class FormatTests(WritingCase):
         self.assertIn("{{v:cohort.n}}", self.source())
         self.assertNotIn("smith2020", self.source())
 
+    def test_a_correction_after_a_format_is_saved_though_the_first_save_is_on_its_way(self):
+        self.build("A quick brown end.\n")
+        self.write_in("quick")
+        self.type("x")
+        self.evaluate("""(() => {
+          const fetch = window.fetch;
+          window.held = [];
+          window.fetch = (url, options) => {
+            if (!String(url).includes('/__block') || window.released) return fetch(url, options);
+            return new Promise((resolve) => window.held.push(() => resolve(fetch(url, options))));
+          };
+          const node = [...document.querySelector('.pv-writing').childNodes].filter(n => n.nodeType === 3).pop();
+          const range = document.createRange();
+          range.setStart(node, 0); range.setEnd(node, 1);
+          const selection = getSelection(); selection.removeAllRanges(); selection.addRange(range);
+        })()""")
+        self.chord("b", 66)
+        self.wait_for("window.held.length === 1")
+        self.evaluate("""(() => {
+          const node = [...document.querySelector('.pv-writing').childNodes].filter(n => n.nodeType === 3).pop();
+          const at = node.data.indexOf('end');
+          const range = document.createRange();
+          range.setStart(node, at); range.setEnd(node, at + 3);
+          const selection = getSelection(); selection.removeAllRanges(); selection.addRange(range);
+        })()""")
+        self.type("final")
+        self.leave()
+        self.evaluate("window.released = true; window.held.splice(0).forEach((go) => go())")
+        self.wait_for("saves === 0")
+        self.assertIn("final", self.source())
+        self.assertFalse(self.evaluate("!!document.querySelector('.pv-write-bar')"))
+
     def test_a_refused_format_says_so_and_leaves_the_text(self):
         text = "A **quick** fox.\n"
         self.build(text)

@@ -62,12 +62,34 @@ class StructureTests(SaveCase):
 
     def test_keeping_mine_is_refused_between_equal_paragraphs(self):
         text = "Same words here.\n\nOther.\n\nSame words here.\n"
-        key, rendered = self.block(text, "Same")
-        self.chapter.write_text("Same words here.\n\nChanged.\n\nSame words here.\n", encoding="utf-8")
-        with self.assertRaises(preview.Conflict):
-            preview.post_route("/__block", lambda: {"file": CHAPTER, "h": key, "before": rendered,
-                                                    "after": "Mine words here.", "keep": True})()
-        self.assertEqual(self.chapter.read_text(encoding="utf-8"), "Same words here.\n\nChanged.\n\nSame words here.\n")
+        for changed in ("Same words here.\n\nChanged.\n\nSame words here.\n",
+                        "Same words here, changed.\n\nOther.\n\nSame words here.\n"):
+            key, rendered = self.block(text, "Same")
+            self.chapter.write_text(changed, encoding="utf-8")
+            with self.assertRaises(preview.Conflict):
+                preview.post_route("/__block", lambda: {"file": CHAPTER, "h": key, "before": rendered,
+                                                        "after": "Mine words here.", "keep": True})()
+            self.assertEqual(self.chapter.read_text(encoding="utf-8"), changed)
+
+    def test_keeping_a_deletion_is_refused_if_the_file_changed_the_paragraph(self):
+        text = "Gone words here for all.\n\nNext.\n"
+        key, rendered = self.block(text, "Gone")
+        changed = "Gone words here for all, and more.\n\nNext.\n"
+        self.chapter.write_text(changed, encoding="utf-8")
+        answer = preview.post_route("/__block", lambda: {"file": CHAPTER, "h": key, "before": rendered, "after": "", "keep": True})()
+        self.assertIn("refused", answer)
+        self.assertEqual(self.chapter.read_text(encoding="utf-8"), changed)
+
+    def test_keeping_a_break_checks_each_paragraph(self):
+        text = "One sentence. Two words here.\n"
+        key, rendered = self.block(text, "sentence")
+        changed = "**One sentence. Two words here.**\n"
+        self.chapter.write_text(changed, encoding="utf-8")
+        answer = preview.post_route("/__block", lambda: {
+            "file": CHAPTER, "h": key, "before": rendered,
+            "after": "One sentence." + roundtrip.BREAK + "Two words here.", "keep": True})()
+        self.assertIn("refused", answer)
+        self.assertEqual(self.chapter.read_text(encoding="utf-8"), changed)
 
     def test_keeping_mine_is_refused_if_the_merge_would_read_wrong(self):
         text = "A big brown fox jumps over the lazy dog.\n"
@@ -80,7 +102,8 @@ class StructureTests(SaveCase):
         self.assertEqual(self.chapter.read_text(encoding="utf-8"), changed)
 
     def test_a_list_item_that_holds_more_cannot_be_emptied(self):
-        for text in ("- Gone.\n  - Child.\n- Next.\n", "1. Gone.\n\n   More of it.\n\n2. Next.\n"):
+        for text in ("- Gone.\n  - Child.\n- Next.\n", "1. Gone.\n\n   More of it.\n\n2. Next.\n",
+                     "> - Gone.\n>   - Child.\n> - Next.\n"):
             key, rendered = self.block(text, "Gone")
             self.assertIn("refused", self.save(key, rendered, ""))
             self.assertEqual(self.chapter.read_text(encoding="utf-8"), text)
@@ -90,6 +113,18 @@ class StructureTests(SaveCase):
         key, _ = self.block(text, "Gone")
         self.assertIn("refused", self.save(key, "Something else.", ""))
         self.assertEqual(self.chapter.read_text(encoding="utf-8"), text)
+
+    def test_a_paragraph_with_a_comment_the_page_does_not_show_is_not_deleted(self):
+        text = "Gone <!-- a note to self --> here.\n"
+        key, rendered = self.block(text, "Gone")
+        self.assertIn("refused", self.save(key, rendered, ""))
+        self.assertEqual(self.chapter.read_text(encoding="utf-8"), text)
+
+    def test_a_citation_and_a_colon_are_no_link_definition(self):
+        key, rendered = self.block("[@smith2020] said words.\n\nNext words.\n", "said")
+        self.assertTrue(self.save(key, rendered, rendered.replace(" said", ": said"))["saved"])
+        key, rendered = self.block(self.chapter.read_text(encoding="utf-8"), "Next")
+        self.assertTrue(self.save(key, rendered, rendered.replace("Next", "Last"))["saved"])
 
     def test_a_paragraph_before_a_fence_leaves_the_code(self):
         key, rendered = self.block("Gone here.\n```python\nkeep()\n```\n\nNext.\n", "Gone")

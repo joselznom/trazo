@@ -99,7 +99,11 @@ Paragraph before a fence.
 keep_this_code()
 ```
 
-A linked [section name](#sec:awkward) in a sentence.
+A linked [section name](#sec:awkward) in a sentence, and [one with a class](#sec:awkward){.internal}.
+
+Three aims follow in this study:
+(1) to measure and
+(2) to compare.
 
 **[@smith2020]** in bold, and [@smith2020] - a dash after it.
 

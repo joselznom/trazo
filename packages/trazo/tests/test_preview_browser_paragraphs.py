@@ -84,6 +84,21 @@ class ParagraphTests(WritingCase):
             self.assertIn(word, text)
         self.assertTrue(self.evaluate("document.querySelector('.pv-write-bar').isConnected"))
 
+    def test_a_refused_break_keeps_the_names_of_the_chips(self):
+        self.build("A [@smith2020] {{v:cohort.n}} **bold words** here.\n")
+        self.write_in("here")
+        self.evaluate("document.querySelector('.pv-writing .pv-atom').remove()")
+        self.caret_after("bold")
+        self.key("Enter", 13)
+        self.wait_for("document.querySelector('.pv-write-bar') && !saves")
+        self.write_in("here")
+        self.caret_after("here")
+        self.type(" more")
+        self.leave()
+        self.wait_for("!saves && !document.querySelector('.pv-writing')")
+        self.assertNotIn("smith2020", self.source())
+        self.assertIn("{{v:cohort.n}}", self.source())
+
     def test_backspace_at_the_start_joins_the_paragraph_before(self):
         self.build("One *word*.\n\nTwo words.\n")
         self.write_in("Two")

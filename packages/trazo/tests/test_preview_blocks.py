@@ -60,6 +60,11 @@ class BlockTests(unittest.TestCase):
             marked = edit_diff.with_marks(text, preview_blocks.marks(text, "a.md"))
             self.assertRegex(marked, r'^# A .*\} \{\.pv-head data-file="a\.md" data-h="h\w+" data-auto="1"\}\n$')
 
+    def test_a_line_like_a_list_item_goes_on_with_a_paragraph(self):
+        text = "Three aims follow:\n(1) to measure and\n(2) to compare.\n"
+        self.assertEqual(self.blocks(text), [text.strip()])
+        self.assertEqual(self.blocks("- One.\n- Two.\n"), ["One.", "Two."])
+
     def test_a_block_ends_at_a_fence_and_at_a_line_of_quote_marks(self):
         self.assertEqual(self.blocks("Text.\n```\ncode\n```\n"), ["Text."])
         self.assertEqual(self.blocks("> One.\n>\n> Two.\n"), ["One.", "Two."])

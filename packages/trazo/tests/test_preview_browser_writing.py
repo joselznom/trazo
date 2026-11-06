@@ -121,6 +121,20 @@ class WritingTests(WritingCase):
         self.evaluate("[...document.querySelectorAll('.pv-write-bar button')].find(b => b.textContent === \"Take the file's\").click()")
         self.wait_for("!document.querySelector('.pv-write-bar') && !document.querySelector('.pv-write-failed')")
 
+    def test_a_refused_save_stays_flagged_if_the_author_comes_and_goes(self):
+        self.build("Plain words here.\n")
+        with patch("trazo.preview_block_save.check", lambda *args: "it does not read the same"):
+            self.write_in("words")
+            self.type("my ")
+            self.leave()
+            self.wait_for("document.querySelector('.pv-write-bar')")
+            self.write_in("here")
+            self.wait_for("!document.querySelector('.pv-write-bar')")
+            self.leave()
+            self.wait_for("document.querySelector('.pv-write-bar')")
+        self.assertTrue(self.evaluate("hasUnsaved()"))
+        self.assertEqual(self.source(), "Plain words here.\n")
+
     def test_a_paragraph_changed_on_disk_keeps_the_text_until_the_author_picks(self):
         text = "The quick brown fox jumps over the lazy dog.\n"
         for choice, result in (("Keep mine", "The slow quick brown fox jumps over the sleepy dog.\n"),

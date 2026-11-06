@@ -124,7 +124,8 @@
     saves++;
     showSaveState("Saving…");
     saveQueue = saveQueue.then(async () => {
-      if (when && !when()) { saves--; return; }
+      // A paragraph a refused break folded back has nothing left to save.
+      if (!ed.el.isConnected || !block.el.isConnected || (when && !when())) { saves--; return; }
       const { file, h: key } = block.mark.dataset;
       const sent = typeof body === "function" ? body() : body;
       let result;
@@ -138,7 +139,7 @@
         showSaveState("", false);
         refused(ed, result.status, result.payload);
       } else if (done) { showSaveState("Saved", true); done(result.payload); }
-      else blockSaved(ed, result.payload, group, Object.keys(sent.mentions || {}));
+      else blockSaved(ed, result.payload, group, sent);
     });
   }
 
@@ -154,10 +155,10 @@
         block: anchor,
         refused: (...failure) => { ed.draftOf = anchor; showFailure(...failure); },
       });
-    } else if (after !== (ed.sent ?? ed.before) || failed.has(ed.el)) {
+    } else if (after !== (ed.queued ?? ed.before) || failed.has(ed.el)) {
       // What a save goes from is what the one before it left, known only when it is sent.
       const mentions = mentionsIn(ed.el);
-      ed.sent = after;
+      ed.queued = after;
       sendBlock(ed, () => ({ before: ed.before, after, ...mentions, ...extra }));
     }
   }
@@ -185,13 +186,17 @@
       });
   }
 
-  function blockSaved(ed, payload, group, mentions) {
+  function blockSaved(ed, payload, group, sent) {
     clearFailure(ed);
     closeMarkdown(ed);
-    if (ed.sent !== undefined) ed.before = ed.sent;
-    group.forEach((part, i) => { if (payload.parts[i]) part.mark.dataset.h = payload.parts[i]; });
+    // Each paragraph now is what this save wrote, whatever was queued after it.
+    const written = sent.after === undefined ? [] : sent.after.split(BREAK);
+    group.forEach((part, i) => {
+      if (payload.parts[i]) part.mark.dataset.h = payload.parts[i];
+      if (written[i] !== undefined) part.before = written[i];
+      for (const chip of $$("[data-new]", part.el)) if (chipChar(chip) in (sent.mentions || {})) chip.dataset.saved = "";
+    });
     if (!payload.parts.length) dropParagraph(ed);
-    else for (const part of group) for (const chip of $$("[data-new]", part.el)) if (mentions.includes(chipChar(chip))) chip.dataset.saved = "";
     showSaveState("Saved", true);
     // A heading without an id of its own gets one from its text: a link to the old one breaks.
     const anchor = ed.el.closest("section")?.id || ed.el.id;
@@ -225,6 +230,7 @@
 
   function showFailure(ed, status, payload) {
     showSaveState("Not saved", true);
+    ed.queued = undefined;  // what it tried is not saved: leaving the text tries again
     failed.set(ed.el, ed);
     ed.el.classList.add("pv-write-failed");
     if (ed.bar) ed.bar.remove();

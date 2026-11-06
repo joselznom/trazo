@@ -1,9 +1,9 @@
 """Writing an edit of the preview's text back to a block of Markdown.
 
 POST /__block {file, h, before, after} takes the block's rendered text before
-and after the edit, with each locked chip as one private-use character:
-U+E000 + i for the block's atom i (trazo.preview_blocks), U+F000 and up for any
-other chip on the page. The text is aligned with the Markdown, and the words
+and after the edit, with each locked chip as one private-use character: from
+U+E000 for the block's atoms (trazo.preview_blocks), in their order, and from
+U+F000 for any other chip on the page. The text is aligned with the Markdown, and the words
 that changed are replaced in it, with what was typed escaped so it reads
 literally. The result is then checked: built alone, the block must read
 exactly what the author left on the page, keep its kind, and keep the source
@@ -35,17 +35,16 @@ from .counts import VOID
 from .edit_diff import Lines, merge
 from .local_server import Conflict, RequestError
 from .preview_block_patch import BREAK, CHIP_FIRST, is_chip, lead_escaped, patch
-from .preview_blocks import ITEM, PROTECTED, QUOTE, SOURCES, Block, atoms, atoms_in, blocks_of, editable, escaped
+from .preview_blocks import ITEM, PROTECTED, QUOTE, SOURCES, Block, atoms, atoms_in, blank, blocks_of, editable, escaped
 from .preview_mentions import sources
 from .preview_sources import change_source, get_source, source_path
 
 # Between two blocks that can join: blank lines and the markers of the second.
 GAP = re.compile(r"[\s>]*(?:(?:[-*+]|\d+[.)]|#[.)])[ \t]+)?")
 BLANK_LINE = re.compile(r"[ \t]*\r?\n")
-NEXT_LINE = re.compile(r"(?:[ \t]*\r?\n)+([ \t]*)\S")
 # What Pandoc's smart typography makes of plain characters, undone.
 TYPED = str.maketrans({"’": "'", "‘": "'", "“": '"', "”": '"', "—": "---", "–": "--", "…": "..."})
-DEFINITION = re.compile(r"(?m)^ {0,3}\[([^\]^]+)\]:.*$")
+DEFINITION = re.compile(r"(?m)^ {0,3}\[([^\]^@]+)\]:.*$")
 QUOTE_LINE = re.compile(rf"(?m)^{QUOTE.pattern}")
 CHECK_TIMEOUT = 30  # seconds; Pandoc takes a few hundredths for one block
 SAME_BLOCK = 0.5    # how alike a changed block and the one the author started from must be
@@ -148,6 +147,8 @@ def _rewritten(request: dict[str, Any], text: str, source: str, spans: list[tupl
     and `lead` the rendered text and Markdown of a block it joins."""
     before, after = _squashed(request, "before"), _squashed(request, "after")
     if not after:  # what goes must be all of what the page showed
+        if "<!--" in source:
+            return None, "this paragraph holds a comment the page does not show"
         try:
             same = _alone(source, _definitions(text), heading)[0] == _comparable(before)
         except (OSError, subprocess.SubprocessError) as exc:
@@ -181,6 +182,8 @@ def _kept_mine(request: dict[str, Any], text: str, sha256: str) -> tuple[Block, 
     source = SOURCES.get(request.get("h"))
     if source is None:
         raise Conflict("the preview no longer knows this paragraph", sha256=sha256)
+    if "-" in request["h"]:  # of equal paragraphs: nothing says which one this is now
+        raise Conflict("more than one paragraph was like this one", sha256=sha256)
     matcher = SequenceMatcher(None, autojunk=False)
     matcher.set_seq2(source.split())
 
@@ -197,22 +200,21 @@ def _kept_mine(request: dict[str, Any], text: str, sha256: str) -> tuple[Block, 
     alone = Block(0, len(source), "")
     patched, why = (_markdown(request), "") if "markdown" in request else (
         _rewritten(request, text, source, _spans(source, alone, Lines(source)), heading=heading))
-    if not patched:
-        return block, patched, why
     current = text[block.at:block.end]
+    if not patched:  # deleted: not if the file's change would go with it
+        return block, patched if current == source else None, why or "the file changed what you deleted"
     merged = merge(source, current, patched)
     if "markdown" in request:
         return block, merged, ""
     # Two good edits can merge into a bad one: it must read as the two texts merged.
     definitions = _definitions(text)
     try:
-        wanted = merge(_alone(source, definitions, heading)[0], _alone(current, definitions, heading)[0],
-                       _comparable(_squashed(request, "after").replace(BREAK, " ")))
-        got, kinds = _alone(merged.replace(BREAK, " "), definitions, heading)
-        same_kind = kinds == _alone(current, definitions, heading)[1]
+        now, kinds = _alone(current, definitions, heading)
+        wanted = merge(_alone(source, definitions, heading)[0], now, _comparable(_squashed(request, "after").replace(BREAK, " ")))
+        built = [_alone(part, definitions, heading) for part in merged.split(BREAK)]
     except (OSError, subprocess.SubprocessError) as exc:
         return block, None, f"could not check the result: {exc}"
-    if got != wanted or not same_kind:
+    if " ".join(part for part, _ in built) != wanted or any(part_kinds != kinds for _, part_kinds in built):
         return block, None, "your text and the file's cannot be combined here"
     return block, merged, ""
 
@@ -265,11 +267,12 @@ def _whole_lines(text: str, block: Block) -> tuple[int, int]:
 
 def _holds_more(text: str, block: Block) -> bool:
     """Whether a list item goes on after this block: taking it out would take its marker."""
-    prefix = text[text.rfind("\n", 0, block.at) + 1:block.at]
+    prefix = QUOTE_LINE.sub("", text[text.rfind("\n", 0, block.at) + 1:block.at])
     if not ITEM.match(prefix):
         return False
-    following = NEXT_LINE.match(text, block.end)
-    return bool(following) and len(following[1]) > len(prefix) - len(prefix.lstrip())
+    following = next((line for line in text[block.end:].split("\n")[1:] if not blank(line)), "")
+    following = QUOTE_LINE.sub("", following)
+    return len(following) - len(following.lstrip()) > len(prefix) - len(prefix.lstrip())
 
 
 def change_block(request: Any) -> dict[str, Any]:

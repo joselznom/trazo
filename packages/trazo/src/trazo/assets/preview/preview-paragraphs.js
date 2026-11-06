@@ -78,7 +78,6 @@
       for (let next = ed.el.nextSibling; next; next = ed.el.nextSibling) el.parentElement.append(next);
     }
     dropParagraph(ed);
-    numberChips(el);
   }
 
   function breakParagraph() {
@@ -129,6 +128,7 @@
     stopWriting();
     for (const chip of $$("[data-new]", ed.el)) chip.dataset.saved = "";  // the join took them to the Markdown
     takeText(previous, ed, " ");
+    numberChips(previous);
     startWriting(previous);
     previous.focus({ preventScroll: true });
     getSelection().collapse(previous, at + 1);
