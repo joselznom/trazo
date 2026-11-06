@@ -146,6 +146,18 @@ B.	Second lettered item.
    \end{equation}
 2. After the equation.
 
+- The model is:
+  \begin{equation}
+  y
+  + a
+  \end{equation}
+
+- First.
+
+  <?xml
+  + content
+  ?>
+
 Setext title
 ============
 

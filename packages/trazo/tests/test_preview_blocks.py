@@ -82,6 +82,13 @@ class BlockTests(unittest.TestCase):
         text = "1. Item:\n\n   \\begin{equation}\n   y\n   + a\n   \\end{equation}\n\n2. Next.\n"
         self.assertEqual(self.blocks(text), ["Item:", "Next."])
 
+    def test_an_equation_under_a_lead_in_line_stays_whole(self):
+        text = "- The model is:\n  \\begin{equation}\n  y\n  + a\n  \\end{equation}\n"
+        self.assertEqual(self.blocks(text), [text[2:].rstrip()])
+
+    def test_a_processing_instruction_is_raw_content(self):
+        self.assertEqual(self.blocks("- First.\n\n  <?xml\n  + content\n  ?>\n"), ["First."])
+
     def test_a_capital_and_a_period_are_no_list_marker_with_one_space(self):
         text = "- The strain of\n  E. coli was used.\n"
         self.assertEqual(self.blocks(text), ["The strain of\n  E. coli was used."])

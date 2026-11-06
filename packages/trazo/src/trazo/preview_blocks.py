@@ -51,7 +51,7 @@ NOT_TEXT = re.compile(r"\[[ xX]\][ \t]|\(@\w*\)[ \t]|\|[ \t]|\{[^}]*\}[ \t\r]*$|
 RULE = re.compile(r"[ \t]{0,3}(?:(?:-[ \t]*){3,}|(?:\*[ \t]*){3,}|(?:_[ \t]*){3,})\r?")
 SETEXT = re.compile(r"[ \t]*(?:=+|-+)[ \t\r]*")
 COMMENT_LINE = re.compile(r"[ \t]*<!--.*-->[ \t\r]*")
-RAW_OPENING = re.compile(r"[ \t]*(?:<[A-Za-z!/]|\\begin\{)")
+RAW_OPENING = re.compile(r"[ \t]*(?:<[A-Za-z!/?]|\\begin\{)")
 # Groups: the marker, the text, closing marks, the attributes. Other braces at the
 # end of a heading are text, or belong to the span before them.
 ATTRIBUTE = r"""(?:[#.][\w:.\-]+|-|[\w:.\-]+=(?:"[^"]*"|'[^']*'|[^\s}]*))"""
@@ -118,6 +118,7 @@ def blocks_of(text: str, lines: edit_diff.Lines | None = None) -> list[Block]:
                and not edit_diff.FENCED_DIV.match(lines.lines[last + 1])
                and not (items and _starts_item(lines.lines[last + 1]))):
             last += 1
+            items = items and "\\begin{" not in lines.lines[last]  # in an environment, a `+ a` is no item
         if prose and not (last > i and SETEXT.fullmatch(lines.lines[i + 1])):
             found.append((at, lines.starts[last] + len(lines.lines[last].rstrip("\r"))))
         i = last + 1
