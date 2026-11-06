@@ -110,7 +110,6 @@
     second.gap = gap;
     sendBlock(first, () => ({ before: first.before, after: left + BREAK + right, ...mentions }), {
       group: [first, second],
-      when: () => first.el.isConnected,  // a break it came from was refused
       refused: (...failure) => {  // the text goes back in one paragraph, where the failure shows
         for (let part = second; part; part = part.brokenInto) {
           if (writing === part) stopWriting();

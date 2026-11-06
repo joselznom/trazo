@@ -125,7 +125,12 @@
     showSaveState("Saving…");
     saveQueue = saveQueue.then(async () => {
       // A paragraph a refused break folded back has nothing left to save.
-      if (!ed.el.isConnected || !block.el.isConnected || (when && !when())) { saves--; return; }
+      if (!ed.el.isConnected || (when && !when())) { saves--; return; }
+      if (!block.el.isConnected) {  // a new paragraph after one that was folded back: its text stays, flagged
+        saves--;
+        refused(ed, 0, { error: "the paragraph before it was not saved" });
+        return;
+      }
       const { file, h: key } = block.mark.dataset;
       const sent = typeof body === "function" ? body() : body;
       let result;

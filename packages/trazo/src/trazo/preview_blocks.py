@@ -81,6 +81,11 @@ def blank(line: str) -> bool:
     return not line.strip() or bool(QUOTE.fullmatch(line.rstrip()))
 
 
+def _indented(line: str) -> bool:
+    quote = QUOTE.match(line)
+    return (line[quote.end():] if quote else line)[:1] in (" ", "\t")
+
+
 def _starts_item(line: str) -> bool:
     quote = QUOTE.match(line)
     return bool(ITEM.match(line[quote.end():] if quote else line))
@@ -95,15 +100,17 @@ def blocks_of(text: str, lines: edit_diff.Lines | None = None) -> list[Block]:
         if blank(lines.lines[i]):
             i += 1
             continue
-        last, item = i, _starts_item(lines.lines[i])
-        # A list item ends at the next one. In a paragraph, such a line goes on with the text.
-        while (last + 1 < count and not blank(lines.lines[last + 1]) and not FENCE.match(lines.lines[last + 1])
-               and not (item and _starts_item(lines.lines[last + 1]))):
-            last += 1
         at = lines.block_mark_at(lines.starts[i])
-        if (at is not None and lines.line_of(at) == i and not lines.hidden[at]
-                and not NOT_TEXT.match(text, at) and not ITEM.match(text, at) and not RULE.fullmatch(lines.lines[i])
-                and not (last > i and SETEXT.fullmatch(lines.lines[i + 1]))):
+        prose = (at is not None and lines.line_of(at) == i and not lines.hidden[at] and not NOT_TEXT.match(text, at)
+                 and not ITEM.match(text, at) and not RULE.fullmatch(lines.lines[i]))
+        # In a paragraph of its own, a line like a list item goes on with the text.
+        # In a list, or after a line that is not text, it starts an item.
+        in_list = not prose or _starts_item(lines.lines[i]) or _indented(lines.lines[i])
+        last = i
+        while (last + 1 < count and not blank(lines.lines[last + 1]) and not FENCE.match(lines.lines[last + 1])
+               and not (in_list and _starts_item(lines.lines[last + 1]))):
+            last += 1
+        if prose and not (last > i and SETEXT.fullmatch(lines.lines[i + 1])):
             found.append((at, lines.starts[last] + len(lines.lines[last].rstrip("\r"))))
         i = last + 1
     return _keyed(text, found)

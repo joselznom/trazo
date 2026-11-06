@@ -65,6 +65,14 @@ class BlockTests(unittest.TestCase):
         self.assertEqual(self.blocks(text), [text.strip()])
         self.assertEqual(self.blocks("- One.\n- Two.\n"), ["One.", "Two."])
 
+    def test_a_list_after_a_line_that_is_not_text_is_a_list(self):
+        for first in ("# Head", "<!-- A comment -->"):
+            self.assertEqual(self.blocks(f"{first}\n- One.\n- Two.\n"), ["One.", "Two."])
+
+    def test_an_items_second_paragraph_ends_at_the_next_item(self):
+        text = "- First item.\n\n  Continuation words.\n- Second item.\n"
+        self.assertEqual(self.blocks(text), ["First item.", "Continuation words.", "Second item."])
+
     def test_a_block_ends_at_a_fence_and_at_a_line_of_quote_marks(self):
         self.assertEqual(self.blocks("Text.\n```\ncode\n```\n"), ["Text."])
         self.assertEqual(self.blocks("> One.\n>\n> Two.\n"), ["One.", "Two."])
