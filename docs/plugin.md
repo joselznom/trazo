@@ -113,3 +113,9 @@ by hand. Agents run the scenarios, not the manual app checks.
   after renaming it back a new chat has all the tools without a reconnect.
   `n2-no-venv-standin` and `n2-codex-tools-by-state` (Codex) start from an
   empty data folder instead of renaming the venv.
+
+- In each app's browser (the Claude Browser pane and the ChatGPT browser),
+  write on the preview's text: click a paragraph and type, Enter, Backspace
+  at its start, ⌘B, `@`, the right-click menu and a paste from Word. If a
+  browser fails, turn writing off there before a release. By hand.
+

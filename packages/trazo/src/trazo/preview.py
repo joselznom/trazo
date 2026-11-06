@@ -76,6 +76,8 @@ editor, /diagrams#<name>, with a return link; the Figures & Tables view has an
 added by the viewer only, never in the Word output, and the list of
 diagrams is refreshed at each rebuild. The editor's endpoints (/__diagrams/...)
 are documented in trazo.diagram_editor.
+A click in the text writes there, and leaving it saves to the Markdown
+(trazo.preview_blocks, preview_block_save, preview_block_format).
 Paragraph markers: click opens the source there, Alt-click copies the ¶ label;
 lists have a small pencil marker. Figures and tables have Edit caption;
 spec tables also have Edit table. The full

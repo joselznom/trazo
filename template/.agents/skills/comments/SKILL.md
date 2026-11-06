@@ -24,8 +24,8 @@ scripts/trazo review resolve SCOPE:ID "reply"
 - Delete resolved comments only when the user asks:
   `scripts/trazo review delete SCOPE:ID...`, or `--resolved` for all of
   them. A deletion is for good, and it refuses open and to-check comments.
-- The author may edit the same files in the page's Source tab, a caption
-  editor or the table editor; re-read a file before editing it.
+- The author may edit the same files on the page's text, in its Source
+  tab, a caption editor or the table editor; re-read a file before editing it.
 - The author sees your edits marked in the page and accepts or rejects
   them. Edit the paragraph a comment is about (or add paragraphs right
   after it): the comment's Resolve and Reject take the edits there. A
