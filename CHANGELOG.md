@@ -22,11 +22,12 @@ Internal changes (tests, CI, refactoring) stay out.
 
 - Write directly on the preview's text, with no Markdown in sight. Click a
   paragraph, a list item or a heading and type: leaving it saves your words
-  to the Markdown, Esc puts it back and "Saved" appears by the build status.
-  Citations, numbers from your data, formulas, code and images stay locked.
-  Enter breaks a paragraph or opens a new one, Backspace at its start joins
-  the one before, and a paste makes paragraphs. ⌘B and ⌘I, or B and I in the
-  selection bar, toggle bold and italic. `@` opens a list of your references,
+  to the Markdown, Esc discards what you typed since the last save and
+  "Saved" appears by the build status. Citations, numbers from your data,
+  formulas, code and images stay locked. Enter breaks a paragraph or opens a
+  new one, Backspace at its start joins the one before, and blank lines in a
+  paste make paragraphs. Select text and press ⌘B or ⌘I, or B or I in the
+  selection bar, to toggle bold and italic. `@` opens a list of your references,
   figures, tables and values. If trazo cannot place a change exactly in the
   Markdown, it saves nothing, keeps your text and asks what to do (#20,
   #21, #22, #23, #24, #25).
