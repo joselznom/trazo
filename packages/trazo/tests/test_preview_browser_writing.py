@@ -97,7 +97,15 @@ class WritingTests(WritingCase):
         self.type("my ")
         other = self.chrome.call("Target.createTarget", {"url": "about:blank", "browserContextId": self.context})["targetId"]
         self.chrome.call("Target.activateTarget", {"targetId": other})
-        self.wait_for("!document.hasFocus()")
+        lost = self.evaluate("""new Promise(done => {
+          const end = Date.now() + 3000;
+          (function check() {
+            if (!document.hasFocus() || Date.now() > end) done(!document.hasFocus());
+            else setTimeout(check, 25);
+          })();
+        })""")
+        if not lost:
+            self.skipTest("Chrome keeps the page focused on this machine")  # as it does on GitHub's Intel Macs
         self.assertTrue(self.evaluate("document.activeElement.classList.contains('pv-writing')"))
         self.assertEqual(self.source(), "Plain words here today.\n")
 
