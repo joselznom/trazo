@@ -131,6 +131,21 @@ Three aims follow in this study:
 
 2. Another item.
 
+A closing line.
+
+II. A roman item.
+
+III. Another one.
+
+A.	First lettered item.
+B.	Second lettered item.
+
+1. \begin{equation}
+   y
+   + a
+   \end{equation}
+2. After the equation.
+
 Setext title
 ============
 

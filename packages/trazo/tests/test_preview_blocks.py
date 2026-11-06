@@ -87,6 +87,14 @@ class BlockTests(unittest.TestCase):
         self.assertEqual(self.blocks(text), ["The strain of\n  E. coli was used."])
         self.assertEqual(self.blocks("E. coli grew.\n"), ["E. coli grew."])
 
+    def test_a_roman_numeral_or_a_tab_makes_a_marker(self):
+        for text in ("II. Second point.\n", "A.\tFirst.\n"):
+            self.assertEqual(self.blocks(text), [])
+
+    def test_less_than_starts_no_raw_content(self):
+        text = "- One\n\n  <5% of samples were lost.\n- Two item.\n"
+        self.assertEqual(self.blocks(text), ["One", "Two item."])
+
     def test_a_block_ends_at_a_fenced_div(self):
         self.assertEqual(self.blocks("::: note\n- One word.\n- Two word.\n:::\n"), ["One word.", "Two word."])
 
