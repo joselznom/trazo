@@ -76,6 +76,9 @@ if one fails. Pushing a `vX.Y.Z` tag also needs n1 and n2 to pass for what
 changed since the previous release, skips included. `git push --no-verify`
 skips it.
 
+To see what failed in each attempt of a CI run, including a test that passed
+on a re-run: `python3 scripts/ci-failures.py <run id or URL>`.
+
 ## Try a change in a real paper
 
 To try unreleased changes inside a real project, point its launcher at
