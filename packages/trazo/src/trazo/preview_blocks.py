@@ -89,6 +89,15 @@ def _indented(line: str) -> bool:
     return (line[quote.end():] if quote else line)[:1] in (" ", "\t")
 
 
+def _in_environment(lines: edit_diff.Lines, i: int, inside: bool) -> bool:
+    """Whether line i leaves a TeX environment open, where `+ a` is no list item."""
+    line = lines.lines[i]
+    opening = line.find("\\begin{")
+    if opening >= 0 and not lines.hidden[lines.starts[i] + opening]:
+        inside = True
+    return inside and "\\end{" not in line
+
+
 def _starts_item(line: str) -> bool:
     quote = QUOTE.match(line)
     return bool(ITEM.match(line[quote.end():] if quote else line))
@@ -113,12 +122,12 @@ def blocks_of(text: str, lines: edit_diff.Lines | None = None) -> list[Block]:
         listed = _starts_item(lines.lines[i]) or (listed and _indented(lines.lines[i]))
         # In a list a line like an item starts one. In a paragraph it goes on with the text.
         raw = RAW_OPENING.match(lines.lines[i]) or (at is not None and RAW_OPENING.match(text, at))
-        last, items = i, listed and not raw
+        last, items, environment = i, listed and not raw, False
         while (last + 1 < count and not blank(lines.lines[last + 1]) and not FENCE.match(lines.lines[last + 1])
                and not edit_diff.FENCED_DIV.match(lines.lines[last + 1])
-               and not (items and _starts_item(lines.lines[last + 1]))):
+               and not (items and not environment and _starts_item(lines.lines[last + 1]))):
             last += 1
-            items = items and "\\begin{" not in lines.lines[last]  # in an environment, a `+ a` is no item
+            environment = _in_environment(lines, last, environment)
         if prose and not (last > i and SETEXT.fullmatch(lines.lines[i + 1])):
             found.append((at, lines.starts[last] + len(lines.lines[last].rstrip("\r"))))
         i = last + 1

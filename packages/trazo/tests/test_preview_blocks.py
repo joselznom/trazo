@@ -86,6 +86,12 @@ class BlockTests(unittest.TestCase):
         text = "- The model is:\n  \\begin{equation}\n  y\n  + a\n  \\end{equation}\n"
         self.assertEqual(self.blocks(text), [text[2:].rstrip()])
 
+    def test_an_item_after_an_equation_or_a_code_span_is_an_item(self):
+        text = "- The model is:\n  \\begin{equation}\n  y\n  \\end{equation}\n- Next item.\n"
+        self.assertEqual(self.blocks(text)[-1], "Next item.")
+        text = "- First item\n  mentions `\\begin{equation}`.\n- Second item.\n"
+        self.assertEqual(self.blocks(text), ["First item\n  mentions `\\begin{equation}`.", "Second item."])
+
     def test_a_processing_instruction_is_raw_content(self):
         self.assertEqual(self.blocks("- First.\n\n  <?xml\n  + content\n  ?>\n"), ["First."])
 
