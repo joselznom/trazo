@@ -65,9 +65,21 @@ class BlockTests(unittest.TestCase):
         self.assertEqual(self.blocks(text), [text.strip()])
         self.assertEqual(self.blocks("- One.\n- Two.\n"), ["One.", "Two."])
 
-    def test_a_list_after_a_line_that_is_not_text_is_a_list(self):
+    def test_a_list_after_a_heading_or_a_comment_is_a_list(self):
         for first in ("# Head", "<!-- A comment -->"):
             self.assertEqual(self.blocks(f"{first}\n- One.\n- Two.\n"), ["One.", "Two."])
+        self.assertEqual(self.blocks("# Head\nThe aims are:\n- to measure\n"), ["The aims are:\n- to measure"])
+
+    def test_lines_like_list_items_in_raw_content_are_not_blocks(self):
+        for text in ("\\begin{equation}\ny\n+ a\n+ b\n\\end{equation}\n", "<pre>\n- x\n+ y\n</pre>\n"):
+            self.assertEqual(self.blocks(text), [], text)
+
+    def test_an_indented_paragraph_outside_a_list_keeps_its_lines(self):
+        text = "  Three aims follow:\n(1) to measure and\n(2) to compare.\n"
+        self.assertEqual(self.blocks(text), [text.strip()])
+
+    def test_a_block_ends_at_a_fenced_div(self):
+        self.assertEqual(self.blocks("::: note\n- One word.\n- Two word.\n:::\n"), ["One word.", "Two word."])
 
     def test_an_items_second_paragraph_ends_at_the_next_item(self):
         text = "- First item.\n\n  Continuation words.\n- Second item.\n"

@@ -49,6 +49,7 @@ ITEM = re.compile(r"[ \t]*(?:[-*+]|\(?\d+[.)]|\(?#[.)]|\(@\w*\)|\(?[A-Za-z][.)]|
 NOT_TEXT = re.compile(r"\[[ xX]\][ \t]|\(@\w*\)[ \t]|\|[ \t]|\{[^}]*\}[ \t\r]*$|~[ \t]|<|\\begin\{")
 RULE = re.compile(r"[ \t]{0,3}(?:(?:-[ \t]*){3,}|(?:\*[ \t]*){3,}|(?:_[ \t]*){3,})\r?")
 SETEXT = re.compile(r"[ \t]*(?:=+|-+)[ \t\r]*")
+COMMENT_LINE = re.compile(r"[ \t]*<!--.*-->[ \t\r]*")
 # Groups: the marker, the text, closing marks, the attributes. Other braces at the
 # end of a heading are text, or belong to the span before them.
 ATTRIBUTE = r"""(?:[#.][\w:.\-]+|-|[\w:.\-]+=(?:"[^"]*"|'[^']*'|[^\s}]*))"""
@@ -96,19 +97,23 @@ def blocks_of(text: str, lines: edit_diff.Lines | None = None) -> list[Block]:
     lines = lines or edit_diff.Lines(text)
     found: list[tuple[int, int]] = []
     i, count = 0, len(lines.lines)
+    listed = False  # in a list: an item, or a paragraph of the item before it
     while i < count:
-        if blank(lines.lines[i]):
+        # A heading, a comment line or a div's fence ends with itself: the next line starts afresh.
+        if (blank(lines.lines[i]) or edit_diff.HEADING.match(lines.lines[i]) or COMMENT_LINE.fullmatch(lines.lines[i])
+                or edit_diff.FENCED_DIV.match(lines.lines[i])):
+            listed = listed and blank(lines.lines[i])
             i += 1
             continue
         at = lines.block_mark_at(lines.starts[i])
         prose = (at is not None and lines.line_of(at) == i and not lines.hidden[at] and not NOT_TEXT.match(text, at)
                  and not ITEM.match(text, at) and not RULE.fullmatch(lines.lines[i]))
-        # In a paragraph of its own, a line like a list item goes on with the text.
-        # In a list, or after a line that is not text, it starts an item.
-        in_list = not prose or _starts_item(lines.lines[i]) or _indented(lines.lines[i])
+        listed = _starts_item(lines.lines[i]) or (listed and _indented(lines.lines[i]))
+        # In a list a line like an item starts one. In a paragraph it goes on with the text.
         last = i
         while (last + 1 < count and not blank(lines.lines[last + 1]) and not FENCE.match(lines.lines[last + 1])
-               and not (in_list and _starts_item(lines.lines[last + 1]))):
+               and not edit_diff.FENCED_DIV.match(lines.lines[last + 1])
+               and not (listed and _starts_item(lines.lines[last + 1]))):
             last += 1
         if prose and not (last > i and SETEXT.fullmatch(lines.lines[i + 1])):
             found.append((at, lines.starts[last] + len(lines.lines[last].rstrip("\r"))))

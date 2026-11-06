@@ -111,6 +111,17 @@ Three aims follow in this study:
 >
 > A second quoted paragraph.
 
+\begin{equation}
+\hat{y} = \beta_0
++ \beta_1 x_1
++ \beta_2 x_2
+\end{equation}
+
+<pre>
+- not a list
++ not one either
+</pre>
+
 Setext title
 ============
 
