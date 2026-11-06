@@ -122,6 +122,15 @@ Three aims follow in this study:
 + not one either
 </pre>
 
+1. An item with an equation:
+
+   \begin{equation}
+   \hat{y} = \beta_0
+   + \beta_1 x_1
+   \end{equation}
+
+2. Another item.
+
 Setext title
 ============
 

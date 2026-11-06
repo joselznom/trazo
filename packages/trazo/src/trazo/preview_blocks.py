@@ -42,7 +42,8 @@ PROTECTED = re.compile(r"""
   | \]\([^)]*\) | \]\[[^\]]*\] | \{[^{}]*\} | <[^>\n]+> | \\[A-Za-z]+(?:\{[^{}]*\})*
 """, re.X | re.S)
 QUOTE = re.compile(r"[ \t]{0,3}(?:>[ \t]?)+")
-ITEM = re.compile(r"[ \t]*(?:[-*+]|\(?\d+[.)]|\(?#[.)]|\(@\w*\)|\(?[A-Za-z][.)]|\(?[ivxlcdmIVXLCDM]+[.)])[ \t]+")
+# A capital and a period are a marker only with two spaces after them: `E. coli` is prose.
+ITEM = re.compile(r"[ \t]*(?![A-Z]+\.[ \t]\S)(?:[-*+]|\(?\d+[.)]|\(?#[.)]|\(@\w*\)|\(?[A-Za-z][.)]|\(?[ivxlcdmIVXLCDM]+[.)])[ \t]+")
 # Where a block's text would start, text that only reads as it does at the start
 # of a block: task boxes, example lists, line blocks, a lone attribute,
 # definitions, raw HTML and raw TeX environments.
@@ -50,6 +51,7 @@ NOT_TEXT = re.compile(r"\[[ xX]\][ \t]|\(@\w*\)[ \t]|\|[ \t]|\{[^}]*\}[ \t\r]*$|
 RULE = re.compile(r"[ \t]{0,3}(?:(?:-[ \t]*){3,}|(?:\*[ \t]*){3,}|(?:_[ \t]*){3,})\r?")
 SETEXT = re.compile(r"[ \t]*(?:=+|-+)[ \t\r]*")
 COMMENT_LINE = re.compile(r"[ \t]*<!--.*-->[ \t\r]*")
+RAW_OPENING = re.compile(r"[ \t]*(?:<|\\begin\{)")
 # Groups: the marker, the text, closing marks, the attributes. Other braces at the
 # end of a heading are text, or belong to the span before them.
 ATTRIBUTE = r"""(?:[#.][\w:.\-]+|-|[\w:.\-]+=(?:"[^"]*"|'[^']*'|[^\s}]*))"""
@@ -110,10 +112,10 @@ def blocks_of(text: str, lines: edit_diff.Lines | None = None) -> list[Block]:
                  and not ITEM.match(text, at) and not RULE.fullmatch(lines.lines[i]))
         listed = _starts_item(lines.lines[i]) or (listed and _indented(lines.lines[i]))
         # In a list a line like an item starts one. In a paragraph it goes on with the text.
-        last = i
+        last, items = i, listed and not RAW_OPENING.match(lines.lines[i])
         while (last + 1 < count and not blank(lines.lines[last + 1]) and not FENCE.match(lines.lines[last + 1])
                and not edit_diff.FENCED_DIV.match(lines.lines[last + 1])
-               and not (listed and _starts_item(lines.lines[last + 1]))):
+               and not (items and _starts_item(lines.lines[last + 1]))):
             last += 1
         if prose and not (last > i and SETEXT.fullmatch(lines.lines[i + 1])):
             found.append((at, lines.starts[last] + len(lines.lines[last].rstrip("\r"))))

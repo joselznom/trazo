@@ -78,6 +78,15 @@ class BlockTests(unittest.TestCase):
         text = "  Three aims follow:\n(1) to measure and\n(2) to compare.\n"
         self.assertEqual(self.blocks(text), [text.strip()])
 
+    def test_raw_content_in_a_list_item_stays_whole(self):
+        text = "1. Item:\n\n   \\begin{equation}\n   y\n   + a\n   \\end{equation}\n\n2. Next.\n"
+        self.assertEqual(self.blocks(text), ["Item:", "Next."])
+
+    def test_a_capital_and_a_period_are_no_list_marker_with_one_space(self):
+        text = "- The strain of\n  E. coli was used.\n"
+        self.assertEqual(self.blocks(text), ["The strain of\n  E. coli was used."])
+        self.assertEqual(self.blocks("E. coli grew.\n"), ["E. coli grew."])
+
     def test_a_block_ends_at_a_fenced_div(self):
         self.assertEqual(self.blocks("::: note\n- One word.\n- Two word.\n:::\n"), ["One word.", "Two word."])
 

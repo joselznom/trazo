@@ -195,6 +195,7 @@ class MarksTests(unittest.TestCase):
         lines = edit_diff.Lines("a \\> b\n")
         self.assertFalse(lines.inline(3, 4))
         self.assertTrue(lines.inline(2, 4))
+        self.assertFalse(lines.inline(0, 3))  # it would end on the backslash
 
     def test_a_new_file_marks_its_paragraphs_as_new(self):
         found, text = self.marked("", "# Methods\n\nWe did it.\n\nTwice.\n")
