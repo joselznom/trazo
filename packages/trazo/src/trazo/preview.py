@@ -58,6 +58,7 @@ spec change then reruns it before the rebuild, since it may read the specs.
 Endpoints: GET/POST /__source, /__table-caption, /__figure-text and /__edits,
 POST /__block (an edit of a paragraph's text, see trazo.preview_block_save),
 POST /__block-format (bold and italic, see trazo.preview_block_format),
+GET /__references (the @ menu, see trazo.preview_mentions),
 GET /__values, GET /__submission (the Submission view's report,
 reused until what it reads changes; ?fields=0 leaves out the form fields,
 ?fresh=S makes it again if its check started over S seconds ago), POST /__locate,
@@ -149,6 +150,7 @@ from .preview_full_build import (  # noqa: F401
     docx_status,
     start_docx_build,
 )
+from .preview_mentions import references
 from .preview_render import (  # noqa: F401
     diagram_links,
     doc_files,
@@ -204,7 +206,7 @@ VIEWER_SCRIPTS = (
     "preview-source.js", "preview-diff.js", "preview-edits.js", "preview-build.js", "preview-new-comments.js",
     "preview-captions.js", "preview-caption-editors.js", "preview-export.js", "preview-export-picker.js",
     "preview-figures.js", "preview-lightbox.js", "preview-submission.js", "preview-writing.js", "preview-paragraphs.js",
-    "preview-format.js", "preview.js",
+    "preview-format.js", "preview-mentions.js", "preview.js",
 )
 WATCHED = tuple(PROJECT.config["preview"]["watch"])
 PANDOC_FLAGS = [
@@ -335,7 +337,7 @@ def get_route(path, query):
     routes = {
         "/__status": status, "/__comments": lambda: comments_payload(first("doc")),
         "/__edits": lambda: edits_payload(first("doc")), "/__values": values_info,
-        "/__source": lambda: get_source(first("file")),
+        "/__source": lambda: get_source(first("file")), "/__references": references,
         "/__figure-text": lambda: get_figure_text(first("doc"), first("id")),
         "/__table-caption": lambda: get_table_caption(first("doc"), first("id")),
         "/__export": lambda: export_request(query),
