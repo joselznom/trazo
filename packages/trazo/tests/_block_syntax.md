@@ -158,6 +158,19 @@ B.	Second lettered item.
   + content
   ?>
 
+- > <pre>
+  > - raw one
+  > + raw two</pre>
+
+- An item.
+
+  \begin{equation}
+  y
+  \end{equation}
+
+  More of the item.
+- The next item.
+
 Setext title
 ============
 

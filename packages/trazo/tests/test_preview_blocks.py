@@ -87,9 +87,15 @@ class BlockTests(unittest.TestCase):
                      "- Use the\n  \\begin{equation} command.\n- Second item.\n",
                      "- The model is \\begin{equation}\n  y\n  + a\n  \\end{equation}\n",
                      "\\begin{equation}\n\\begin{aligned}\nx\n\\end{aligned}\n+ z\n\\end{equation}\n",
-                     "- A <pre>\n  <pre>\n  - x\n  </pre>\n"):
+                     "- A <pre>\n  <pre>\n  - x\n  </pre>\n",
+                     "- > <pre>\n  > - raw one\n  > + raw two</pre>\n",
+                     "- Use `\\begin{a}` then \\begin{equation}\n  y\n  + a\n  \\end{equation}\n"):
             self.assertEqual(self.blocks(text), [], text)
         self.assertEqual(self.blocks("\\begin{equation}\ny\n\\end{equation}\n\nNext item.\n"), ["Next item."])
+
+    def test_a_list_goes_on_after_raw_content(self):
+        text = "- First item.\n\n  \\begin{equation}\n  y\n  \\end{equation}\n\n  Words here.\n- Second item.\n"
+        self.assertEqual(self.blocks(text), ["First item.", "Words here.", "Second item."])
 
     def test_a_code_span_opens_no_raw_content(self):
         text = "- First item\n  mentions `\\begin{equation}`.\n- Second item.\n"
