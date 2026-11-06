@@ -270,6 +270,10 @@ class Lines:
         segment = self.text[c0:c1]
         if BLANK_LINE.search(segment) or not _balanced(segment) or segment.endswith("\n"):
             return False
+        # After a backslash, the span's own bracket would be the character it escapes.
+        before = self.text[max(0, c0 - 8):c0]
+        if (len(before) - len(before.rstrip("\\"))) % 2:
+            return False
         # A span's edge in a run of markers would leave half of the run outside it.
         if any(0 < edge < len(self.text) and self.text[edge - 1] == self.text[edge] and self.text[edge] in PAIRED + "_"
                for edge in (c0, c1)):

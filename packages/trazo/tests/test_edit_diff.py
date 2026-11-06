@@ -191,6 +191,11 @@ class MarksTests(unittest.TestCase):
         self.assertTrue(lines.inline(2, 9))
         self.assertFalse(lines.inline(2, 7))  # 4 markers in all, but the closing run is cut
 
+    def test_an_edit_after_a_backslash_keeps_the_escape_and_its_mark(self):
+        lines = edit_diff.Lines("a \\> b\n")
+        self.assertFalse(lines.inline(3, 4))
+        self.assertTrue(lines.inline(2, 4))
+
     def test_a_new_file_marks_its_paragraphs_as_new(self):
         found, text = self.marked("", "# Methods\n\nWe did it.\n\nTwice.\n")
         self.assertEqual(len(found), 1)
