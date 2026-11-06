@@ -133,7 +133,7 @@ a.pv-tbl-edit { display: inline-block; text-decoration: none; }
 
 /* Writing on the page (preview-writing.js). */
 .pv-can-write { cursor: text; }
-.pv-writing { outline: none; }
+.pv-writing { min-height: 1.5em; outline: none; }
 .pv-writing .pv-edit-del { display: none; }
 .pv-writing .pv-atom { border-radius: 2px; background: var(--pv-hover); cursor: default; }
 .pv-write-failed { box-shadow: -3px 0 0 var(--pv-err); }

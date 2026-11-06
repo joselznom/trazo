@@ -215,6 +215,70 @@ class SaveTests(unittest.TestCase):
         with self.assertRaises(preview.Conflict):
             preview.post_route("/__block", lambda: {"file": CHAPTER, "h": "unknown", "before": "a", "after": "b", "keep": True})()
 
+    def split(self, text, rendered_cut, expected):
+        key, rendered = self.block(text, "split")
+        at = rendered.index(rendered_cut)
+        answer = self.save(key, rendered, rendered[:at].rstrip() + roundtrip.BREAK + rendered[at:])
+        self.assertTrue(answer.get("saved"), answer)
+        self.assertEqual(self.chapter.read_bytes().decode("utf-8"), expected)
+        return answer
+
+    def test_a_paragraph_breaks_into_two(self):
+        answer = self.split("One to split. Two *with* [@smith2020].\n", "Two",
+                            "One to split.\n\nTwo *with* [@smith2020].\n")
+        self.assertEqual(len(answer["parts"]), 2)
+
+    def test_a_list_item_breaks_into_two_items(self):
+        self.split("- One to split. Two.\n- Three.\n", "Two", "- One to split.\n- Two.\n- Three.\n")
+        self.split("1. One to split. Two.\n", "Two", "1. One to split.\n2. Two.\n")
+
+    def test_a_quoted_paragraph_breaks_inside_the_quote(self):
+        self.split("> One to split. Two.\n", "Two", "> One to split.\n>\n> Two.\n")
+
+    def test_a_break_keeps_a_windows_files_line_endings(self):
+        self.split("One to split. Two.\r\n\r\nNext.\r\n", "Two", "One to split.\r\n\r\nTwo.\r\n\r\nNext.\r\n")
+
+    def test_text_after_a_break_cannot_start_a_list(self):
+        self.split("One to split - two.\n", "- two", "One to split\n\n\\- two.\n")
+
+    def test_a_break_inside_a_bold_is_refused(self):
+        text = "One **to split** here.\n"
+        key, rendered = self.block(text, "split")
+        answer = self.save(key, rendered, "One to" + roundtrip.BREAK + "split here.")
+        self.assertIn("refused", answer)
+        self.assertEqual(self.chapter.read_text(encoding="utf-8"), text)
+
+    def test_an_empty_paragraph_leaves_the_file(self):
+        for text, expected in (("One.\n\nGone.\n\nThree.\n", "One.\n\nThree.\n"), ("- One.\n- Gone.\n- Three.\n", "- One.\n- Three.\n"),
+                               ("One.\n\nGone.\n", "One.\n\n")):
+            key, rendered = self.block(text, "Gone")
+            answer = self.save(key, rendered, "")
+            self.assertEqual(answer["parts"], [])
+            self.assertEqual(self.chapter.read_text(encoding="utf-8"), expected)
+
+    def join(self, text, words, **extra):
+        blocks = {roundtrip.squash(roundtrip.flat(node)): key for (file, key), node in roundtrip.page_blocks(self.page(text)).items()
+                  if file == CHAPTER}
+        left, right = words
+        return preview.post_route("/__block", lambda: {"file": CHAPTER, "h": blocks[right], "before": right, "after": right,
+                                                       "previous": left, "into": blocks[left], **extra})()
+
+    def test_a_paragraph_joins_the_one_before_it(self):
+        answer = self.join("One *word*.\n\nTwo words.\n\nThree.\n", ("One word.", "Two words."))
+        self.assertTrue(answer["saved"])
+        self.assertEqual(self.chapter.read_text(encoding="utf-8"), "One *word*. Two words.\n\nThree.\n")
+        self.assertEqual(len(answer["parts"]), 1)
+
+    def test_a_list_item_joins_the_one_before_it(self):
+        self.join("- One.\n- Two.\n", ("One.", "Two."))
+        self.assertEqual(self.chapter.read_text(encoding="utf-8"), "- One. Two.\n")
+
+    def test_paragraphs_with_something_between_them_do_not_join(self):
+        text = "One.\n\n![Figure](a.png)\n\nTwo.\n"
+        answer = self.join(text, ("One.", "Two."))
+        self.assertIn("refused", answer)
+        self.assertEqual(self.chapter.read_text(encoding="utf-8"), text)
+
     def test_a_paragraph_the_page_shows_differently_is_refused_with_its_markdown(self):
         text = "A sentence here.\n"
         key, _ = self.block(text, "sentence")
