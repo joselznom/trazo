@@ -295,8 +295,8 @@
     else if (at) selection.collapse(at.node, at.offset);
   }, true);
   page.addEventListener("focusout", (e) => {
-    // Another window taking the focus is not leaving the paragraph.
-    if (writing && !writing.joining && e.target === writing.el && document.hasFocus()
+    // Another window taking the focus leaves the paragraph the active element, and that is not leaving it.
+    if (writing && !writing.joining && e.target === writing.el && document.activeElement !== e.target
         && !(e.relatedTarget && writing.el.contains(e.relatedTarget))) saveBlock(stopWriting());
   });
   page.addEventListener("input", () => { if (writing) fab.hidden = true; });
