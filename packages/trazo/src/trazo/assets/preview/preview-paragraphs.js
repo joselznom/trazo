@@ -72,6 +72,11 @@
   // Moves a paragraph's text to the end of `el`, and the paragraph goes.
   function takeText(el, ed, ...before) {
     el.append(...before, ...[...ed.el.childNodes].filter((node) => !(node.nodeType === 1 && node.matches(".pv-src, .pv-para, .pv-src-mark"))));
+    // The item's other paragraphs go with its text, or the item would stay behind.
+    const item = itemOf(ed.el);
+    if (item && item !== ed.el && item !== el.parentElement) {
+      for (let next = ed.el.nextSibling; next; next = ed.el.nextSibling) el.parentElement.append(next);
+    }
     dropParagraph(ed);
     numberChips(el);
   }
@@ -86,7 +91,8 @@
     const el = newParagraph(ed, above ? "" : restOf(ed, true).extractContents(), above);
     // The space at the break goes, as it does in the saved text.
     const start = textNodes(el)[0], end = textNodes(ed.el).pop();
-    const gap = (start && /^\s/.test(start.data)) || (end && /\s$/.test(end.data)) ? " " : "";
+    const spaceAfter = start && /^\s/.test(start.data) ? " " : "";
+    const gap = spaceAfter || (end && /\s$/.test(end.data) ? " " : "");
     if (start) start.data = start.data.trimStart();
     if (end) end.data = end.data.trimEnd();
     const left = textOf(ed.el), right = textOf(el);
@@ -99,7 +105,7 @@
       saveBlock(first);
       second.draftOf = first;
       second.above = above;
-      return gap;
+      return spaceAfter;
     }
     sendBlock(first, { before: first.before, after: left + BREAK + right }, {
       group: [first, second],
@@ -109,7 +115,7 @@
         showFailure(...failure);
       },
     });
-    return gap;
+    return spaceAfter;
   }
 
   function joinTo(ed, previous, payload) {

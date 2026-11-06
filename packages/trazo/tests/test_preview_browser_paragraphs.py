@@ -135,6 +135,39 @@ class ParagraphTests(WritingCase):
         self.assertEqual(self.source(), "- First words.\n\n- Second.\n")
         self.assertEqual(self.evaluate("document.querySelectorAll('.pv-page li').length"), 2)
 
+    def test_an_items_other_paragraphs_go_with_a_break_and_come_back_with_a_join(self):
+        text = "- First words.\n\n  Continuation.\n\n- Second.\n"
+        self.build(text)
+        self.write_in("First")
+        self.caret_after("First")
+        self.key("Enter", 13)
+        self.saved("- First\n- words.\n\n  Continuation.\n\n- Second.\n")
+        self.evaluate("getSelection().collapse(document.querySelector('.pv-writing .pv-src').nextSibling, 0)")
+        self.key("Backspace", 8)
+        self.wait_for("!saves && document.querySelector('.pv-writing')?.textContent.includes('First words.')")
+        self.assertEqual(self.source(), text)
+        self.assertEqual(self.evaluate("document.querySelectorAll('.pv-page li').length"), 2)
+
+    def test_a_refused_break_leaves_an_items_paragraphs_where_they_were(self):
+        self.build("- One **bold words** here.\n\n  Continuation.\n\n- Second.\n")
+        self.write_in("bold")
+        self.caret_after("bold")
+        self.key("Enter", 13)
+        self.wait_for("document.querySelector('.pv-write-bar')")
+        self.assertEqual(self.evaluate("document.querySelectorAll('.pv-page li').length"), 2)
+
+    def test_a_paste_adds_no_space_the_text_did_not_have(self):
+        self.build("Onehere.\n")
+        self.write_in("Onehere")
+        self.caret_after("One")
+        self.evaluate("""(() => {
+          const data = new DataTransfer();
+          data.setData('text/plain', ' first \\n\\nsecond');
+          document.activeElement.dispatchEvent(new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true }));
+        })()""")
+        self.leave()
+        self.saved("One first\n\nsecondhere.\n")
+
     def test_enter_leaves_an_item_with_a_sublist_alone(self):
         text = "- First words.\n\n  - Nested.\n\n- Second.\n"
         self.build(text)
