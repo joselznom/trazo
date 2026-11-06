@@ -1,21 +1,27 @@
 """The Source tab: reading, saving and undoing a manuscript file, and locating a
 paragraph in its source. Saves and their undo are the author's own changes:
 they are accepted in the edit review as they are made (preview_edit_review).
+Malformed source history is preserved beside the store and reported once; the
+next action can start a new undo history without changing manuscript text.
 
 The preview's paths and state stay in trazo.preview, and this code reads them from
 there when it runs (preview.NAME), so patching them on trazo.preview reaches it.
 """
 
 import hashlib
+import json
 import os
 import time
 from pathlib import Path
+from typing import Any
+from uuid import uuid4
 
 from . import preview_edit_review, preview_locate
 from .expand import Values, load_entries, resolve_include
 from .local_server import Conflict, NotFound
 from .local_server import RequestError as CommentError
-from .review_storage import read_list, review_lock, write_atomic, write_json
+from .portable import replace
+from .review_storage import StoreError, read_list, review_lock, write_atomic, write_json
 
 
 def sha256_of(data):
@@ -57,10 +63,38 @@ def read_source(path):
         raise CommentError(f"{path.name} is not valid UTF-8: {exc}") from exc
 
 
-def source_state(file, path, data, text):
+def read_file_history() -> list[dict[str, Any]]:
+    """Read under review_lock; preserve corrupt bytes before allowing a retry.
+
+    A damaged undo store cannot safely describe an earlier manuscript. The first
+    request reports its preserved copy; later requests record a new history.
+    """
     from . import preview
+    path = preview.FILE_HISTORY_PATH
+    try:
+        entries = read_list(path)
+        for entry in entries:
+            if (not isinstance(entry, dict)
+                    or any(not isinstance(entry.get(key), str) for key in ("file", "before_text", "after_sha"))
+                    or not isinstance(entry.get("time", ""), str)
+                    or not isinstance(entry.get("at", 0), int)):
+                raise StoreError("invalid source history entry")
+        json.dumps(entries, ensure_ascii=False).encode("utf-8")
+    except (StoreError, UnicodeEncodeError) as exc:
+        backup = path.with_name(f"{path.stem}.corrupt-{uuid4().hex}{path.suffix}")
+        try:
+            replace(path, backup)
+        except OSError as error:
+            raise StoreError(f"Source history is corrupt and could not be preserved: {error}. "
+                             f"No manuscript text was changed. Check the filesystem error and retry.") from error
+        raise StoreError(f"Source history is corrupt; preserved unchanged at {backup}. "
+                         f"Retry your action to start new undo history. Previous undo entries are unavailable.") from exc
+    return entries
+
+
+def source_state(file, path, data, text):
     sha = sha256_of(data)
-    entries = [e for e in read_list(preview.FILE_HISTORY_PATH) if e.get("file") == file]
+    entries = [e for e in read_file_history() if e.get("file") == file]
     return {"file": file, "text": text, "sha256": sha,
             "can_undo": bool(entries) and entries[-1].get("after_sha") == sha}
 
@@ -91,7 +125,6 @@ def change_source(request):
     only if the file is still exactly what that save wrote. Undoing a
     rejection of edits (kind "reject") makes those edits pending again.
     """
-    from . import preview
     if not isinstance(request, dict):
         raise CommentError("request body must be a JSON object")
     op = request.get("op", "save")
@@ -101,7 +134,7 @@ def change_source(request):
         path, file = source_path(request.get("file"))
         data, old = read_source(path)
         current = sha256_of(data)
-        entries = read_list(preview.FILE_HISTORY_PATH)
+        entries = read_file_history()
         if op == "undo":
             mine = [i for i, e in enumerate(entries) if e.get("file") == file]
             if not mine:
@@ -143,7 +176,7 @@ def latest_change(doc):
     from .preview_comments import PreviewComments, PreviewHistory
     files = set(preview_edit_review.page_files(doc))
     with review_lock():
-        saves = [e for e in read_list(preview.FILE_HISTORY_PATH) if e.get("file") in files]
+        saves = [e for e in read_file_history() if e.get("file") in files]
         history = PreviewHistory(preview.HISTORY_PATH).load()
         comments = [history[i] for i in PreviewComments().history_of(history, doc)]
     # `at` tells apart two changes of one second; older entries have only `time`.

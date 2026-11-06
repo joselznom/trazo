@@ -35,7 +35,7 @@ from typing import Any, cast
 
 from . import edit_diff, preview_blocks
 from .local_server import RequestError
-from .review_storage import StoreError, read_list, review_lock, write_atomic, write_json
+from .review_storage import StoreError, review_lock, write_atomic, write_json
 
 MAX_ITEMS = 10_000
 
@@ -181,7 +181,7 @@ def change_edits(request: Any) -> dict[str, Any]:
     """Accept or reject edits; those that changed since the page was built
     are left as they are and listed as missed ({file, id})."""
     from . import preview
-    from .preview_sources import read_source, save_file_history, sha256_of, source_path
+    from .preview_sources import read_file_history, read_source, save_file_history, sha256_of, source_path
     op, by_file = _items(request)
     paths = {name: source_path(name) for name in by_file}  # validates every name first
     ensure()
@@ -204,7 +204,7 @@ def change_edits(request: Any) -> dict[str, Any]:
                 store["files"][name] = edit_diff.accept(store["files"].get(name, ""), chosen)
                 continue
             new = edit_diff.reject(text, chosen).encode("utf-8")
-            history = read_list(preview.FILE_HISTORY_PATH) if history is None else history
+            history = read_file_history() if history is None else history
             history.append({"time": time.strftime("%Y-%m-%d %H:%M:%S"), "at": time.time_ns(), "file": name, "kind": "reject",
                             "before_text": text, "before_sha": sha256_of(data), "after_sha": sha256_of(new)})
             write_atomic(path, new)

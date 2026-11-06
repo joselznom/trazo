@@ -68,6 +68,9 @@ Internal changes (tests, CI, refactoring) stay out.
 
 ### Fixed
 
+- A corrupt manuscript undo history is preserved in a separate file and shown as
+  an error. Retrying resumes saving and undoing new changes without repairing
+  the old history by hand.
 - The table editor no longer shows "null" under a table without a note (#15).
 
 ### Removed
