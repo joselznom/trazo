@@ -34,8 +34,9 @@ so it starts with empty sections and no example files.
 ## How you work
 
 1. Write in `manuscript/main/` (one file per section) and
-   `manuscript/supplementary/`. Use any text editor (VS Code, TextEdit in
-   plain-text mode) or the preview's **Source** tab, or ask the agent.
+   `manuscript/supplementary/`. Click the text in the preview and type, use
+   any text editor (VS Code, TextEdit in plain-text mode) or the preview's
+   **Source** tab, or ask the agent.
 2. Read the result in the preview. Select text to leave a comment for the
    agent. What the agent changed since your last review is marked in the
    text: click a mark to accept or reject it, or use **Edits** above the
