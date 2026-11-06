@@ -4,8 +4,6 @@ import unittest
 
 from _preview_writing import WritingCase
 
-from trazo import preview
-
 META = 4  # the modifier bit of Cmd in Input.dispatchKeyEvent
 
 
@@ -36,6 +34,12 @@ class HeadingTests(WritingCase):
         self.key("Enter", 13)
         self.wait_for("document.querySelector('.pv-writing')?.textContent.includes('Text here.')")
         self.saved("# Old title again\n\nText here.\n")
+
+    def test_enter_in_a_heading_passes_over_the_heading_after_it(self):
+        self.build("# Outer title\n\n## Inner title\n\nText here.\n")
+        self.write_at_end_of_heading("Outer title")
+        self.key("Enter", 13)
+        self.wait_for("document.querySelector('.pv-writing')?.textContent.includes('Text here.')")
 
     def test_a_heading_left_empty_is_refused(self):
         text = "# Old title\n\nText here.\n"
@@ -98,7 +102,6 @@ class UndoTests(WritingCase):
         self.leave()
         self.wait_for("document.querySelector('.pv-save-state').textContent === 'Saved' && !saves")
         saved = self.source()
-        preview.FILE_HISTORY_PATH.write_text(preview.FILE_HISTORY_PATH.read_text(encoding="utf-8").replace('"time": "2', '"time": "1'), encoding="utf-8")
         self.evaluate("""fetch('/__comments', { method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ op: 'add', doc: 'manuscript', quote: 'Plain', para: 'x', section: '', comment: 'Check this' }) }).then(() => loadComments())""")
         self.wait_for("undoLabel")

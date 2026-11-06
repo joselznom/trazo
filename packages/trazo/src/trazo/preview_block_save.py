@@ -312,7 +312,8 @@ def _kept_mine(request: dict[str, Any], text: str, sha256: str) -> tuple[Block, 
     def likeness(block: Block) -> float:
         matcher.set_seq1(text[block.at:block.end].split())
         return matcher.ratio()
-    block = max(editable(text), key=likeness, default=None)
+    candidates = [block for block in editable(text) if block.heading == str(request.get("h")).startswith("h")]
+    block = max(candidates, key=likeness, default=None)
     if block is None or likeness(block) < SAME_BLOCK:
         raise Conflict("this paragraph is no longer in the file", sha256=sha256)
     alone = Block(0, len(source), "")
@@ -389,7 +390,7 @@ def change_block(request: Any) -> dict[str, Any]:
             new, why = (_markdown(request), "") if "markdown" in request else (
                 _rewritten(request, text, text[block.at:block.end], _spans(text, block, lines)))
     source = text[block.at:block.end]
-    if block.heading and new is not None and (not new or BREAK in new):
+    if block.heading and new is not None and (not new.strip() or BREAK in new or "\n" in new):
         new, why = None, "a heading stays one line of text"
     if new is None:
         return {"refused": why, "file": file, "markdown": source}

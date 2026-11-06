@@ -1,20 +1,16 @@
 """Writing on the preview: the marks of a page's blocks and saving an edit of one."""
 
 import re
-import shutil
-import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
 
 import _block_roundtrip as roundtrip
-import _support
+from _preview_saving import CHAPTER, SaveCase
 
-from trazo import edit_diff, preview, preview_block_save, preview_blocks, preview_edit_review, preview_render
+from trazo import edit_diff, preview, preview_block_save, preview_blocks, preview_edit_review
 
 SYNTAX = Path(__file__).with_name("_block_syntax.md")
-CHAPTER = "manuscript/main/02_syntax.md"
-INTRO = "manuscript/main/01_introduction.md"
 
 
 class BlockTests(unittest.TestCase):
@@ -59,6 +55,11 @@ class BlockTests(unittest.TestCase):
         self.assertRegex(lines[0], r'^# One \{#sec:one \.pv-head data-file="a\.md" data-h="h\w+"\}$')
         self.assertRegex(lines[2], r'^## Two \{\.pv-head data-file="a\.md" data-h="h\w+" data-auto="1"\}$')
 
+    def test_other_braces_at_the_end_of_a_heading_are_not_its_attributes(self):
+        for text in ("# A {literal}\n", "# A [word]{.smallcaps}\n"):
+            marked = edit_diff.with_marks(text, preview_blocks.marks(text, "a.md"))
+            self.assertRegex(marked, r'^# A .*\} \{\.pv-head data-file="a\.md" data-h="h\w+" data-auto="1"\}\n$')
+
     def test_a_line_ending_is_not_part_of_a_block_in_a_windows_file(self):
         self.assertEqual(self.blocks("One\r\ntwo.\r\n\r\nThree.\r\n"), ["One\r\ntwo.", "Three."])
 
@@ -90,41 +91,7 @@ class PatchTests(unittest.TestCase):
         self.assertEqual(self.patched("Text.", "1. Text.", "Text."), r"1\. Text.")
 
 
-@unittest.skipUnless(shutil.which("pandoc"), "needs Pandoc")
-class SaveTests(unittest.TestCase):
-    def setUp(self):
-        folder = tempfile.TemporaryDirectory()
-        self.addCleanup(folder.cleanup)
-        self.folder = Path(folder.name)
-        for name, value in (("EDITS_PATH", self.folder / "edits.json"),
-                            ("FILE_HISTORY_PATH", self.folder / "file_history.json"),
-                            ("WATCHER", {"synced": 0.0, "rebuild": set(), "outputs": []})):
-            patcher = patch.object(preview, name, value)
-            patcher.start()
-            self.addCleanup(patcher.stop)
-        self.intro = _support.ROOT / INTRO
-        self.addCleanup(self.intro.write_bytes, self.intro.read_bytes())
-        self.chapter = _support.ROOT / CHAPTER
-        self.addCleanup(self.chapter.unlink, missing_ok=True)
-
-    def page(self, text=None):
-        if text is not None:
-            self.chapter.write_bytes(text.encode("utf-8"))
-        error, _ = preview_render.render("manuscript", self.folder / "page")
-        self.assertEqual(error, "")
-        return (self.folder / "page" / "manuscript.html").read_text(encoding="utf-8")
-
-    def block(self, text, words):
-        """(key, rendered text) of the block of the chapter that holds `words`."""
-        for (file, key), node in roundtrip.page_blocks(self.page(text)).items():
-            rendered = roundtrip.squash(roundtrip.flat(node))
-            if file == CHAPTER and words in rendered:
-                return key, rendered
-        self.fail(f"no block holds {words!r}")
-
-    def save(self, key, before, after):
-        return preview.post_route("/__block", lambda: {"file": CHAPTER, "h": key, "before": before, "after": after})()
-
+class SaveTests(SaveCase):
     def test_the_marks_leave_the_page_as_it_was(self):
         self.chapter.write_bytes(SYNTAX.read_bytes())
         marked = self.page()
@@ -228,89 +195,6 @@ class SaveTests(unittest.TestCase):
         self.chapter.write_text("The quick fox.\n", encoding="utf-8")
         with self.assertRaises(preview.Conflict):
             preview.post_route("/__block", lambda: {"file": CHAPTER, "h": "unknown", "before": "a", "after": "b", "keep": True})()
-
-    def split(self, text, rendered_cut, expected):
-        key, rendered = self.block(text, "split")
-        at = rendered.index(rendered_cut)
-        answer = self.save(key, rendered, rendered[:at].rstrip() + roundtrip.BREAK + rendered[at:])
-        self.assertTrue(answer.get("saved"), answer)
-        self.assertEqual(self.chapter.read_bytes().decode("utf-8"), expected)
-        return answer
-
-    def test_a_paragraph_breaks_into_two(self):
-        answer = self.split("One to split. Two *with* [@smith2020].\n", "Two",
-                            "One to split.\n\nTwo *with* [@smith2020].\n")
-        self.assertEqual(len(answer["parts"]), 2)
-
-    def test_a_list_item_breaks_into_two_items(self):
-        self.split("- One to split. Two.\n- Three.\n", "Two", "- One to split.\n- Two.\n- Three.\n")
-        self.split("1. One to split. Two.\n", "Two", "1. One to split.\n2. Two.\n")
-
-    def test_a_quoted_paragraph_breaks_inside_the_quote(self):
-        self.split("> One to split. Two.\n", "Two", "> One to split.\n>\n> Two.\n")
-
-    def test_a_break_keeps_a_windows_files_line_endings(self):
-        self.split("One to split. Two.\r\n\r\nNext.\r\n", "Two", "One to split.\r\n\r\nTwo.\r\n\r\nNext.\r\n")
-
-    def test_text_after_a_break_cannot_start_a_list(self):
-        self.split("One to split - two.\n", "- two", "One to split\n\n\\- two.\n")
-
-    def test_a_break_inside_a_bold_is_refused(self):
-        text = "One **to split** here.\n"
-        key, rendered = self.block(text, "split")
-        answer = self.save(key, rendered, "One to" + roundtrip.BREAK + "split here.")
-        self.assertIn("refused", answer)
-        self.assertEqual(self.chapter.read_text(encoding="utf-8"), text)
-
-    def test_a_heading_takes_new_text_and_keeps_its_id(self):
-        key, rendered = self.block("# Old title {#sec:x .y}\n\nText.\n", "Old title")
-        self.assertTrue(self.save(key, rendered, "New title")["saved"])
-        self.assertEqual(self.chapter.read_text(encoding="utf-8"), "# New title {#sec:x .y}\n\nText.\n")
-
-    def test_a_heading_cannot_be_emptied_or_broken(self):
-        text = "# Old title\n\nText.\n"
-        for after in ("", "Old" + roundtrip.BREAK + "title"):
-            key, rendered = self.block(text, "Old title")
-            self.assertIn("refused", self.save(key, rendered, after))
-            self.assertEqual(self.chapter.read_text(encoding="utf-8"), text)
-
-    def test_cmd_z_takes_the_latest_of_a_save_and_a_comment(self):
-        self.assertEqual(preview.latest_change()["kind"], "")
-        self.chapter.write_text("Text.\n", encoding="utf-8")
-        state = preview.get_source(CHAPTER)
-        preview.change_source({"file": CHAPTER, "text": "New.\n", "base_sha256": state["sha256"]})
-        self.assertEqual(preview.latest_change(), {"kind": "file", "file": CHAPTER})
-
-    def test_an_empty_paragraph_leaves_the_file(self):
-        for text, expected in (("One.\n\nGone.\n\nThree.\n", "One.\n\nThree.\n"), ("- One.\n- Gone.\n- Three.\n", "- One.\n- Three.\n"),
-                               ("One.\n\nGone.\n", "One.\n\n")):
-            key, rendered = self.block(text, "Gone")
-            answer = self.save(key, rendered, "")
-            self.assertEqual(answer["parts"], [])
-            self.assertEqual(self.chapter.read_text(encoding="utf-8"), expected)
-
-    def join(self, text, words, **extra):
-        blocks = {roundtrip.squash(roundtrip.flat(node)): key for (file, key), node in roundtrip.page_blocks(self.page(text)).items()
-                  if file == CHAPTER}
-        left, right = words
-        return preview.post_route("/__block", lambda: {"file": CHAPTER, "h": blocks[right], "before": right, "after": right,
-                                                       "previous": left, "into": blocks[left], **extra})()
-
-    def test_a_paragraph_joins_the_one_before_it(self):
-        answer = self.join("One *word*.\n\nTwo words.\n\nThree.\n", ("One word.", "Two words."))
-        self.assertTrue(answer["saved"])
-        self.assertEqual(self.chapter.read_text(encoding="utf-8"), "One *word*. Two words.\n\nThree.\n")
-        self.assertEqual(len(answer["parts"]), 1)
-
-    def test_a_list_item_joins_the_one_before_it(self):
-        self.join("- One.\n- Two.\n", ("One.", "Two."))
-        self.assertEqual(self.chapter.read_text(encoding="utf-8"), "- One. Two.\n")
-
-    def test_paragraphs_with_something_between_them_do_not_join(self):
-        text = "One.\n\n![Figure](a.png)\n\nTwo.\n"
-        answer = self.join(text, ("One.", "Two."))
-        self.assertIn("refused", answer)
-        self.assertEqual(self.chapter.read_text(encoding="utf-8"), text)
 
     def test_a_paragraph_the_page_shows_differently_is_refused_with_its_markdown(self):
         text = "A sentence here.\n"

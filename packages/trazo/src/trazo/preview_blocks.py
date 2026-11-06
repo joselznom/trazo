@@ -47,8 +47,10 @@ ITEM = re.compile(r"[ \t]*(?:[-*+]|\d+[.)]|#[.)]|\(@\w*\)|\(?[A-Za-z][.)]|\(?[iv
 NOT_TEXT = re.compile(r"\[[ xX]\][ \t]|\(@\w*\)[ \t]|\|[ \t]|\{[^}]*\}[ \t\r]*$|~[ \t]|<|\\begin\{")
 RULE = re.compile(r"[ \t]{0,3}(?:(?:-[ \t]*){3,}|(?:\*[ \t]*){3,}|(?:_[ \t]*){3,})\r?")
 SETEXT = re.compile(r"[ \t]*(?:=+|-+)[ \t\r]*")
-# Groups: the marker, the text, closing marks, the attributes.
-HEADING_LINE = re.compile(r"( {0,3}#{1,6}[ \t]+)(.*?)((?:[ \t]+#+)?[ \t]*)(\{[^{}]*\})?[ \t]*\r?")
+# Groups: the marker, the text, closing marks, the attributes. Other braces at the
+# end of a heading are text, or belong to the span before them.
+ATTRIBUTE = r"""(?:[#.][\w:.\-]+|-|[\w:\-]+=(?:"[^"]*"|[^\s}]*))"""
+HEADING_LINE = re.compile(rf"( {{0,3}}#{{1,6}}[ \t]+)(.*?)((?:[ \t]+#+)?[ \t]*)((?<=[ \t])\{{\s*(?:{ATTRIBUTE}\s*)+\}})?[ \t]*\r?")
 # A name that could not sit in the mark's quoted attribute: its file gets no marks.
 UNQUOTABLE = re.compile(r'["\\\n]')
 # Key -> the Markdown of each block marked since the preview started, oldest first. A

@@ -205,7 +205,7 @@
 
   // Outside the text, Cmd+Z undoes the latest change, a saved paragraph or a comment.
   async function undoLatest() {
-    const { ok, payload } = await postJson("/__undo");
+    const { ok, payload } = await postJson(`/__undo?doc=${encodeURIComponent(doc)}`);
     if (ok && payload.kind === "comment" && undoLabel) send({ op: "undo" }, `Undone: ${undoLabel}`);
     if (!ok || payload.kind !== "file") return;
     const { ok: undone, payload: answer } = await postJson("/__source", { op: "undo", file: payload.file });

@@ -83,7 +83,7 @@
 
   function breakParagraph() {
     const ed = writing, selection = getSelection(), item = itemOf(ed.el);
-    if (isHeading(ed.el)) { goTo(true); return ""; }  // a heading stays one line: Enter goes on to the text
+    if (isHeading(ed.el)) { goTo(true, true); return ""; }  // a heading stays one line: Enter goes on to the text
     if (item && item.querySelector(SUBLIST)) return;  // the new item would take the sublist from this one
     if (!selection.isCollapsed) selection.deleteFromDocument();
     if (!textOf(ed.el)) return;  // the file has no empty paragraphs
@@ -157,8 +157,9 @@
     });
   }
 
-  function goTo(forward) {
-    const all = $$(".pv-can-write", page), next = all[all.indexOf(writing.el) + (forward ? 1 : -1)];
+  function goTo(forward, toText) {
+    const all = $$(".pv-can-write", page), from = all.indexOf(writing.el);
+    const next = toText ? all.slice(from + 1).find((el) => !isHeading(el)) : all[from + (forward ? 1 : -1)];
     if (!next) return false;
     saveBlock(stopWriting());
     writeInto(next, !forward);

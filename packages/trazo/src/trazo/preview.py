@@ -338,7 +338,8 @@ def get_route(path, query):
     routes = {
         "/__status": status, "/__comments": lambda: comments_payload(first("doc")),
         "/__edits": lambda: edits_payload(first("doc")), "/__values": values_info,
-        "/__source": lambda: get_source(first("file")), "/__references": references, "/__undo": latest_change,
+        "/__source": lambda: get_source(first("file")), "/__references": references,
+        "/__undo": lambda: latest_change(first("doc")),
         "/__figure-text": lambda: get_figure_text(first("doc"), first("id")),
         "/__table-caption": lambda: get_table_caption(first("doc"), first("id")),
         "/__export": lambda: export_request(query),

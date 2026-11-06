@@ -136,15 +136,19 @@ def change_source(request):
         return source_state(file, path, data, text)
 
 
-def latest_change():
-    """What Cmd+Z outside the text undoes: the most recent of a save and a
-    comment change, each with its own undo. {kind: file|comment|"", file}."""
+def latest_change(doc):
+    """What Cmd+Z outside the text undoes in a document: the most recent of a
+    save and a comment change, each with its own undo. {kind: file|comment|"", file}."""
     from . import preview
     from .preview_comments import PreviewHistory
+    files = set(preview_edit_review.page_files(doc))
     with review_lock():
-        saves = read_list(preview.FILE_HISTORY_PATH)
-        comments = PreviewHistory(preview.HISTORY_PATH).load()
-    if saves and (not comments or saves[-1].get("time", "") >= comments[-1].get("time", "")):
+        saves = [e for e in read_list(preview.FILE_HISTORY_PATH) if e.get("file") in files]
+        comments = [e for e in PreviewHistory(preview.HISTORY_PATH).load() if e.get("doc") in (doc, None)]
+        # Their times are in seconds: within one, the history written last has the latest.
+        latest = [(entries[-1].get("time", ""), path.stat().st_mtime_ns) if entries else ("", 0)
+                  for entries, path in ((saves, preview.FILE_HISTORY_PATH), (comments, preview.HISTORY_PATH))]
+    if saves and latest[0] >= latest[1]:
         return {"kind": "file", "file": saves[-1].get("file", "")}
     return {"kind": "comment" if comments else "", "file": ""}
 
