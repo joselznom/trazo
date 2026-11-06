@@ -82,6 +82,33 @@ class WritingTests(WritingCase):
         self.wait_for("!document.querySelector('.pv-write-box') && !document.querySelector('.pv-write-bar')")
         self.assertEqual(self.source(), "Plain *new* words.\n")
 
+    def test_a_click_outside_leaves_the_text_even_if_the_window_reports_no_focus(self):
+        self.build("Plain words here today.\n")
+        self.write_in("words")
+        self.type("my ")
+        self.evaluate("document.hasFocus = () => false")
+        self.leave()
+        self.wait_for("document.querySelector('.pv-save-state').textContent === 'Saved'")
+        self.assertIn("my ", self.source())  # where it lands in the word depends on the machine's fonts
+
+    def test_another_window_taking_the_focus_does_not_leave_the_text(self):
+        self.build("Plain words here today.\n")
+        self.write_in("words")
+        self.type("my ")
+        other = self.chrome.call("Target.createTarget", {"url": "about:blank", "browserContextId": self.context})["targetId"]
+        self.chrome.call("Target.activateTarget", {"targetId": other})
+        lost = self.evaluate("""new Promise(done => {
+          const end = Date.now() + 3000;
+          (function check() {
+            if (!document.hasFocus() || Date.now() > end) done(!document.hasFocus());
+            else setTimeout(check, 25);
+          })();
+        })""")
+        if not lost:
+            self.skipTest("Chrome keeps the page focused on this machine")  # as it does on GitHub's Intel Macs
+        self.assertTrue(self.evaluate("document.activeElement.classList.contains('pv-writing')"))
+        self.assertEqual(self.source(), "Plain words here today.\n")
+
     def test_markdown_that_cannot_be_saved_stays_and_can_be_kept(self):
         for marker in ("", "- "):
             with self.subTest(marker=marker):
