@@ -83,6 +83,7 @@
 
   function breakParagraph() {
     const ed = writing, selection = getSelection(), item = itemOf(ed.el);
+    if (isHeading(ed.el)) { goTo(true); return ""; }  // a heading stays one line: Enter goes on to the text
     if (item && item.querySelector(SUBLIST)) return;  // the new item would take the sublist from this one
     if (!selection.isCollapsed) selection.deleteFromDocument();
     if (!textOf(ed.el)) return;  // the file has no empty paragraphs
@@ -131,6 +132,7 @@
 
   function joinBack() {
     const ed = writing, item = itemOf(ed.el), loose = item && item !== ed.el;
+    if (isHeading(ed.el)) return;
     const sibling = (loose ? item : ed.el).previousElementSibling;
     const previous = loose ? sibling && $$(":scope > p", sibling).pop() : sibling;
     const mark = previous && blockMark.get(previous);
@@ -166,7 +168,8 @@
   page.addEventListener("paste", (e) => {
     if (!writing) return;
     e.preventDefault();
-    const pieces = e.clipboardData.getData("text/plain").split(/\r?\n[ \t]*\r?\n\s*/)
+    const text = e.clipboardData.getData("text/plain");
+    const pieces = (isHeading(writing.el) ? [text] : text.split(/\r?\n[ \t]*\r?\n\s*/))
       .map((piece) => piece.replace(/\s+/g, " ")).filter((piece) => piece.trim());
     let gap = "";  // the space before the text that follows, kept after the last piece
     pieces.forEach((piece, i) => {

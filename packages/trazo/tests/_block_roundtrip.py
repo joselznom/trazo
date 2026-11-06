@@ -35,6 +35,7 @@ FORMATS = {"bold": ("strong", None), "italic": ("em", None), "unbold": ("strong"
            "bold-italic": ("strong", 2), "italic-bold": ("em", 1)}
 KINDS = (*COMMON, "chip", "rewrite", "split", *PREFIXES, *FORMATS)
 BREAK = "\uf8ff"
+HEADINGS = {"h1", "h2", "h3", "h4", "h5", "h6"}
 
 
 @dataclass
@@ -136,6 +137,9 @@ def page_blocks(html: str) -> dict[tuple[str, str], Node]:
             host = node.closest("p", "li")
             if host is not None and host.closest("nav", "table", "figure") is None:
                 found[node.attrs["data-file"], node.attrs["data-h"]] = host
+        elif "pv-head" in node.classes:
+            heading = node if node.tag in HEADINGS else next(child for child in node.children if isinstance(child, Node) and child.tag in HEADINGS)
+            found[node.attrs["data-file"], node.attrs["data-h"]] = heading
     return found
 
 

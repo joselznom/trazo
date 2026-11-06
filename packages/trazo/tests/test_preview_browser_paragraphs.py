@@ -49,7 +49,7 @@ class ParagraphTests(WritingCase):
         self.key("Enter", 13)
         self.wait_for("document.querySelector('.pv-writing')?.textContent === ''")
         self.leave()
-        self.assertEqual(self.evaluate("document.querySelectorAll('.pv-can-write').length"), 2)  # the introduction's and this
+        self.assertEqual(self.evaluate("document.querySelectorAll('p.pv-can-write').length"), 2)  # the introduction's and this
         self.assertEqual(self.source(), "One sentence.\n")
 
     def test_enter_in_a_list_makes_a_new_item(self):

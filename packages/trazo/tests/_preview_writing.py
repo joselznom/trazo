@@ -59,5 +59,10 @@ class WritingCase(PreviewBrowserTestCase):
         self.chrome.call("Input.insertText", {"text": text}, self.session)
 
     def leave(self):
-        self.click_word("Introduction")
+        point = self.evaluate("""(() => {
+          const box = document.querySelector('.pv-page').getBoundingClientRect();
+          return [box.left + 4, Math.min(box.top + 300, innerHeight - 20)];
+        })()""")  # the page's margin
+        self.mouse("mousePressed", *point)
+        self.mouse("mouseReleased", *point)
         self.wait_for("!document.querySelector('.pv-writing')")

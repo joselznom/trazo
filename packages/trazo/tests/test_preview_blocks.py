@@ -48,6 +48,17 @@ class BlockTests(unittest.TestCase):
         self.assertEqual(wrapped.count("pv-atom"), 7)
         self.assertIn('<span class="pv-atom" data-i="5">@b [p. 3]</span>', wrapped)
 
+    def test_a_heading_is_its_text_without_its_marks_or_attributes(self):
+        text = "# One {#sec:one .x}\n\n## Two ##\n\n```\n# Code\n```\n"
+        self.assertEqual([text[b.at:b.end] for b in preview_blocks.headings_of(text)], ["One", "Two"])
+
+    def test_a_heading_takes_its_mark_as_an_attribute(self):
+        text = "# One {#sec:one}\n\n## Two\n"
+        marked = edit_diff.with_marks(text, preview_blocks.marks(text, "a.md"))
+        lines = marked.split("\n")
+        self.assertRegex(lines[0], r'^# One \{#sec:one \.pv-head data-file="a\.md" data-h="h\w+"\}$')
+        self.assertRegex(lines[2], r'^## Two \{\.pv-head data-file="a\.md" data-h="h\w+" data-auto="1"\}$')
+
     def test_a_line_ending_is_not_part_of_a_block_in_a_windows_file(self):
         self.assertEqual(self.blocks("One\r\ntwo.\r\n\r\nThree.\r\n"), ["One\r\ntwo.", "Three."])
 
@@ -130,7 +141,10 @@ class SaveTests(unittest.TestCase):
                 elif "pv-atom" in child.classes:
                     yield from lines(child)
                 elif "pv-src" not in child.classes:
-                    yield f"\0<{child.tag} {sorted(child.attrs.items())}>\0"
+                    attrs = {k: v for k, v in child.attrs.items() if k not in ("data-file", "data-h", "data-auto")}
+                    if "class" in attrs:
+                        attrs["class"] = " ".join(name for name in attrs["class"].split() if name != "pv-head")
+                    yield f"\0<{child.tag} {sorted((k, v) for k, v in attrs.items() if v or k != 'class')}>\0"
                     yield from lines(child)
                     yield f"\0</{child.tag}>\0"
         joined = re.sub(r"\s+", " ", "".join(lines(roundtrip.parse(html))))
@@ -247,6 +261,25 @@ class SaveTests(unittest.TestCase):
         answer = self.save(key, rendered, "One to" + roundtrip.BREAK + "split here.")
         self.assertIn("refused", answer)
         self.assertEqual(self.chapter.read_text(encoding="utf-8"), text)
+
+    def test_a_heading_takes_new_text_and_keeps_its_id(self):
+        key, rendered = self.block("# Old title {#sec:x .y}\n\nText.\n", "Old title")
+        self.assertTrue(self.save(key, rendered, "New title")["saved"])
+        self.assertEqual(self.chapter.read_text(encoding="utf-8"), "# New title {#sec:x .y}\n\nText.\n")
+
+    def test_a_heading_cannot_be_emptied_or_broken(self):
+        text = "# Old title\n\nText.\n"
+        for after in ("", "Old" + roundtrip.BREAK + "title"):
+            key, rendered = self.block(text, "Old title")
+            self.assertIn("refused", self.save(key, rendered, after))
+            self.assertEqual(self.chapter.read_text(encoding="utf-8"), text)
+
+    def test_cmd_z_takes_the_latest_of_a_save_and_a_comment(self):
+        self.assertEqual(preview.latest_change()["kind"], "")
+        self.chapter.write_text("Text.\n", encoding="utf-8")
+        state = preview.get_source(CHAPTER)
+        preview.change_source({"file": CHAPTER, "text": "New.\n", "base_sha256": state["sha256"]})
+        self.assertEqual(preview.latest_change(), {"kind": "file", "file": CHAPTER})
 
     def test_an_empty_paragraph_leaves_the_file(self):
         for text, expected in (("One.\n\nGone.\n\nThree.\n", "One.\n\nThree.\n"), ("- One.\n- Gone.\n- Three.\n", "- One.\n- Three.\n"),

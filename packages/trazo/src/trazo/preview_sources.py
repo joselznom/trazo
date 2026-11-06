@@ -136,6 +136,19 @@ def change_source(request):
         return source_state(file, path, data, text)
 
 
+def latest_change():
+    """What Cmd+Z outside the text undoes: the most recent of a save and a
+    comment change, each with its own undo. {kind: file|comment|"", file}."""
+    from . import preview
+    from .preview_comments import PreviewHistory
+    with review_lock():
+        saves = read_list(preview.FILE_HISTORY_PATH)
+        comments = PreviewHistory(preview.HISTORY_PATH).load()
+    if saves and (not comments or saves[-1].get("time", "") >= comments[-1].get("time", "")):
+        return {"kind": "file", "file": saves[-1].get("file", "")}
+    return {"kind": "comment" if comments else "", "file": ""}
+
+
 def read_include_from(path_text, source_file):
     """Text of an `!include`d file (inside the repo only), else None."""
     from . import preview

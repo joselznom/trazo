@@ -58,7 +58,7 @@ spec change then reruns it before the rebuild, since it may read the specs.
 Endpoints: GET/POST /__source, /__table-caption, /__figure-text and /__edits,
 POST /__block (an edit of a paragraph's text, see trazo.preview_block_save),
 POST /__block-format (bold and italic, see trazo.preview_block_format),
-GET /__references (the @ menu, see trazo.preview_mentions),
+GET /__references (the @ menu, see trazo.preview_mentions), GET /__undo (what Cmd+Z undoes),
 GET /__values, GET /__submission (the Submission view's report,
 reused until what it reads changes; ?fields=0 leaves out the form fields,
 ?fresh=S makes it again if its check started over S seconds ago), POST /__locate,
@@ -161,6 +161,7 @@ from .preview_render import (  # noqa: F401
 from .preview_sources import (  # noqa: F401
     change_source,
     get_source,
+    latest_change,
     locate_source,
     read_include_from,
     read_source,
@@ -337,7 +338,7 @@ def get_route(path, query):
     routes = {
         "/__status": status, "/__comments": lambda: comments_payload(first("doc")),
         "/__edits": lambda: edits_payload(first("doc")), "/__values": values_info,
-        "/__source": lambda: get_source(first("file")), "/__references": references,
+        "/__source": lambda: get_source(first("file")), "/__references": references, "/__undo": latest_change,
         "/__figure-text": lambda: get_figure_text(first("doc"), first("id")),
         "/__table-caption": lambda: get_table_caption(first("doc"), first("id")),
         "/__export": lambda: export_request(query),

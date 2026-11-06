@@ -234,9 +234,10 @@ class Lines:
         # trazo reads headings, `!include` lines and definition terms line by
         # line before Pandoc does (sections, the abstract's keywords, the
         # abbreviation list): a span there would change what it reads.
+        self.prose = markable_lines(self.lines)
         self.markable = [ok and not HEADING.match(line) and not line.startswith(INCLUDE_PREFIX)
                          and not FENCED_DIV.match(line) and not self._term(i)
-                         for i, (ok, line) in enumerate(zip(markable_lines(self.lines), self.lines))]
+                         for i, (ok, line) in enumerate(zip(self.prose, self.lines))]
         context = markdown_context(text)
         self.hidden = [a != b for a, b in zip(context, text)]  # code and comments
         self.blocked: list[list[tuple[int, int, bool]]] = [[] for _ in self.lines]  # (start, end, may be inside a span)
