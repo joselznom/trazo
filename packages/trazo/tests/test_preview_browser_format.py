@@ -67,6 +67,42 @@ class FormatTests(WritingCase):
         self.assertIn("**quick**", self.source())
         self.assertIn("very ", self.source())
 
+    def test_taking_bold_off_leaves_the_italic_it_had_inside(self):
+        self.build("A ***quick brown*** fox.\n")
+        self.select("quick")
+        self.chord("b", 66)
+        self.wait_for("!saves && document.querySelector('.pv-save-state').textContent === 'Saved'")
+        self.assertEqual(self.source(), "A *quick* ***brown*** fox.\n")
+        self.assertEqual(self.evaluate("""(() => {
+          const walker = document.createTreeWalker(document.querySelector('.pv-writing'), NodeFilter.SHOW_TEXT);
+          while (walker.nextNode()) if (walker.currentNode.data.includes('quick'))
+            return [!!walker.currentNode.parentElement.closest('em'), !!walker.currentNode.parentElement.closest('strong')];
+        })()"""), [True, False])
+
+    def test_no_format_is_sent_after_a_save_that_failed(self):
+        text = "A quick brown fox jumps.\n"
+        self.build(text)
+        self.write_in("jumps")
+        self.type("very ")
+        self.evaluate("""(() => {
+          const node = document.querySelector('.pv-writing .pv-src').nextSibling;
+          const range = document.createRange();
+          range.setStart(node, 2); range.setEnd(node, 7);
+          const selection = getSelection(); selection.removeAllRanges(); selection.addRange(range);
+        })()""")
+        with patch("trazo.preview_block_save.check", lambda *args: "it does not read the same"):
+            self.chord("b", 66)
+            self.wait_for("document.querySelector('.pv-write-bar') && !saves")
+        self.assertEqual(self.source(), text)
+        self.assertFalse(self.evaluate("!!document.querySelector('.pv-page strong')"))
+
+    def test_the_selection_is_counted_in_characters(self):
+        self.build("A 😀🧪 quick brown fox.\n")
+        self.select("quick")
+        self.chord("b", 66)
+        self.wait_for("document.querySelector('.pv-writing strong')?.textContent === 'quick'")
+        self.saved("A 😀🧪 **quick** brown fox.\n")
+
     def test_a_refused_format_says_so_and_leaves_the_text(self):
         text = "A **quick** fox.\n"
         self.build(text)

@@ -11,16 +11,24 @@
     const contents = range.extractContents();
     for (const inner of contents.querySelectorAll(tag)) inner.replaceWith(...inner.childNodes);
     const nodes = [...contents.childNodes];
-    const outer = range.startContainer.nodeType === 1 ? range.startContainer.closest(tag) : range.startContainer.parentElement.closest(tag);
+    const inside = range.startContainer.nodeType === 1 ? range.startContainer : range.startContainer.parentElement;
+    const outer = inside.closest(tag);
     if (on) {
       const wrap = document.createElement(tag);
       wrap.append(contents);
       range.insertNode(wrap);
     } else if (outer) {
+      // The text leaves `outer` and keeps the other styles it had inside it.
+      let moved = contents;
+      for (let node = inside; node !== outer; node = node.parentElement) {
+        const copy = node.cloneNode(false);
+        copy.append(moved);
+        moved = copy;
+      }
       const tail = range.cloneRange();
       tail.setEndAfter(outer);
       const rest = tail.extractContents(), parts = [...rest.childNodes];
-      outer.after(contents, rest);
+      outer.after(moved, rest);
       for (const part of [outer, ...parts]) if (!part.textContent) part.remove();
     } else range.insertNode(contents);
     range.setStartBefore(nodes[0]);
@@ -35,10 +43,12 @@
     head.collapse(true);
     head.setStart(ed.el, 0);
     upTo.setStart(ed.el, 0);
-    const from = textOf(head.cloneContents()).length, to = textOf(upTo.cloneContents()).length;
+    // In characters, as the server counts them: an emoji is two units of a JavaScript string.
+    const from = [...textOf(head.cloneContents())].length, to = [...textOf(upTo.cloneContents())].length;
     saveBlock(ed);
     sendBlock(ed, () => ({ before: ed.before, style, from, to }), {
       path: "/__block-format",
+      when: () => !failed.has(ed.el),  // the offsets are into text that did not save
       refused: (_, status, payload) => toast(`Not formatted: ${refusal(payload)}.`),
       done: (payload) => {
         ed.mark.dataset.h = payload.parts[0];

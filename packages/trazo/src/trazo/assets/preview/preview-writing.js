@@ -114,10 +114,11 @@
   // One at a time and in order: a save may need the key the one before it got.
   // `group` are the paragraphs the block becomes, the first being the one sent.
   let saveQueue = Promise.resolve();
-  function sendBlock(ed, body, { path = "/__block", group = [ed], block = group[0], refused = showFailure, done = null } = {}) {
+  function sendBlock(ed, body, { path = "/__block", group = [ed], block = group[0], refused = showFailure, done = null, when = null } = {}) {
     saves++;
     showSaveState("Saving…");
     saveQueue = saveQueue.then(async () => {
+      if (when && !when()) { saves--; return; }
       const { file, h: key } = block.mark.dataset;
       let result;
       try {
