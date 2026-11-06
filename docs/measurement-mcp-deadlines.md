@@ -129,3 +129,13 @@ remain while an escaped descendant retains the handle. Windows process-tree
 termination has its existing separate 30-second bound. Linux and Windows behavior
 was reviewed but not executed locally. Native executable writes and power-loss
 durability were not tested. The pre-existing cancel/reaped-PID race is unchanged.
+
+## Type validation follow-up
+
+The combined validation found two new optional-stream diagnostics in the POSIX
+cleanup path. Narrowing each pipe before closing it removes both diagnostics
+without changing the configured PIPE behavior. `make lint` and the 13 MCP
+lifetime tests pass. `make typecheck` still exits 2 with the original 148 errors
+in 37 files; none is in `mcp_calls.py`. Logs are in
+`.build/measure/deadline-type-narrowing/`. The integrated report retains the
+intermediate 150-error run rather than labeling it pre-existing.

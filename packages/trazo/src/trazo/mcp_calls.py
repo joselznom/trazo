@@ -110,8 +110,9 @@ class Calls:
                     process.wait(timeout=5)
                 finally:
                     if os.name != "nt":  # Windows reader threads own these streams until EOF.
-                        process.stdout.close()
-                        process.stderr.close()
+                        for stream in (process.stdout, process.stderr):
+                            if stream is not None:
+                                stream.close()
                 output = [value.decode("utf-8", "replace") if isinstance(value, bytes) else value or ""
                           for value in (stderr, stdout)]
                 message = (f"trazo {' '.join(argv)} timed out after {timeout:g} s; "
