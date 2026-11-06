@@ -66,6 +66,19 @@ The browser milestone is a conservative paint opportunity, not pixel recognition
 or proof that every offscreen image has decoded. Warm editor samples reload the
 actual document; a surviving old DOM cannot satisfy the milestone.
 
+## Idle polling cost
+
+```sh
+uv run --quiet --project packages/trazo python scripts/measure/idle.py PAPER OUTPUT.json --checkout PRODUCT_CHECKOUT
+```
+
+This complementary measurement uses 20 settled idle windows of two seconds each.
+It reports server CPU from `ps`, Chrome main-renderer task time and request rates,
+with p50/p95 and raw samples. CPU percentages are fractions of one core, not of
+all machine cores. Server descendants and total browser/system energy are outside
+this scope. Run before and after serially on the same load paper. It waits for
+initial watcher work and browser reloads to settle before opening the windows.
+
 ## Separate profiling
 
 ```sh

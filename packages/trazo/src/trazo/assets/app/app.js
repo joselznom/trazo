@@ -83,27 +83,37 @@
     return { ok: response.ok, status: response.status, data };
   }
 
-  // One non-overlapping status request per page; consumers share the result.
-  const listeners = new Set();
-  let timer = null, polling = false, latest = null;
+  // One request at a time. Preview pages refresh document state cheaply between
+  // workspace scans; catalogs and input fingerprints retain their one-second cadence.
+  const listeners = new Map();
+  let timer = null, polling = false, latest = null, workspaceAt = 0;
   async function poll() {
     if (polling || !listeners.size) return;
     clearTimeout(timer);
     polling = true;
+    const fast = [...listeners.values()].some(Boolean);
     try {
-      const result = await api("/__workspace");
+      const workspace = !fast || !latest || performance.now() - workspaceAt >= 1000;
+      const result = await api(workspace ? "/__workspace" : "/__status");
       if (!result.ok) throw new Error(result.data.error || "Workspace unavailable");
-      latest = result.data;
-      await Promise.allSettled([...listeners].map(fn => fn(latest, null)));
+      if (workspace) {
+        latest = result.data;
+        workspaceAt = performance.now();
+      } else {
+        latest = { ...latest,
+          documents: Object.fromEntries(Object.keys(latest.documents).map(name => [name, result.data[name]])),
+          comments: result.data.comments, docx: result.data.docx };
+      }
+      await Promise.allSettled([...listeners.keys()].map(fn => fn(latest, null)));
     } catch (error) {
-      await Promise.allSettled([...listeners].map(fn => fn(null, error)));
+      await Promise.allSettled([...listeners.keys()].map(fn => fn(null, error)));
     } finally {
       polling = false;
-      if (listeners.size) timer = setTimeout(poll, document.hidden ? 5000 : 1000);
+      if (listeners.size) timer = setTimeout(poll, document.hidden ? 5000 : fast ? 250 : 1000);
     }
   }
-  function watch(fn) {
-    listeners.add(fn);
+  function watch(fn, { preview = false } = {}) {
+    listeners.set(fn, preview);
     if (latest) Promise.resolve().then(() => fn(latest, null));
     if (!polling) { clearTimeout(timer); timer = setTimeout(poll, 0); }
     return () => { listeners.delete(fn); if (!listeners.size) clearTimeout(timer); };
