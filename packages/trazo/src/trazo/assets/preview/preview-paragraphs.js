@@ -46,6 +46,29 @@
     (getSelection().focusNode.parentElement || el).scrollIntoView({ block: "nearest" });
   }
 
+  // The list item a paragraph opens: the <li> itself, or in a loose list the <li> of its first <p>.
+  function itemOf(el) {
+    if (el.tagName === "LI") return el;
+    const item = el.parentElement;
+    return item.tagName === "LI" && item.querySelector(":scope > p") === el ? item : null;
+  }
+
+  // A new paragraph next to this one, or in a list a new item.
+  function newParagraph(ed, contents, above) {
+    const mark = h("span", { class: "pv-src", "data-file": ed.mark.dataset.file, "data-h": "" });
+    const el = h(ed.el.tagName.toLowerCase(), { class: ed.el.classList.contains("pv-p") ? "pv-p pv-can-write" : "pv-can-write" }, mark, contents);
+    blockMark.set(el, mark);
+    const item = itemOf(ed.el), loose = item && item !== ed.el;
+    const outer = loose ? h("li", null, el) : el;
+    if (above) (loose ? item : ed.el).before(outer);
+    else {
+      // The item's other paragraphs follow the line that starts the new item.
+      if (loose) for (let next = ed.el.nextSibling; next; next = ed.el.nextSibling) outer.append(next);
+      (loose ? item : ed.el).after(outer);
+    }
+    return el;
+  }
+
   // Moves a paragraph's text to the end of `el`, and the paragraph goes.
   function takeText(el, ed, ...before) {
     el.append(...before, ...[...ed.el.childNodes].filter((node) => !(node.nodeType === 1 && node.matches(".pv-src, .pv-para, .pv-src-mark"))));
@@ -54,16 +77,17 @@
   }
 
   function breakParagraph() {
-    const ed = writing, selection = getSelection();
-    if (ed.el.querySelector(SUBLIST)) return;  // the new item would take the sublist from this one
+    const ed = writing, selection = getSelection(), item = itemOf(ed.el);
+    if (item && item.querySelector(SUBLIST)) return;  // the new item would take the sublist from this one
     if (!selection.isCollapsed) selection.deleteFromDocument();
-    if (atEdge(ed, false)) return;
-    if (ed.draftOf) saveBlock(ed);
-    const mark = h("span", { class: "pv-src", "data-file": ed.mark.dataset.file, "data-h": "" });
-    const el = h(ed.el.tagName.toLowerCase(), { class: ed.el.classList.contains("pv-p") ? "pv-p pv-can-write" : "pv-can-write" },
-      mark, restOf(ed, true).extractContents());
-    ed.el.after(el);
-    blockMark.set(el, mark);
+    if (!textOf(ed.el)) return;  // the file has no empty paragraphs
+    if (ed.draftOf && !atEdge(ed, false)) saveBlock(ed);
+    const above = atEdge(ed, false);  // a paragraph cannot start empty: this opens one before it
+    const el = newParagraph(ed, above ? "" : restOf(ed, true).extractContents(), above);
+    // The space at the break goes, as it does in the saved text.
+    const start = textNodes(el)[0], end = textNodes(ed.el).pop();
+    if (start) start.data = start.data.trimStart();
+    if (end) end.data = end.data.trimEnd();
     const left = textOf(ed.el), right = textOf(el);
     const first = stopWriting();
     numberChips(el);
@@ -73,6 +97,7 @@
     if (!right) {
       saveBlock(first);
       second.draftOf = first;
+      second.above = above;
       return;
     }
     sendBlock(first, { before: first.before, after: left + BREAK + right }, {
@@ -96,12 +121,13 @@
   }
 
   function joinBack() {
-    const ed = writing, previous = ed.el.previousElementSibling;
+    const ed = writing, item = itemOf(ed.el), loose = item && item !== ed.el;
+    const sibling = (loose ? item : ed.el).previousElementSibling;
+    const previous = loose ? sibling && $$(":scope > p", sibling).pop() : sibling;
     const mark = previous && blockMark.get(previous);
     if (!mark || previous.tagName !== ed.el.tagName || mark.dataset.file !== ed.mark.dataset.file) return;
-    if (ed.draftOf && !textOf(ed.el)) {
-      stopWriting();
-      dropParagraph(ed);
+    if (!textOf(ed.el)) {  // nothing to join: it goes
+      saveBlock(stopWriting());
       writeInto(previous, true);
       return;
     }
@@ -132,7 +158,8 @@
   page.addEventListener("paste", (e) => {
     if (!writing) return;
     e.preventDefault();
-    const pieces = e.clipboardData.getData("text/plain").split(/\n\s*\n/).map(squash).filter(Boolean);
+    const pieces = e.clipboardData.getData("text/plain").split(/\r?\n[ \t]*\r?\n\s*/)
+      .map((piece) => piece.replace(/\s+/g, " ")).filter((piece) => piece.trim());
     pieces.forEach((piece, i) => {
       if (i) breakParagraph();
       document.execCommand("insertText", false, piece);

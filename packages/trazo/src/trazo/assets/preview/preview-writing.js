@@ -112,11 +112,11 @@
   // One at a time and in order: a save may need the key the one before it got.
   // `group` are the paragraphs the block becomes, the first being the one sent.
   let saveQueue = Promise.resolve();
-  function sendBlock(ed, body, { group = [ed], refused = showFailure, done = null } = {}) {
+  function sendBlock(ed, body, { group = [ed], block = group[0], refused = showFailure, done = null } = {}) {
     saves++;
     showSaveState("Saving…");
     saveQueue = saveQueue.then(async () => {
-      const { file, h: key } = group[0].mark.dataset;
+      const { file, h: key } = block.mark.dataset;
       let result;
       try {
         result = await postJson("/__block", { file, h: key, ...(typeof body === "function" ? body() : body) });
@@ -136,8 +136,10 @@
       ed.draftOf = null;
       if (!after) { dropParagraph(ed); return; }
       ed.before = after;
-      sendBlock(ed, () => ({ before: anchor.before, after: anchor.before + BREAK + after, ...extra }), {
-        group: [anchor, ed],
+      const parts = ed.above ? [ed, anchor] : [anchor, ed];
+      sendBlock(ed, () => ({ before: anchor.before, after: parts.map((part) => part.before).join(BREAK), ...extra }), {
+        group: parts,
+        block: anchor,
         refused: (...failure) => { ed.draftOf = anchor; showFailure(...failure); },
       });
     } else if (after !== ed.before || failed.has(ed.el)) {
@@ -147,8 +149,10 @@
   }
 
   function dropParagraph(ed) {
+    const item = ed.el.parentElement;
     blockMark.delete(ed.el);
     ed.el.remove();
+    if (item && item.tagName === "LI" && !item.querySelector("p, ul, ol, dl")) item.remove();
   }
 
   // Until the page reloads, the chips of a paragraph are numbered as its Markdown is.
