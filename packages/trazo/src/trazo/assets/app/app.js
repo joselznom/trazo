@@ -85,13 +85,15 @@
 
   // One request at a time. Preview pages refresh document state cheaply between
   // workspace scans; catalogs and input fingerprints retain their one-second cadence.
+  // Host tool calls and document names colliding with status metadata use workspace only.
   const listeners = new Map();
   let timer = null, polling = false, latest = null, workspaceAt = 0;
   async function poll() {
     if (polling || !listeners.size) return;
     clearTimeout(timer);
     polling = true;
-    const fast = [...listeners.values()].some(Boolean);
+    const fast = !window.TRAZO_VIEW && [...listeners.values()].some(Boolean)
+      && !["comments", "docx", "synced", "server"].some(name => Object.hasOwn(latest?.documents || {}, name));
     try {
       const workspace = !fast || !latest || performance.now() - workspaceAt >= 1000;
       const result = await api(workspace ? "/__workspace" : "/__status");
