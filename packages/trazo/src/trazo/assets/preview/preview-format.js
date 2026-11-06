@@ -39,7 +39,7 @@
     saveBlock(ed);
     sendBlock(ed, () => ({ before: ed.before, style, from, to }), {
       path: "/__block-format",
-      refused: (_, status, payload) => toast(`Not formatted: ${payload.refused || payload.error || "the server refused"}.`),
+      refused: (_, status, payload) => toast(`Not formatted: ${refusal(payload)}.`),
       done: (payload) => {
         ed.mark.dataset.h = payload.parts[0];
         if (range.collapsed) return;
@@ -59,9 +59,18 @@
   const formatButtons = () => (writing ? [formatButton("strong", "B", "Bold (⌘B)"), formatButton("em", "I", "Italic (⌘I)")] : []);
 
   document.addEventListener("keydown", (e) => {
-    if (!writing || writing.joining || !(e.metaKey || e.ctrlKey) || e.shiftKey || e.altKey) return;
+    if (!(e.metaKey || e.ctrlKey) || e.shiftKey || e.altKey) return;
     const style = { b: "strong", i: "em" }[e.key.toLowerCase()];
     if (!style) return;
+    if (writing) {
+      e.preventDefault();
+      if (!writing.joining) toggleStyle(style);
+      return;
+    }
+    // Text selected across paragraphs: the author means a style, not the build Cmd+B starts.
+    const selection = getSelection();
+    if (selection.isCollapsed || !page.contains(selection.anchorNode)) return;
     e.preventDefault();
-    toggleStyle(style);
+    e.stopPropagation();
+    toast("Select inside one paragraph to format text.");
   }, true);

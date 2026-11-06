@@ -150,7 +150,7 @@
         ed.joining = false;
         ed.el.contentEditable = "plaintext-only";
         ed.el.focus({ preventScroll: true });
-        toast(`Not joined: ${payload.refused || payload.error || "the server refused"}.`);
+        toast(`Not joined: ${refusal(payload)}.`);
       },
     });
   }

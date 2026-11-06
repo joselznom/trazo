@@ -242,11 +242,7 @@
     if (e.target.closest && e.target.closest("textarea, input, select, [contenteditable]")) return;
     const key = e.key.toLowerCase();
     if (key === "e") { e.preventDefault(); openExportPanel(); }
-    else if (key === "b") {
-      e.preventDefault();
-      // With text selected, the author means bold, not a build.
-      if (getSelection().isCollapsed) docxBtn.click();
-    }
+    else if (key === "b") { e.preventDefault(); docxBtn.click(); }
   });
 
   function exportButtons(name, kind, id, source, singleImage) {

@@ -18,9 +18,8 @@ from typing import Any
 from .local_server import RequestError
 from .preview_block_save import (
     DEFINITION,
-    TYPED,
+    _comparable,
     _find,
-    _is_chip,
     _masked,
     _Offsets,
     _spans,
@@ -37,12 +36,17 @@ STYLES = {1: {"em"}, 2: {"strong"}, 3: {"strong", "em"}}
 RUN = re.compile(r"\*{1,3}|(?<!\w)_{1,3}|_{1,3}(?!\w)")
 
 
+def _letters(text: str) -> str:
+    """Text as the check compares it, character by character."""
+    return _comparable(text).replace(" ", "")
+
+
 class _Styled(HTMLParser):
     """Each character of Pandoc's HTML with the styles on it, spaces left out."""
 
     def __init__(self) -> None:
         super().__init__(convert_charrefs=True)
-        self.chars: list[tuple[str, bool, bool]] = []
+        self.chars: list[tuple[str, frozenset[str]]] = []
         self.depth = {"strong": 0, "em": 0}
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
@@ -54,19 +58,14 @@ class _Styled(HTMLParser):
             self.depth[tag] -= 1
 
     def handle_data(self, data: str) -> None:
-        for ch in "".join(data.translate(TYPED).split()):
-            self.chars.append((ch, self.depth["strong"] > 0, self.depth["em"] > 0))
+        styles = frozenset(tag for tag, depth in self.depth.items() if depth)
+        self.chars += [(ch, styles) for ch in _letters(data)]
 
 
-def _styled(block: str, definitions: str) -> list[tuple[str, bool, bool]]:
+def _styled(block: str, definitions: str) -> list[tuple[str, frozenset[str]]]:
     page = _Styled()
     page.feed(alone_html(block, definitions))
     return page.chars
-
-
-def _shown(text: str) -> int:
-    """How many characters of _Styled a piece of rendered text makes."""
-    return len("".join("".join(ch for ch in text if not _is_chip(ch)).translate(TYPED).split()))
 
 
 def _pairs(masked: str) -> list[tuple[re.Match[str], re.Match[str]]]:
@@ -143,14 +142,14 @@ def _toggled(request: dict[str, Any], text: str, source: str, spans: list[tuple[
     definitions = "\n".join(m[0] for m in DEFINITION.finditer(text))
     try:
         chars = _styled(source, definitions)
-        first, last = _shown(before[:start]), _shown(before[:end])
-        if len(chars) != _shown(before):
+        first, last = len(_letters(before[:start])), len(_letters(before[:end]))
+        if len(chars) != len(_letters(before)):
             return None, False, "this paragraph has more on the page than its Markdown shows"
-        slot = 1 if style == "strong" else 2
-        on = not (last > first and all(char[slot] for char in chars[first:last]))
+        on = not (last > first and all(style in styles for _, styles in chars[first:last]))
         patched = _with_style(source, at, stop, style) if on else _without_style(source, at, stop, style)
-        wanted = [(ch, *(on if i == slot - 1 and first <= n < last else flag for i, flag in enumerate(flags)))
-                  for n, (ch, *flags) in enumerate(chars)]
+        changed = {style}
+        wanted = [(ch, (styles | changed if on else styles - changed) if first <= n < last else styles)
+                  for n, (ch, styles) in enumerate(chars)]
         if patched is None or _styled(patched, definitions) != wanted:
             return None, on, "select all of the formatted text, or none of it"
     except (OSError, subprocess.SubprocessError) as exc:
