@@ -74,7 +74,8 @@ the tip of each pushed branch or tag (a few minutes), then the acceptance
 scenarios for what the branch changed since `develop`, and cancels the push
 if one fails. Pushing a `vX.Y.Z` tag also needs n1 and n2 to pass for what
 changed since the previous release, skips included. `git push --no-verify`
-skips it.
+skips it. The connection to GitHub sits idle meanwhile, so `make hooks` also
+sets an SSH keepalive, unless you already have a `core.sshCommand`.
 
 To see what failed in each attempt of a CI run, including a test that passed
 on a re-run: `python3 scripts/ci-failures.py <run id or URL>`.

@@ -114,8 +114,10 @@ test-linux:
 	docker run --rm -v "$(CURDIR):/src:ro" debian:trixie sh /src/scripts/ci-linux.sh
 
 # Test each pushed commit locally (.githooks/pre-push), in place of CI.
+# The push hook runs for minutes while git holds its SSH connection, and GitHub closes it as idle.
 hooks:
 	git config core.hooksPath .githooks
+	git config core.sshCommand >/dev/null || git config core.sshCommand "ssh -o ServerAliveInterval=30"
 
 # Refresh the generated skill copies and diagram exports shipped in template/.
 template-agents:

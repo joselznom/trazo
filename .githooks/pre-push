@@ -1,10 +1,11 @@
 #!/bin/sh
-# Test every pushed commit before it leaves this machine, in place of
-# GitHub Actions: make test-package, test-template and test-update run in a
-# clean checkout of the commit, so uncommitted changes do not count.
+# Test the tip of each pushed branch or tag before it leaves this machine:
+# make test-package, test-template and test-update run in a clean checkout of
+# it, so uncommitted changes do not count. Only this hook runs the acceptance
+# scenarios below; GitHub Actions repeats the tests.
 # A commit that passed is remembered, so pushing it again (a tag, another
-# branch) is instant. `make hooks` turns this on; `git push --no-verify`
-# skips it for work in progress.
+# branch) is instant. `make hooks` turns this on, and keeps the connection to
+# GitHub alive while it runs.
 set -eu
 zero=0000000000000000000000000000000000000000
 tested="$(git rev-parse --path-format=absolute --git-common-dir)/trazo-tested"
