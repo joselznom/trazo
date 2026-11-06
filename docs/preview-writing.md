@@ -23,7 +23,9 @@ before it is written: built alone, the paragraph must read what you left on the
 page. If not, nothing is written, your text stays and the paragraph is flagged
 until you edit its Markdown in place or discard it; if the file changed there,
 you choose yours, the file's, or the Markdown. New headings, sections, tables,
-figures, equations and footnotes stay in the Source tab or the agent's hands.
+figures, equations and footnotes stay in the Source tab or the agent's hands,
+and so do lines that hold a raw TeX environment or HTML, and the lines next to
+them with no blank line between.
 
 Inside a paragraph, ⌘Z undoes your typing. Outside the text, it undoes your
 latest change in the document, a comment or a saved paragraph.
