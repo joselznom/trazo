@@ -213,7 +213,8 @@
   async function undoLatest() {
     const { ok, payload } = await postJson(`/__undo?doc=${encodeURIComponent(doc)}`);
     if (ok && payload.kind === "comment" && undoLabel) send({ op: "undo" }, `Undone: ${undoLabel}`);
-    if (!ok || payload.kind !== "file") return;
+    if (!ok) { toast(`Not undone: ${refusal(payload)}.`); return; }
+    if (payload.kind !== "file") return;
     const { ok: undone, payload: answer } = await postJson("/__source", { op: "undo", file: payload.file });
     toast(undone ? `Undone: the last save of ${payload.file}` : `Not undone: ${refusal(answer)}.`);
   }
