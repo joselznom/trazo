@@ -178,6 +178,25 @@ class MarksTests(unittest.TestCase):
         found, text = self.marked("Quote\n", ">Quote\n")
         self.assertIn("<blockquote>", html(text))
 
+    def test_an_edit_that_ends_on_a_list_marker_keeps_the_list(self):
+        found, text = self.marked("1. Old Two\n", "1. New words:\n   - Two\n")
+        self.assertIn("<ul>", html(text))
+
+    def test_an_edit_across_the_end_of_a_bold_keeps_it(self):
+        found, text = self.marked("**Abc.** one\n", "**Abc!** two\n")
+        self.assertIn("<strong>", html(text))
+
+    def test_an_edit_that_ends_inside_a_run_of_markers_keeps_the_emphasis(self):
+        lines = edit_diff.Lines("x ***a*** y\n")
+        self.assertTrue(lines.inline(2, 9))
+        self.assertFalse(lines.inline(2, 7))  # 4 markers in all, but the closing run is cut
+
+    def test_an_edit_after_a_backslash_keeps_the_escape_and_its_mark(self):
+        lines = edit_diff.Lines("a \\> b\n")
+        self.assertFalse(lines.inline(3, 4))
+        self.assertTrue(lines.inline(2, 4))
+        self.assertFalse(lines.inline(0, 3))  # it would end on the backslash
+
     def test_a_new_file_marks_its_paragraphs_as_new(self):
         found, text = self.marked("", "# Methods\n\nWe did it.\n\nTwice.\n")
         self.assertEqual(len(found), 1)

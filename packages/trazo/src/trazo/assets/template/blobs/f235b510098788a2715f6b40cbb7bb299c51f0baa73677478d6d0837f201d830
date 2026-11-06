@@ -29,8 +29,9 @@ updates when a file changes. Stop it with Ctrl+C in Terminal.
 ## How you work
 
 1. Write in `manuscript/main/` (one file per section) and
-   `manuscript/supplementary/`. Use any text editor (VS Code, TextEdit in
-   plain-text mode) or the preview's **Source** tab, or ask the agent.
+   `manuscript/supplementary/`. Click the text in the preview and type, use
+   any text editor (VS Code, TextEdit in plain-text mode) or the preview's
+   **Source** tab, or ask the agent.
 2. Read the result in the preview. Select text to leave a comment for the
    agent. What the agent changed since your last review is marked in the
    text: click a mark to accept or reject it, or use **Edits** above the
@@ -93,6 +94,39 @@ references and exports. The manuscript cites them with the same labels
 manuscript's the same way. To change the prefix, set `number_prefix` in the
 document's `trazo.toml` entry; `title_prefix = "Supplementary"` gives
 "Supplementary Figure S1" in captions and references.
+
+## Submitting to a journal
+
+Use the `journal-submission` skill with the journal and its instructions URL.
+It configures `[submission]` and `[limits]` in `trazo.toml` and helps adapt
+`manuscript/declarations/*.md` and `manuscript/cover-letter/*.md`. Confirm
+all declarations with the authors; never submit unresolved placeholders.
+
+Declarations default to the manuscript's end, before references. Set
+`declarations = "separate"` for a separate Word file or `"form"` for preview
+only. Keep the stable `decl-` ids when renaming headings; `.form-only` marks
+individual sections that belong only in the journal form. Set
+`title_page = "separate"` for a title page generated from metadata (including
+ORCIDs); optional `manuscript/title-page/*.md` follows it.
+
+Build them with `scripts/trazo build --submission` (in the app, ask the
+agent for the submission files): upload the main and supplementary files plus active
+`output/title_page.docx`, `output/declarations.docx` and
+`output/cover_letter.docx`. `submission.output` changes the separate files'
+folder. Form-only information remains in the preview, not in Word.
+
+`scripts/trazo submission check` lists what is still missing: limits
+(including the number of keywords, `[limits] keywords`), authors and
+affiliations, declarations, every `[PLACEHOLDER: …]`, `[TODO…]` or `[TBD…]`
+left in the sources, and Word files that are missing or out of date.
+With `--strict` it fails while anything must be fixed.
+The preview's **Submission** menu has the same list (Checklist; each row
+opens where it is fixed), the declarations, title page and cover letter, and the fields of the journal's web form (title, abstract, key
+points, keywords, authors, affiliations, declarations, ...) as plain text
+with Copy buttons.
+
+Restart the preview after changing `[submission]` or creating/removing a
+submission folder: documents are registered when the preview starts.
 
 ## References
 
@@ -159,6 +193,7 @@ Claude Code you can also call one directly, for example `/critique`.
 |---|---|
 | `scientific-writing-style` | "Draft the Methods from these notes" |
 | `critique` | "Review the Discussion as a peer reviewer would" |
+| `journal-submission` | "Prepare this article for the journal's instructions" |
 | `comments` | "Answer my comments in the preview" |
 | `add-reference` | "Add the reference for DOI 10.1000/xyz" |
 | `citation-discipline` | "Check the citations" |
@@ -234,6 +269,9 @@ error into the agent.
 manuscript/main/          Sections, built in name order
 manuscript/supplementary/ Supplementary sections
 manuscript/metadata.yaml  Title, authors, keywords, Pandoc settings
+manuscript/declarations/  Journal declarations with stable decl- ids
+manuscript/cover-letter/  Cover letter
+manuscript/title-page/    Optional additions to the generated title page
 bibliography/             references.bib and citation styles (CSL)
 data/                     Data, and values.json ({{v:key}} numbers)
 figures/scripts/          Scripts that make the plots

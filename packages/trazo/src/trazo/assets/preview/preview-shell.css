@@ -51,6 +51,7 @@ html.pv-app *, html.pv-app *::before, html.pv-app *::after { box-sizing: border-
 .pv-words { color: var(--pv-muted); font-variant-numeric: tabular-nums; white-space: nowrap; padding: 0 4px; }
 .pv-words.over { color: var(--pv-err); }
 .pv-hold { color: var(--pv-warn); font-size: 12px; white-space: nowrap; }
+.pv-save-state { color: var(--pv-muted); font-size: 12px; white-space: nowrap; }
 .pv-build { display: inline-flex; align-items: center; gap: 7px; padding: 5px 8px; border-radius: 6px; color: var(--pv-ink-2); white-space: nowrap; }
 .pv-build:hover { background: var(--pv-hover); }
 .pv-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--pv-line-strong); flex: none; }

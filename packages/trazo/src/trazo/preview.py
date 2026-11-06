@@ -56,6 +56,9 @@ re-renders the spec tables in-process (no project code runs), unless the
 project has its own tables stage (a `tables` step or [commands] entry): a
 spec change then reruns it before the rebuild, since it may read the specs.
 Endpoints: GET/POST /__source, /__table-caption, /__figure-text and /__edits,
+POST /__block (an edit of a paragraph's text, see trazo.preview_block_save),
+POST /__block-format (bold and italic, see trazo.preview_block_format),
+GET /__references (the @ menu, see trazo.preview_mentions), GET /__undo (what Cmd+Z undoes),
 GET /__values, GET /__submission (the Submission view's report,
 reused until what it reads changes; ?fields=0 leaves out the form fields,
 ?fresh=S makes it again if its check started over S seconds ago), POST /__locate,
@@ -73,6 +76,8 @@ editor, /diagrams#<name>, with a return link; the Figures & Tables view has an
 added by the viewer only, never in the Word output, and the list of
 diagrams is refreshed at each rebuild. The editor's endpoints (/__diagrams/...)
 are documented in trazo.diagram_editor.
+A click in the text writes there, and leaving it saves to the Markdown
+(trazo.preview_blocks, preview_block_save, preview_block_format).
 Paragraph markers: click opens the source there, Alt-click copies the ¶ label;
 lists have a small pencil marker. Figures and tables have Edit caption;
 spec tables also have Edit table. The full
@@ -92,6 +97,7 @@ Mono, Source Serif 4; SIL OFL) ship with trazo in assets/preview/.
 
 This module holds the preview's paths and state, the routes and the CLI; the
 work lives in preview_comments, preview_sources (the Source tab),
+preview_blocks and preview_block_save (writing on the page),
 preview_edit_review, preview_captions, preview_render, preview_watch and preview_full_build, which
 read that state from here when they run, and is imported back under its old
 names.
@@ -118,6 +124,8 @@ from .background import CommandJob
 from .expand import VALUES_PATH
 from .local_server import Conflict, Download, NotFound  # noqa: F401  (callers catch preview.NotFound)
 from .local_server import RequestError as CommentError
+from .preview_block_format import change_format
+from .preview_block_save import change_block
 
 # Moved to their own modules; imported back because callers and tests use preview.<name>.
 from .preview_captions import (  # noqa: F401
@@ -144,6 +152,7 @@ from .preview_full_build import (  # noqa: F401
     docx_status,
     start_docx_build,
 )
+from .preview_mentions import references
 from .preview_render import (  # noqa: F401
     diagram_links,
     doc_files,
@@ -154,6 +163,7 @@ from .preview_render import (  # noqa: F401
 from .preview_sources import (  # noqa: F401
     change_source,
     get_source,
+    latest_change,
     locate_source,
     read_include_from,
     read_source,
@@ -198,7 +208,8 @@ VIEWER_SCRIPTS = (
     "preview-comment-anchors.js", "preview-comment-list.js", "preview-comment-highlights.js",
     "preview-source.js", "preview-diff.js", "preview-edits.js", "preview-build.js", "preview-new-comments.js",
     "preview-captions.js", "preview-caption-editors.js", "preview-export.js", "preview-export-picker.js",
-    "preview-figures.js", "preview-lightbox.js", "preview-submission.js", "preview.js",
+    "preview-figures.js", "preview-lightbox.js", "preview-submission.js", "preview-writing.js", "preview-paragraphs.js",
+    "preview-format.js", "preview-mentions.js", "preview.js",
 )
 WATCHED = tuple(PROJECT.config["preview"]["watch"])
 PANDOC_FLAGS = [
@@ -212,6 +223,7 @@ PANDOC_FLAGS = [
     "--citeproc",
     "--section-divs",
     "--to=html5",
+    "--wrap=none",  # a line break in a paragraph's HTML would show while writing in it
     f"--css=/{ASSET_URL}preview.css",
 ]
 
@@ -328,7 +340,8 @@ def get_route(path, query):
     routes = {
         "/__status": status, "/__comments": lambda: comments_payload(first("doc")),
         "/__edits": lambda: edits_payload(first("doc")), "/__values": values_info,
-        "/__source": lambda: get_source(first("file")),
+        "/__source": lambda: get_source(first("file")), "/__references": references,
+        "/__undo": lambda: latest_change(first("doc")),
         "/__figure-text": lambda: get_figure_text(first("doc"), first("id")),
         "/__table-caption": lambda: get_table_caption(first("doc"), first("id")),
         "/__export": lambda: export_request(query),
@@ -341,7 +354,7 @@ def get_route(path, query):
 
 def post_route(path, body):
     route = {"/__comments": change_comments, "/__source": change_source, "/__edits": change_edits,
-             "/__figure-text": change_figure_text,
+             "/__block": change_block, "/__block-format": change_format, "/__figure-text": change_figure_text,
              "/__table-caption": change_table_caption,
              "/__locate": locate_source,
              "/__build-docx": start_docx_build, "/__cancel-docx": cancel_docx_build}.get(path)

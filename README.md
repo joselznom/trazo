@@ -40,8 +40,8 @@ Along the way you get:
   citations, numbered figures and tables, and cross-references that
   renumber themselves.
 - **A live preview** where you read the paper as it will look, leave
-  comments for the agent on any sentence, edit the text and see what
-  changed since your last version.
+  comments for the agent on any sentence, write on the page itself and
+  see what changed since your last version.
 - **Figures and tables made from your data**, a diagram editor, and numbers
   in the text that are computed from the data instead of typed.
 - **An agent that knows academic writing**: it drafts sections, adds and
@@ -113,9 +113,11 @@ your data when it makes figures, tables and the numbers in the text.
 3. **Open the preview.** Ask the agent to open the preview (`/trazo:open`).
 4. **Review and edit.** Select a sentence, choose **Comment** and write
    what should change, then ask the agent to answer your comments
-   (or `/trazo:comments`). For small changes, such as a word or a
-   number, edit the Markdown yourself, in the preview's **Source** tab or
-   in any text editor.
+   (or `/trazo:comments`). To change the text yourself, click it in the
+   preview and type: leaving the paragraph saves it to the Markdown.
+   Citations, numbers from your data and formulas stay locked, and `@`
+   inserts a reference, a figure, a table or a value. The preview's
+   **Source** tab and any text editor still work for the Markdown itself.
 5. **Get the Word file.** In the preview, click **Export** and choose the
    full document (**Full manuscript** in an article, or press ⌘B), or ask
    the agent to build the Word files.

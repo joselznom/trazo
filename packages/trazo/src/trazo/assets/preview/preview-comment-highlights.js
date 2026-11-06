@@ -232,10 +232,11 @@
       return;
     }
     const typing = e.target.closest && e.target.closest("textarea, input, select, [contenteditable]");
-    // ⌘Z / Ctrl+Z undoes the last comment change when not typing.
+    // ⌘Z / Ctrl+Z undoes the last change, a comment or a save, when not typing.
     if (e.key === "z" && (e.metaKey || e.ctrlKey) && !e.shiftKey) {
       if (typing) return;
-      if (undoLabel) { e.preventDefault(); send({ op: "undo" }, `Undone: ${undoLabel}`); }
+      e.preventDefault();
+      undoLatest();
       return;
     }
     // j / k (outside text fields) or ⌥↓ / ⌥↑: next / previous open comment.

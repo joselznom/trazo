@@ -20,6 +20,17 @@ Internal changes (tests, CI, refactoring) stay out.
 
 ### New
 
+- Write directly on the preview's text, with no Markdown in sight. Click a
+  paragraph, a list item or a heading and type: leaving it saves your words
+  to the Markdown, Esc discards what you typed since the last save and
+  "Saved" appears by the build status. Citations, numbers from your data,
+  formulas, code and images stay locked. Enter breaks a paragraph or opens a
+  new one, Backspace at its start joins the one before, and blank lines in a
+  paste make paragraphs. Select text and press ⌘B or ⌘I, or B or I in the
+  selection bar, to toggle bold and italic. `@` opens a list of your references,
+  figures, tables and values. If trazo cannot place a change exactly in the
+  Markdown, it saves nothing, keeps your text and asks what to do (#20,
+  #21, #22, #23, #24, #25).
 - The preview marks what changed in your text since you last reviewed it,
   like tracked changes: inserted words in green, deleted ones struck
   through, new paragraphs with a bar. Click a mark to accept or reject it,
@@ -37,6 +48,9 @@ Internal changes (tests, CI, refactoring) stay out.
 
 ### Changed
 
+- ⌘Z in the preview, outside the text, undoes your latest change in the
+  document, a comment or a saved paragraph, where before it undid only
+  comments (#25).
 - Deleting a review comment now removes it for good, after a warning, in
   the preview and in the table and diagram editors. Each comment has a
   trash button, shown when you point at it. Under Resolved you can tick

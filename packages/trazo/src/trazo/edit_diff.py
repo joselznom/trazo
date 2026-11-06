@@ -82,6 +82,8 @@ def changes(base: str, current: str, exact: bool = False) -> list[tuple[int, int
     """Word-level changes as (b0, b1, c0, c1): lines first, then the words
     inside each changed run of lines. `exact` keeps a long run's changes as
     narrow as a short one's, at the cost of LONG_RUN's time."""
+    if base == current:
+        return []
     a, b = base.splitlines(keepends=True), current.splitlines(keepends=True)
     a_at, b_at = list(accumulate(map(len, a), initial=0)), list(accumulate(map(len, b), initial=0))
     out = []
@@ -213,13 +215,14 @@ def _balanced(text: str) -> bool:
         depth += {"[": 1, "]": -1}.get(ch, 0)
         if depth < 0:
             return False
-    if depth or any(plain.count(ch) % 2 for ch in PAIRED):
+    # By runs too: the two asterisks that close a bold are an even count and still half a pair.
+    if depth or any(plain.count(ch) % 2 or len(re.findall(rf"{re.escape(ch)}+", plain)) % 2 for ch in PAIRED):
         return False
     # `_` emphasis opens or closes at a word boundary; inside words it is text.
     return len(re.findall(r"(?<!\w)_|_(?!\w)", plain)) % 2 == 0
 
 
-class _Lines:
+class Lines:
     """Line offsets of a text and where spans may go."""
 
     def __init__(self, text: str) -> None:
@@ -231,19 +234,20 @@ class _Lines:
         # trazo reads headings, `!include` lines and definition terms line by
         # line before Pandoc does (sections, the abstract's keywords, the
         # abbreviation list): a span there would change what it reads.
+        self.prose = markable_lines(self.lines)
         self.markable = [ok and not HEADING.match(line) and not line.startswith(INCLUDE_PREFIX)
                          and not FENCED_DIV.match(line) and not self._term(i)
-                         for i, (ok, line) in enumerate(zip(markable_lines(self.lines), self.lines))]
+                         for i, (ok, line) in enumerate(zip(self.prose, self.lines))]
         context = markdown_context(text)
         self.hidden = [a != b for a, b in zip(context, text)]  # code and comments
-        self.blocked: list[tuple[int, int, bool]] = []  # (start, end, may be inside a span)
+        self.blocked: list[list[tuple[int, int, bool]]] = [[] for _ in self.lines]  # (start, end, may be inside a span)
         for i, line in enumerate(self.lines):
             for pattern in (UNMARKABLE, INLINE_CODE, PLACEHOLDER, CITATION):
                 for m in pattern.finditer(line):
                     # Attributes and HTML may not move into a span; math, link
                     # targets, code, values and citations may, whole.
                     inner = pattern is not UNMARKABLE or m.group(0)[0] not in "{<"
-                    self.blocked.append((self.starts[i] + m.start(), self.starts[i] + m.end(), inner))
+                    self.blocked[i].append((self.starts[i] + m.start(), self.starts[i] + m.end(), inner))
 
     def _term(self, i: int) -> bool:
         """Whether line i is a definition list's term."""
@@ -264,23 +268,41 @@ class _Lines:
             if not self.markable[i]:
                 return False
         segment = self.text[c0:c1]
-        if BLANK_LINE.search(segment) or not _balanced(segment):
+        if BLANK_LINE.search(segment) or not _balanced(segment) or segment.endswith("\n"):
             return False
-        for line in segment.split("\n")[1:]:
-            if BLOCK_START.match(line):
+        # After a backslash, the span's own bracket would be the character it escapes.
+        for edge in (c0, c1):
+            before = self.text[max(0, edge - 8):edge]
+            if (len(before) - len(before.rstrip("\\"))) % 2:
                 return False
+        # A span's edge in a run of markers would leave half of the run outside it.
+        if any(0 < edge < len(self.text) and self.text[edge - 1] == self.text[edge] and self.text[edge] in PAIRED + "_"
+               for edge in (c0, c1)):
+            return False
+        # Whole lines: a span ending on a marker would cut it off from what makes it one.
+        if any(BLOCK_START.match(self.lines[i]) for i in range(first + 1, last + 1)):
+            return False
         if c0 < self.starts[first] + len(_prefix(self.lines[first], STRUCTURE)):
             return False
         if not self.text[self.starts[first]:c0].strip() and segment.strip() and BLOCK_START.match(segment):
             return False
         if any(self.hidden[max(0, c0 - 1):min(len(self.text), c1 + 1)]):
             return False
-        for start, end, inner in self.blocked:
-            if start < c0 < end or start < c1 < end:
-                return False
-            if not inner and c0 <= start and end <= c1 and c1 > c0:
-                return False
+        for i in range(first, last + 1):
+            for start, end, inner in self.blocked[i]:
+                if start < c0 < end or start < c1 < end:
+                    return False
+                if not inner and c0 <= start and end <= c1 and c1 > c0:
+                    return False
         return True
+
+    def holds(self, c0: int, c1: int) -> bool:
+        """Whether a span may wrap text[c0:c1], which Pandoc reads as one unit."""
+        first, last = self.line_of(c0), self.line_of(max(c0, c1 - 1))
+        return (all(self.markable[first:last + 1])
+                and c0 >= self.starts[first] + len(_prefix(self.lines[first], STRUCTURE))
+                and not any(start < edge < end for i in range(first, last + 1)
+                            for start, end, _ in self.blocked[i] for edge in (c0, c1)))
 
     def block_mark_at(self, offset: int) -> int | None:
         """Where an empty span marks the block that `offset` is in, or None."""
@@ -296,7 +318,7 @@ class _Lines:
         if NO_BLOCK_MARK.match(line, at) or not line[at:].strip():
             return None
         position = self.starts[i] + at
-        if any(start < position < end for start, end, _ in self.blocked):
+        if any(start < position < end for start, end, _ in self.blocked[i]):
             return None
         return position
 
@@ -319,12 +341,14 @@ def _blocks_inserted(text: str, c0: int, c1: int) -> list[int]:
     return starts
 
 
-def marked(current: str, found: list[Edit]) -> str:
-    """`current` with the marks of `found`; an edit with no safe place has none."""
+def edit_marks(current: str, found: list[Edit]) -> list[tuple[int, int, str]]:
+    """The marks of `found` as (offset, order, text), where the order at one
+    offset is closers 0, block marks 1, deletions 2, openers 3. An edit with
+    no safe place has none."""
     if not found:
-        return current
-    lines = _Lines(current)
-    inserts: list[tuple[int, int, str]] = []  # (offset, order, text): closers, block marks, deletions, openers
+        return []
+    lines = Lines(current)
+    inserts: list[tuple[int, int, str]] = []
     for e in found:
         attr = f'data-edit="{e.id}"'
         new_text, old_text = e.new.strip(), e.old.strip()
@@ -354,9 +378,19 @@ def marked(current: str, found: list[Edit]) -> str:
         if old_text and BLANK_LINE.search(e.old) and lines.inline(e.c0, e.c0) and not marks:
             marks.append((e.c0, 2, f"[{_escaped(e.old)}]{{.pv-edit-del .pv-edit-del-block {attr}}}"))
         inserts.extend(marks)
+    return inserts
+
+
+def with_marks(current: str, inserts: list[tuple[int, int, str]]) -> str:
+    """`current` with each (offset, order, text) in place."""
     pieces, at = [], 0
     for offset, _, text in sorted(inserts, key=lambda x: (x[0], x[1])):
         pieces.append(current[at:offset] + text)
         at = offset
     pieces.append(current[at:])
     return "".join(pieces)
+
+
+def marked(current: str, found: list[Edit]) -> str:
+    """`current` with the marks of `found`."""
+    return with_marks(current, edit_marks(current, found))
