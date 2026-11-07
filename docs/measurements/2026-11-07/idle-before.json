@@ -1,0 +1,207 @@
+{
+  "machine": {
+    "platform": "macOS-27.2-arm64-arm-64bit",
+    "machine": "arm64",
+    "cpu": "Apple M4",
+    "memory_bytes": "17179869184",
+    "python": "3.12.13 (main, Mar 25 2026, 03:16:06) [Clang 22.1.1 ]",
+    "pandoc": "pandoc 3.9.0.2",
+    "uv": "uv 0.11.3 (Homebrew 2026-04-01 aarch64-apple-darwin)",
+    "commit": "527db7356abebaed4f5c49be37dc87201b82db73",
+    "renderer_sha256": "41dd04c3e8a95b79c8a404fb97a51f0b5a25e902f0b100adde44ee06023e0599",
+    "clock": "namespace(implementation='mach_absolute_time()', monotonic=True, adjustable=False, resolution=4.166666666666667e-08)",
+    "started_utc": "2026-11-06T23:51:04Z",
+    "chrome": {
+      "protocolVersion": "1.3",
+      "product": "Chrome/156.0.8078.80",
+      "revision": "@fb096c0011f9d50f0a264a9376420cdea9c421e3",
+      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/156.0.0.0 Safari/537.36",
+      "jsVersion": "15.6.75.27"
+    }
+  },
+  "samples": [
+    {
+      "index": 0,
+      "wall_seconds": 2.00255304199527,
+      "server_cpu_percent_one_core": 4.494262978938489,
+      "renderer_task_percent_one_core": 0.23205377847919068,
+      "status_requests_per_second": 0.0,
+      "workspace_requests_per_second": 0.9987251064307757
+    },
+    {
+      "index": 1,
+      "wall_seconds": 2.002841957990313,
+      "server_cpu_percent_one_core": 4.992905186605025,
+      "renderer_task_percent_one_core": 0.21259790284564192,
+      "status_requests_per_second": 0.0,
+      "workspace_requests_per_second": 0.9985810373210053
+    },
+    {
+      "index": 2,
+      "wall_seconds": 2.0020371669961605,
+      "server_cpu_percent_one_core": 3.4964385853549036,
+      "renderer_task_percent_one_core": 0.10594208913625355,
+      "status_requests_per_second": 0.0,
+      "workspace_requests_per_second": 0.49949122647927235
+    },
+    {
+      "index": 3,
+      "wall_seconds": 2.0036730830033775,
+      "server_cpu_percent_one_core": 3.992667300799649,
+      "renderer_task_percent_one_core": 0.30174583125793236,
+      "status_requests_per_second": 0.0,
+      "workspace_requests_per_second": 0.9981668251999114
+    },
+    {
+      "index": 4,
+      "wall_seconds": 2.0029455829935614,
+      "server_cpu_percent_one_core": 3.4948528104981955,
+      "renderer_task_percent_one_core": 0.13525080376627974,
+      "status_requests_per_second": 0.0,
+      "workspace_requests_per_second": 0.9985293744280566
+    },
+    {
+      "index": 5,
+      "wall_seconds": 2.0030669999832753,
+      "server_cpu_percent_one_core": 1.996937696059793,
+      "renderer_task_percent_one_core": 0.12116419470842847,
+      "status_requests_per_second": 0.0,
+      "workspace_requests_per_second": 0.9984688480298957
+    },
+    {
+      "index": 6,
+      "wall_seconds": 2.003084416995989,
+      "server_cpu_percent_one_core": 1.9969203324934122,
+      "renderer_task_percent_one_core": 0.10493816347252975,
+      "status_requests_per_second": 0.0,
+      "workspace_requests_per_second": 0.9984601662467053
+    },
+    {
+      "index": 7,
+      "wall_seconds": 2.0027163329941686,
+      "server_cpu_percent_one_core": 2.4966091890431312,
+      "renderer_task_percent_one_core": 0.10865243190715614,
+      "status_requests_per_second": 0.0,
+      "workspace_requests_per_second": 0.9986436756172515
+    },
+    {
+      "index": 8,
+      "wall_seconds": 2.002258166001411,
+      "server_cpu_percent_one_core": 2.497180475974874,
+      "renderer_task_percent_one_core": 0.0999871062580345,
+      "status_requests_per_second": 0.0,
+      "workspace_requests_per_second": 0.9988721903899531
+    },
+    {
+      "index": 9,
+      "wall_seconds": 2.0034387499908917,
+      "server_cpu_percent_one_core": 1.996567152361503,
+      "renderer_task_percent_one_core": 0.10422080535327069,
+      "status_requests_per_second": 0.0,
+      "workspace_requests_per_second": 0.9982835761807506
+    },
+    {
+      "index": 10,
+      "wall_seconds": 2.0035178329853807,
+      "server_cpu_percent_one_core": 3.9929766874495205,
+      "renderer_task_percent_one_core": 0.1672558109955413,
+      "status_requests_per_second": 0.0,
+      "workspace_requests_per_second": 0.9982441718623792
+    },
+    {
+      "index": 11,
+      "wall_seconds": 2.0035517910146154,
+      "server_cpu_percent_one_core": 4.991136263533224,
+      "renderer_task_percent_one_core": 0.21352080935395182,
+      "status_requests_per_second": 0.0,
+      "workspace_requests_per_second": 0.9982272527066461
+    },
+    {
+      "index": 12,
+      "wall_seconds": 2.0035835840099026,
+      "server_cpu_percent_one_core": 4.491951357471057,
+      "renderer_task_percent_one_core": 0.24431224327578727,
+      "status_requests_per_second": 0.0,
+      "workspace_requests_per_second": 0.9982114127713452
+    },
+    {
+      "index": 13,
+      "wall_seconds": 2.0038035000034142,
+      "server_cpu_percent_one_core": 4.990509298932241,
+      "renderer_task_percent_one_core": 0.42938342008012964,
+      "status_requests_per_second": 0.0,
+      "workspace_requests_per_second": 0.9981018597864473
+    },
+    {
+      "index": 14,
+      "wall_seconds": 2.002628249989357,
+      "server_cpu_percent_one_core": 3.99475039865362,
+      "renderer_task_percent_one_core": 0.7386792830910389,
+      "status_requests_per_second": 0.0,
+      "workspace_requests_per_second": 0.9986875996634069
+    },
+    {
+      "index": 15,
+      "wall_seconds": 2.0029743750055786,
+      "server_cpu_percent_one_core": 2.4962875523487806,
+      "renderer_task_percent_one_core": 0.10289697290781562,
+      "status_requests_per_second": 0.0,
+      "workspace_requests_per_second": 0.9985150209395114
+    },
+    {
+      "index": 16,
+      "wall_seconds": 2.0014588750200346,
+      "server_cpu_percent_one_core": 1.9985421883624581,
+      "renderer_task_percent_one_core": 0.10262514137241215,
+      "status_requests_per_second": 0.0,
+      "workspace_requests_per_second": 0.9992710941812282
+    },
+    {
+      "index": 17,
+      "wall_seconds": 2.003392790997168,
+      "server_cpu_percent_one_core": 2.4957661934638917,
+      "renderer_task_percent_one_core": 0.10052946227272488,
+      "status_requests_per_second": 0.0,
+      "workspace_requests_per_second": 0.9983064773855559
+    },
+    {
+      "index": 18,
+      "wall_seconds": 2.001622125011636,
+      "server_cpu_percent_one_core": 2.4979739869586712,
+      "renderer_task_percent_one_core": 0.13888735367490224,
+      "status_requests_per_second": 0.0,
+      "workspace_requests_per_second": 0.9991895947834677
+    },
+    {
+      "index": 19,
+      "wall_seconds": 2.0025619999796618,
+      "server_cpu_percent_one_core": 2.9961619166152755,
+      "renderer_task_percent_one_core": 0.1383727445156837,
+      "status_requests_per_second": 0.0,
+      "workspace_requests_per_second": 0.9987206388717613
+    }
+  ],
+  "summary": {
+    "wall_seconds": {
+      "p50": 2.00295997899957,
+      "p95": 2.0036730830033775
+    },
+    "server_cpu_percent_one_core": {
+      "p50": 3.2455073635567357,
+      "p95": 4.991136263533224
+    },
+    "renderer_task_percent_one_core": {
+      "p50": 0.13681177414098172,
+      "p95": 0.42938342008012964
+    },
+    "status_requests_per_second": {
+      "p50": 0.0,
+      "p95": 0.0
+    },
+    "workspace_requests_per_second": {
+      "p50": 0.9984919344847035,
+      "p95": 0.9991895947834677
+    }
+  },
+  "scope": "20 warm idle windows; ps CPU excludes descendants; Chrome TaskDuration covers the page renderer main thread, not total browser or system energy."
+}
