@@ -202,6 +202,40 @@ class ShellTests(PreviewBrowserTestCase):
             opacity: getComputedStyle(document.body).opacity, animations: document.body.getAnimations().length})"""),
             {"visibility": "visible", "opacity": "1", "animations": 0})
 
+    def test_document_named_comments_stays_stable_until_a_real_edit(self) -> None:
+        titles = json.dumps(preview.PROJECT.titles)
+        documents = {**preview.PROJECT.config["documents"],
+                     "comments": {**preview.PROJECT.config["documents"]["supplementary"], "title": "Comments"}}
+        with patch.dict(preview.PROJECT.config, documents=documents), \
+                patch.dict(preview.DOCS, comments=preview.DOCS["supplementary"]), \
+                patch.dict(preview.STATE, comments=dict(preview.STATE["supplementary"])):
+            for state in preview.STATE.values():
+                state.update(ok=True, error="", warnings=[], version=1)
+            page = preview.OUT_DIR / "manuscript.html"
+            for file in preview.OUT_DIR.glob("*.html"):
+                file.write_text(file.read_text().replace(titles, json.dumps(preview.PROJECT.titles)))
+            (preview.OUT_DIR / "comments.html").write_text(page.read_text().replace(
+                'window.PREVIEW_DOC = "manuscript"', 'window.PREVIEW_DOC = "comments"'))
+            for query in ("", "?view=figures"):
+                with self.subTest(view=query or "document"):
+                    self.open(query)
+                    self.wait_for("document.querySelector('[data-view=figures] .pv-badge')?.textContent === '6'")
+                    # The first workspace reply may refresh documents prefetched before it.
+                    self.wait_for("performance.getEntriesByType('resource')"
+                        ".filter(e => new URL(e.name).pathname === '/__workspace').length >= 2")
+                    origin = self.evaluate("performance.timeOrigin")
+                    self.evaluate("performance.clearResourceTimings()")
+                    # Observe more than one workspace cycle: a false version change refetches
+                    # the other documents or reloads the Figures & Tables view while idle.
+                    self.evaluate("new Promise(resolve => setTimeout(resolve, 2500))")
+                    self.assertEqual(self.evaluate("performance.timeOrigin"), origin)
+                    self.assertEqual(self.evaluate("performance.getEntriesByType('resource')"
+                        ".filter(e => new URL(e.name).pathname.endsWith('.html')).length"), 0)
+                    self.assertEqual(self.evaluate("document.querySelector('.pv-bs-label').textContent"), "Build OK")
+            with preview.LOCK:
+                preview.STATE["comments"]["version"] += 1
+            self.wait_for(f"performance.timeOrigin !== {origin} && document.readyState === 'complete'")
+
     def test_reload_shows_the_last_build_status_and_figures_count_at_once(self):
         self.open()
         self.wait_for("!document.querySelector('[data-view=figures] .pv-badge').hidden")

@@ -48,6 +48,7 @@ Internal changes (tests, CI, refactoring) stay out.
 
 ### Changed
 
+- Saved changes appear sooner in a visible preview, especially in longer papers.
 - ⌘Z in the preview, outside the text, undoes your latest change in the
   document, a comment or a saved paragraph, where before it undid only
   comments (#25).
