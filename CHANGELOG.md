@@ -68,6 +68,8 @@ Internal changes (tests, CI, refactoring) stay out.
 
 ### Fixed
 
+- A build, check or paper update run by the agent that hangs now stops after
+  20 minutes with an error, instead of waiting forever.
 - The table editor no longer shows "null" under a table without a note (#15).
 
 ### Removed
