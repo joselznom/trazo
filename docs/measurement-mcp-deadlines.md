@@ -6,7 +6,8 @@ process group is stopped, available command output is kept, and the same MCP
 session can serve the next request. `TRAZO_MCP_TIMEOUT` sets a positive finite
 number of seconds. Invalid values fail before launching the command.
 
-Product commit: `3f77f64`. Comparison base: `2cc61c0`. Risk: **high**, as the
+Measured product commit: `6edd945` (including the optional-pipe narrowing).
+Original deadline correction: `3f77f64`. Comparison base: `2cc61c0`. Risk: **high**, as the
 MCP lifecycle and error contract change. Rollback: revert this PR, which restores
 unbounded agent subprocess calls. No new cache, dependency or renderer change.
 
@@ -19,41 +20,45 @@ observations. Seconds, p50 / p95. No normal-operation speed improvement is claim
 
 | Paper | Operation | Regime | Before | After |
 | --- | --- | --- | ---: | ---: |
-| Example | diagram_open | cold | 0.067 / 0.070 | 0.067 / 0.083 |
-| Example | diagram_open | warm | 0.064 / 0.080 | 0.072 / 0.080 |
-| Example | mcp_check | cold | 0.472 / 0.485 | 0.454 / 0.463 |
-| Example | mcp_check | warm | 0.471 / 0.478 | 0.451 / 0.458 |
-| Example | preview_start | cold | 1.455 / 1.478 | 1.449 / 1.478 |
-| Example | preview_start | warm | 0.418 / 0.667 | 0.515 / 0.658 |
-| Example | save_visible | cold | 1.065 / 1.099 | 1.073 / 1.095 |
-| Example | save_visible | warm | 1.081 / 1.113 | 1.092 / 1.129 |
-| Example | table_open | cold | 0.067 / 0.069 | 0.075 / 0.085 |
-| Example | table_open | warm | 0.063 / 0.064 | 0.063 / 0.080 |
-| Example | word_full | cold | 0.505 / 0.528 | 0.494 / 0.509 |
-| Example | word_full | warm | 0.393 / 0.401 | 0.393 / 0.399 |
-| Example | word_unchanged | cold | 0.119 / 0.121 | 0.119 / 0.121 |
-| Example | word_unchanged | warm | 0.119 / 0.121 | 0.119 / 0.120 |
-| Load | diagram_open | cold | 0.102 / 0.118 | 0.100 / 0.117 |
-| Load | diagram_open | warm | 0.077 / 0.095 | 0.064 / 0.080 |
-| Load | mcp_check | cold | 1.051 / 1.066 | 1.082 / 1.277 |
-| Load | mcp_check | warm | 1.048 / 1.062 | 1.082 / 1.115 |
-| Load | preview_start | cold | 1.519 / 1.542 | 1.524 / 1.538 |
-| Load | preview_start | warm | 0.434 / 0.698 | 0.431 / 0.697 |
-| Load | save_visible | cold | 2.332 / 2.366 | 2.350 / 2.366 |
-| Load | save_visible | warm | 1.147 / 1.203 | 1.162 / 1.211 |
-| Load | table_open | cold | 0.150 / 0.184 | 0.151 / 0.200 |
-| Load | table_open | warm | 0.096 / 0.113 | 0.080 / 0.113 |
-| Load | word_full | cold | 0.792 / 0.840 | 0.801 / 0.830 |
-| Load | word_full | warm | 0.615 / 0.627 | 0.684 / 0.791 |
-| Load | word_unchanged | cold | 0.132 / 0.136 | 0.176 / 0.185 |
-| Load | word_unchanged | warm | 0.135 / 0.137 | 0.159 / 0.174 |
+| Example | diagram_open | cold | 0.067 / 0.070 | 0.067 / 0.072 |
+| Example | diagram_open | warm | 0.064 / 0.080 | 0.063 / 0.078 |
+| Example | mcp_check | cold | 0.472 / 0.485 | 0.486 / 0.494 |
+| Example | mcp_check | warm | 0.471 / 0.478 | 0.478 / 0.485 |
+| Example | preview_start | cold | 1.455 / 1.478 | 1.469 / 1.476 |
+| Example | preview_start | warm | 0.418 / 0.667 | 0.522 / 0.664 |
+| Example | save_visible | cold | 1.065 / 1.099 | 1.051 / 1.082 |
+| Example | save_visible | warm | 1.081 / 1.113 | 1.080 / 1.127 |
+| Example | table_open | cold | 0.067 / 0.069 | 0.067 / 0.085 |
+| Example | table_open | warm | 0.063 / 0.064 | 0.063 / 0.083 |
+| Example | word_full | cold | 0.505 / 0.528 | 0.526 / 0.539 |
+| Example | word_full | warm | 0.393 / 0.401 | 0.412 / 0.416 |
+| Example | word_unchanged | cold | 0.119 / 0.121 | 0.122 / 0.126 |
+| Example | word_unchanged | warm | 0.119 / 0.121 | 0.125 / 0.128 |
+| Load | diagram_open | cold | 0.102 / 0.118 | 0.101 / 0.116 |
+| Load | diagram_open | warm | 0.077 / 0.095 | 0.063 / 0.080 |
+| Load | mcp_check | cold | 1.051 / 1.066 | 1.041 / 1.064 |
+| Load | mcp_check | warm | 1.048 / 1.062 | 1.040 / 1.050 |
+| Load | preview_start | cold | 1.519 / 1.542 | 1.521 / 1.555 |
+| Load | preview_start | warm | 0.434 / 0.698 | 0.433 / 0.701 |
+| Load | save_visible | cold | 2.332 / 2.366 | 2.334 / 2.365 |
+| Load | save_visible | warm | 1.147 / 1.203 | 1.145 / 1.194 |
+| Load | table_open | cold | 0.150 / 0.184 | 0.159 / 0.200 |
+| Load | table_open | warm | 0.096 / 0.113 | 0.096 / 0.112 |
+| Load | word_full | cold | 0.792 / 0.840 | 0.798 / 0.814 |
+| Load | word_full | warm | 0.615 / 0.627 | 0.615 / 0.627 |
+| Load | word_unchanged | cold | 0.132 / 0.136 | 0.134 / 0.138 |
+| Load | word_unchanged | warm | 0.135 / 0.137 | 0.135 / 0.137 |
 
 The same 25 of 28 p95 budgets pass. Warm source saves on both papers and cold
-source saves on the load paper remain above budget. Load Word/check timings moved
-up while some unrelated editor timings moved down; the full raw samples and
-bootstrap intervals are retained. These movements are not treated as speed wins.
+source saves on the load paper remain above budget. This final run records the
+committed product, identical input hashes and all 560 observations. It is not a
+claim that timeout handling makes successful commands faster.
 
-A second serial control compared the unchanged base with the candidate immediately
+An earlier run at `3f77f64`, retained in `.build/measure/deadline-after/`, showed
+load unchanged-build p95 values of 0.185 s cold and 0.174 s warm, and a warm full
+build p95 of 0.791 s. Those movements did not repeat in the final committed run
+above or the adjacent control below. No observations were discarded.
+That earlier serial control compared the unchanged base with the candidate immediately
 on the same load paper (20 samples per cell on each side). It did not reproduce the
 large Word timing increase:
 
@@ -67,23 +72,26 @@ large Word timing increase:
 The control differences are under 2% in both quantiles. Some bootstrap intervals
 exclude zero, but none meets the declared 5% practical threshold. This is evidence
 against attributing the earlier large movement to the code change, not proof of
-zero overhead. The original observations remain in the table above. Complete
+zero overhead. The original observations remain in `.build/measure/deadline-after/` in the primary worktree. Complete
 commands, samples and comparisons: `.build/measure/deadline-word-control/`.
 
 
-Commands (serial, with no concurrent test/build workload):
+The final run lives in this worktree. Earlier measurements, the baseline papers
+and the before captures live in the primary sibling worktree `t3-a971c6e6`.
+Set `BASE` to that checkout. Commands are serial, with no concurrent test/build
+workload:
 
 ```sh
-uv run --quiet --project packages/trazo python scripts/measure/run.py .build/measure/baseline-papers/example .build/measure/deadline-after/example
-uv run --quiet --project packages/trazo python scripts/measure/run.py '.build/measure/final-papers/carga con acentos á' .build/measure/deadline-after/load
-uv run --quiet --project packages/trazo python scripts/measure/compare.py .build/measure/baseline-example/results.json .build/measure/deadline-after/example/results.json .build/measure/deadline-after/comparison-example.json
-uv run --quiet --project packages/trazo python scripts/measure/compare.py .build/measure/final-load/results.json .build/measure/deadline-after/load/results.json .build/measure/deadline-after/comparison-load.json
+uv run --quiet --project packages/trazo python scripts/measure/run.py "$BASE/.build/measure/baseline-papers/example" .build/measure/deadline-final-head/example
+uv run --quiet --project packages/trazo python scripts/measure/run.py "$BASE/.build/measure/final-papers/carga con acentos á" .build/measure/deadline-final-head/load
+uv run --quiet --project packages/trazo python scripts/measure/compare.py "$BASE/.build/measure/baseline-example/results.json" .build/measure/deadline-final-head/example/results.json .build/measure/deadline-final-head/comparison-example.json
+uv run --quiet --project packages/trazo python scripts/measure/compare.py "$BASE/.build/measure/final-load/results.json" .build/measure/deadline-final-head/load/results.json .build/measure/deadline-final-head/comparison-load.json
 ```
 
 Both papers were force-built again from restored inputs. `equivalence.py PAPER OUT
 --compare BEFORE` returned `equal: true` for both: all normalized DOCX ZIP members,
 diagram exports and renderer hashes match. Captures and real `diagram check --all
---exports --json` results: `.build/measure/deadline-after/word-{example,load}/`.
+--exports --json` results: `.build/measure/deadline-final-head/word-{example,load}/`.
 Before: `.build/measure/word-before-{example,load}/`. Only ZIP container metadata
 and core created/modified timestamps are normalized. No content difference.
 Renderer SHA256:
@@ -115,10 +123,19 @@ make acceptance-auto AUTO=push
 - `make test-package`: **914 tests, OK, one Windows-only skip**, 422.497 test seconds.
 - `make test-template`: exit 0, 40.179 s.
 - Full logs and command records: `.build/measure/deadline-validation-final/`.
-- `make typecheck`: not run; no strict-override module changed.
+- `make typecheck`: run after the optional-pipe correction; exit 2 with 148
+  pre-existing errors in 37 files, none in `mcp_calls.py`. No strict module changed.
 - `make test-update`: not directly applicable; the push hook runs it.
-- Acceptance: `.build/acceptance/20261106T212346Z/report.md`, **18 passed, 0 failed,
-  0 skipped, 0 not automated**. All 18 fresh, none cached.
+- Earlier acceptance at `3f77f64`: `.build/acceptance/20261106T212346Z/report.md`,
+  18 fresh passes, no failures or skips.
+- Final acceptance at `6edd945`: `.build/acceptance/20261106T234107Z/report.md`,
+  **12 passed, 0 failed, 6 skipped, 0 not automated**. All 12 passes are fresh.
+  The Claude keychain login expired or was about to expire. The six unproven
+  scenarios are `n2-slash-commands`, `n2-mcp-connection-time`,
+  `n2-resume-no-hook-note`, `n2-no-venv-standin`, `n2-install-claude` and
+  `n2-update-claude`. Earlier passes are not evidence of a fresh final-tip pass.
+  An agent did not renew the owner's login. Final benchmark, equality and
+  acceptance command logs are in `.build/measure/deadline-final-head/`.
 
 ## Limits
 
