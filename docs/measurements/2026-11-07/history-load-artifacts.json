@@ -1,0 +1,87 @@
+{
+  "comparison": {
+    "equal": true,
+    "different_categories": []
+  },
+  "manifest": {
+    "docx": {
+      "manuscript.docx": {
+        "[Content_Types].xml": "1553e7e68068b3e1da4711068ebb733a6f4dc53e0345748e2e05a40effd2a4c6",
+        "_rels/.rels": "ac6a012040a82c3b23f19cf36dd8d10cad16e2fe442c8665f53dde2b9836178e",
+        "docProps/app.xml": "3af512c1d965d98f87dfdb9d3638ab668264dea6f73aed3ea005f1aa6b533359",
+        "docProps/core.xml": "6658915c85b81b3e5e1b628b1bd0b215f4bd1636162ad57be76dfbaa42f0edac",
+        "docProps/custom.xml": "308c3df0271055725761bf8d4ff4ffc913593816e03d1839de89cd58f4c4f8bf",
+        "word/_rels/document.xml.rels": "761f388fee037dc19c25fb1cacd8172689935ddfeb393d24e297a5ec9635a577",
+        "word/_rels/footnotes.xml.rels": "64e4565eb3cc4903cfd30c427c3ec19a0a7f7663bca964143d48022a88068f04",
+        "word/comments.xml": "7b87229d5af1f34f0fad2e50382eb6c8080c9afa29b641c4ae93e98529d0a320",
+        "word/document.xml": "7133f13bd0879e7cd1697d9dfeb5a59d0f730f24bfe11d91941c31790753d672",
+        "word/fontTable.xml": "855d35ae8c32c3d324061d647f19946c5bb587086f20534898db100b63e7c20f",
+        "word/footer1.xml": "8b8d7cc98a9e3646bebfe8de57aec2d46620d4b5dcbbb67f6e9c4ca401cc0cd3",
+        "word/footnotes.xml": "0862050ac498039adcb369c821645a486c0dd66d3edf3ed464eb7da29ca4b67a",
+        "word/media/rId13.png": "9b60c7ad046b5100d5c6d29a9779c92124cb0fff318ce3e912c5b4e307c80d12",
+        "word/media/rId18.png": "4cb872ac99c2128071058c2fdc9f021a6c88d3197b2ff81bd2049b9182b7b80e",
+        "word/media/rId44.png": "899e64087b155808ff32af4c943040ef683f0cb8500543235270ec8808c28fa5",
+        "word/media/rId48.png": "f7703bc699b9daa500172bbd037d189f631170a2bcdffa4154dd8313aa26803b",
+        "word/media/rId52.png": "408cf5349c0975090d88ff40832f8260406798dde0d5a7f91b7a8341dda837e5",
+        "word/media/rId56.png": "399d6422ff8c2a2cba3469aa02eb15c05478a950c6f26336778df710bb1c981a",
+        "word/media/rId60.png": "1ec93ef511e23642a73c6406cb4b8c71bf459717023852a281e05e61a5f68e4b",
+        "word/media/rId64.png": "1625faa7b6291af1121f0957a37275fa84638f2e73b549bfc209e205a92c4137",
+        "word/media/rId68.png": "0ee7e059144c63f30db3f0b09729a94b3e004b0fe45557eaaebea22965448ee8",
+        "word/media/rId72.png": "4653555a600d349e9469dcdfd4004ff84f59f7c04c5cc979cc2ddd8a38b0fe9e",
+        "word/media/rId76.png": "1c5240bf5283718e45aa0cd7a4de4fc972987f72d565041f29e2d6cf41b99457",
+        "word/media/rId80.png": "1f8181cb273fe5713406247dd0fd7c61e9cbf8cc04684ae2ca1470e96977d9ac",
+        "word/numbering.xml": "4bed7a3a5ff0d9b6d251b6c0ce4de864f5261f5c40cf32e3a8e4d4e682284e39",
+        "word/settings.xml": "7c3e582b8c0c8d60d097edd0338b0e609eb1d6cbba1ef30ac592054c85757991",
+        "word/styles.xml": "32c737b58bec2b75a4c247ebb8371c7567585c4456614e1176e993c0a6a9124d",
+        "word/theme/theme1.xml": "287e41f62eb4a943f333f886d04665d31fb7397ec8f48c589a055c9f1d0cecbf",
+        "word/webSettings.xml": "85ec1f6e8d13bcbdbf7cf928ed9dc75f02bc0600be57bd26c74a3eb2de6dfb4f"
+      },
+      "supplementary.docx": {
+        "[Content_Types].xml": "0cd6720eadf0a2f6d8f06c7757dbc7e3d28034cdf2e1a5eea42227bafe1657b0",
+        "_rels/.rels": "ac6a012040a82c3b23f19cf36dd8d10cad16e2fe442c8665f53dde2b9836178e",
+        "docProps/app.xml": "3af512c1d965d98f87dfdb9d3638ab668264dea6f73aed3ea005f1aa6b533359",
+        "docProps/core.xml": "6658915c85b81b3e5e1b628b1bd0b215f4bd1636162ad57be76dfbaa42f0edac",
+        "docProps/custom.xml": "fce1af75513f1d8d070505b8338659aff45f8e9c0d60fac9b9a9e6b37268e109",
+        "word/_rels/document.xml.rels": "feb3522af26eed65716eb3125f903165718e70007a6dea90f5828a8e562e3526",
+        "word/_rels/footnotes.xml.rels": "948e9e8ec6bef4e7d44f8c6807b051360d36cab0ac13174ca65608820005dddf",
+        "word/comments.xml": "7b87229d5af1f34f0fad2e50382eb6c8080c9afa29b641c4ae93e98529d0a320",
+        "word/document.xml": "f0e5236f65c861c467502374291fe74f2164e96660dc096731217f08f8a6f8b6",
+        "word/fontTable.xml": "855d35ae8c32c3d324061d647f19946c5bb587086f20534898db100b63e7c20f",
+        "word/footer1.xml": "8b8d7cc98a9e3646bebfe8de57aec2d46620d4b5dcbbb67f6e9c4ca401cc0cd3",
+        "word/footnotes.xml": "0862050ac498039adcb369c821645a486c0dd66d3edf3ed464eb7da29ca4b67a",
+        "word/numbering.xml": "4bed7a3a5ff0d9b6d251b6c0ce4de864f5261f5c40cf32e3a8e4d4e682284e39",
+        "word/settings.xml": "7c3e582b8c0c8d60d097edd0338b0e609eb1d6cbba1ef30ac592054c85757991",
+        "word/styles.xml": "32c737b58bec2b75a4c247ebb8371c7567585c4456614e1176e993c0a6a9124d",
+        "word/theme/theme1.xml": "287e41f62eb4a943f333f886d04665d31fb7397ec8f48c589a055c9f1d0cecbf",
+        "word/webSettings.xml": "85ec1f6e8d13bcbdbf7cf928ed9dc75f02bc0600be57bd26c74a3eb2de6dfb4f"
+      }
+    },
+    "exports": {
+      ".gitkeep": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bench01.png": "899e64087b155808ff32af4c943040ef683f0cb8500543235270ec8808c28fa5",
+      "bench02.png": "f7703bc699b9daa500172bbd037d189f631170a2bcdffa4154dd8313aa26803b",
+      "bench03.png": "408cf5349c0975090d88ff40832f8260406798dde0d5a7f91b7a8341dda837e5",
+      "bench04.png": "399d6422ff8c2a2cba3469aa02eb15c05478a950c6f26336778df710bb1c981a",
+      "bench05.png": "1ec93ef511e23642a73c6406cb4b8c71bf459717023852a281e05e61a5f68e4b",
+      "bench06.png": "1625faa7b6291af1121f0957a37275fa84638f2e73b549bfc209e205a92c4137",
+      "bench07.png": "0ee7e059144c63f30db3f0b09729a94b3e004b0fe45557eaaebea22965448ee8",
+      "bench08.png": "4653555a600d349e9469dcdfd4004ff84f59f7c04c5cc979cc2ddd8a38b0fe9e",
+      "bench09.png": "1c5240bf5283718e45aa0cd7a4de4fc972987f72d565041f29e2d6cf41b99457",
+      "bench10.png": "1f8181cb273fe5713406247dd0fd7c61e9cbf8cc04684ae2ca1470e96977d9ac",
+      "fig2_workflow.pdf": "9034afb7303c98df5f9e27235e4c720a730d18007677c0ebe2ae785b602683a1",
+      "fig2_workflow.png": "9b60c7ad046b5100d5c6d29a9779c92124cb0fff318ce3e912c5b4e307c80d12",
+      "fig2_workflow.svg": "76df6997b28a5c8a14a93bdc24a4f6d03a116e7dd53f3186f2048249bc1eacc6"
+    },
+    "renderer_sha256": "41dd04c3e8a95b79c8a404fb97a51f0b5a25e902f0b100adde44ee06023e0599"
+  },
+  "diagram_check": [
+    {
+      "name": "fig2_workflow",
+      "file": "figures/diagrams/fig2_workflow.json",
+      "ok": true,
+      "errors": 0,
+      "warnings": 0,
+      "issues": []
+    }
+  ]
+}

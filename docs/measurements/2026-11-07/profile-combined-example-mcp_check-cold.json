@@ -1,0 +1,163 @@
+{
+  "warning": "Diagnostic runs, nested spans and concurrent threads overlap; not an additive wall-time partition.",
+  "machine": {
+    "platform": "macOS-27.2-arm64-arm-64bit",
+    "machine": "arm64",
+    "cpu": "Apple M4",
+    "memory_bytes": "17179869184",
+    "python": "3.12.13 (main, Mar 25 2026, 03:16:06) [Clang 22.1.1 ]",
+    "pandoc": "pandoc 3.9.0.2",
+    "uv": "uv 0.11.3 (Homebrew 2026-04-01 aarch64-apple-darwin)",
+    "commit": "6ee0bae9a8a6904259bad18a736abf8cd8d9d776",
+    "renderer_sha256": "41dd04c3e8a95b79c8a404fb97a51f0b5a25e902f0b100adde44ee06023e0599",
+    "clock": "namespace(implementation='mach_absolute_time()', monotonic=True, adjustable=False, resolution=4.166666666666667e-08)",
+    "started_utc": "2026-11-07T00:01:20Z",
+    "chrome": {
+      "protocolVersion": "1.3",
+      "product": "Chrome/156.0.8078.80",
+      "revision": "@fb096c0011f9d50f0a264a9376420cdea9c421e3",
+      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/156.0.0.0 Safari/537.36",
+      "jsVersion": "15.6.75.27"
+    }
+  },
+  "operation": {
+    "operation": "mcp_check",
+    "mode": "cold",
+    "instrumented_seconds": 0.5653187920106575,
+    "save_ack_seconds": null,
+    "overlapping_span_seconds": {
+      "filesystem_api": 0.008515919151250273,
+      "pandoc": 0.36869846103945747,
+      "trazo_child_overlapping": 0.5619482499896549
+    },
+    "span_counts": {
+      "filesystem_api": 586,
+      "pandoc": 10,
+      "trazo_child_overlapping": 1
+    },
+    "render_spans": [],
+    "whole_process_top_python_self": [
+      [
+        "crossref.py:390:equations",
+        {
+          "calls": 13744,
+          "own_seconds": 0.005082621000000001,
+          "cumulative_seconds": 0.007780250000000001
+        }
+      ],
+      [
+        "crossref_references.py:229:walk",
+        {
+          "calls": 13747,
+          "own_seconds": 0.003965869,
+          "cumulative_seconds": 0.008218916
+        }
+      ],
+      [
+        "crossref.py:261:blocks_in",
+        {
+          "calls": 13360,
+          "own_seconds": 0.002919726,
+          "cumulative_seconds": 0.003873149
+        }
+      ],
+      [
+        "submission_check.py:66:sections",
+        {
+          "calls": 31,
+          "own_seconds": 0.00116422,
+          "cumulative_seconds": 0.003928500000000001
+        }
+      ],
+      [
+        "counts.py:77:<genexpr>",
+        {
+          "calls": 9435,
+          "own_seconds": 0.00102522,
+          "cumulative_seconds": 0.001365368
+        }
+      ],
+      [
+        "expand.py:168:fenced_lines",
+        {
+          "calls": 7671,
+          "own_seconds": 0.0008990770000000001,
+          "cumulative_seconds": 0.0017010950000000001
+        }
+      ],
+      [
+        "crossref_references.py:233:<genexpr>",
+        {
+          "calls": 6241,
+          "own_seconds": 0.000797713,
+          "cumulative_seconds": 0.001183156
+        }
+      ],
+      [
+        "expand.py:199:substitute",
+        {
+          "calls": 7,
+          "own_seconds": 0.000693757,
+          "cumulative_seconds": 0.0028229170000000003
+        }
+      ],
+      [
+        "abbreviations.py:31:uses",
+        {
+          "calls": 568,
+          "own_seconds": 0.000525807,
+          "cumulative_seconds": 0.0024850790000000003
+        }
+      ],
+      [
+        "abbreviations.py:260:check",
+        {
+          "calls": 3,
+          "own_seconds": 0.00050264,
+          "cumulative_seconds": 0.012955209
+        }
+      ],
+      [
+        "counts.py:57:<genexpr>",
+        {
+          "calls": 634,
+          "own_seconds": 0.00043097000000000003,
+          "cumulative_seconds": 0.013444513000000002
+        }
+      ],
+      [
+        "expand.py:237:include_lines",
+        {
+          "calls": 1002,
+          "own_seconds": 0.00038626700000000003,
+          "cumulative_seconds": 0.000928547
+        }
+      ],
+      [
+        "crossref.py:302:is_subfigure",
+        {
+          "calls": 4044,
+          "own_seconds": 0.000385824,
+          "cumulative_seconds": 0.0005598980000000001
+        }
+      ],
+      [
+        "counts.py:76:inside",
+        {
+          "calls": 1800,
+          "own_seconds": 0.00030212100000000003,
+          "cumulative_seconds": 0.002151853
+        }
+      ],
+      [
+        "abbreviations.py:204:<genexpr>",
+        {
+          "calls": 3679,
+          "own_seconds": 0.000294473,
+          "cumulative_seconds": 0.000434102
+        }
+      ]
+    ],
+    "browser_inclusive_events": {}
+  }
+}

@@ -1,0 +1,231 @@
+{
+  "warning": "Diagnostic runs, nested spans and concurrent threads overlap; not an additive wall-time partition.",
+  "machine": {
+    "platform": "macOS-27.2-arm64-arm-64bit",
+    "machine": "arm64",
+    "cpu": "Apple M4",
+    "memory_bytes": "17179869184",
+    "python": "3.12.13 (main, Mar 25 2026, 03:16:06) [Clang 22.1.1 ]",
+    "pandoc": "pandoc 3.9.0.2",
+    "uv": "uv 0.11.3 (Homebrew 2026-04-01 aarch64-apple-darwin)",
+    "commit": "ee13ca0a8c835749b9575a784171ce7a7007dde4",
+    "renderer_sha256": "41dd04c3e8a95b79c8a404fb97a51f0b5a25e902f0b100adde44ee06023e0599",
+    "clock": "namespace(implementation='mach_absolute_time()', monotonic=True, adjustable=False, resolution=4.166666666666667e-08)",
+    "started_utc": "2026-11-06T19:08:03Z",
+    "chrome": {
+      "protocolVersion": "1.3",
+      "product": "Chrome/156.0.8078.80",
+      "revision": "@fb096c0011f9d50f0a264a9376420cdea9c421e3",
+      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/156.0.0.0 Safari/537.36",
+      "jsVersion": "15.6.75.27"
+    }
+  },
+  "operation": {
+    "operation": "save_visible",
+    "mode": "cold",
+    "instrumented_seconds": 2.444819833996007,
+    "save_ack_seconds": 0.012150916998507455,
+    "overlapping_span_seconds": {
+      "filesystem_api": 0.7819736719247885,
+      "pandoc": 0.9471564590057824,
+      "python_render_span": 1.430597166006919
+    },
+    "span_counts": {
+      "filesystem_api": 8946,
+      "pandoc": 12,
+      "python_render_span": 6
+    },
+    "render_spans": [
+      {
+        "document": "('manuscript',)",
+        "start_from_operation": -0.5194619579997379,
+        "duration": 0.8390379170014057,
+        "end_from_operation": 0.3195759590016678
+      },
+      {
+        "document": "('supplementary',)",
+        "start_from_operation": 0.3195812920166645,
+        "duration": 0.11842858299496584,
+        "end_from_operation": 0.43800987501163036
+      },
+      {
+        "document": "('cover_letter',)",
+        "start_from_operation": 0.4380146670155227,
+        "duration": 0.08125049999216571,
+        "end_from_operation": 0.5192651670076884
+      },
+      {
+        "document": "('manuscript',)",
+        "start_from_operation": 1.076279834000161,
+        "duration": 0.7471181660075672,
+        "end_from_operation": 1.8233980000077281
+      },
+      {
+        "document": "('supplementary',)",
+        "start_from_operation": 1.8234114999941085,
+        "duration": 0.08418062501004897,
+        "end_from_operation": 1.9075921250041574
+      },
+      {
+        "document": "('cover_letter',)",
+        "start_from_operation": 1.9075990419951268,
+        "duration": 0.08004333300050348,
+        "end_from_operation": 1.9876423749956302
+      }
+    ],
+    "whole_process_top_python_self": [
+      [
+        "crossref.py:390:equations",
+        {
+          "calls": 221030,
+          "own_seconds": 0.088736595,
+          "cumulative_seconds": 0.030309832000000002
+        }
+      ],
+      [
+        "crossref.py:261:blocks_in",
+        {
+          "calls": 195035,
+          "own_seconds": 0.049291112000000005,
+          "cumulative_seconds": 0.13826042700000002
+        }
+      ],
+      [
+        "crossref_references.py:229:walk",
+        {
+          "calls": 146926,
+          "own_seconds": 0.043889298,
+          "cumulative_seconds": 0.02155475
+        }
+      ],
+      [
+        "abbreviations.py:31:uses",
+        {
+          "calls": 33783,
+          "own_seconds": 0.042795039,
+          "cumulative_seconds": 0.230052899
+        }
+      ],
+      [
+        "counts.py:77:<genexpr>",
+        {
+          "calls": 203655,
+          "own_seconds": 0.023175003000000003,
+          "cumulative_seconds": 0.030965994000000004
+        }
+      ],
+      [
+        "abbreviations.py:204:<genexpr>",
+        {
+          "calls": 254982,
+          "own_seconds": 0.021535802,
+          "cumulative_seconds": 0.032638416
+        }
+      ],
+      [
+        "abbreviations.py:226:canonical",
+        {
+          "calls": 90166,
+          "own_seconds": 0.019683448000000003,
+          "cumulative_seconds": 0.033893068000000005
+        }
+      ],
+      [
+        "labels.py:120:cites",
+        {
+          "calls": 55913,
+          "own_seconds": 0.014944089,
+          "cumulative_seconds": 0.014255001000000002
+        }
+      ],
+      [
+        "workspace.py:44:handle_starttag",
+        {
+          "calls": 18336,
+          "own_seconds": 0.014248195000000002,
+          "cumulative_seconds": 0.066168081
+        }
+      ],
+      [
+        "workspace.py:48:<genexpr>",
+        {
+          "calls": 113608,
+          "own_seconds": 0.013861406000000001,
+          "cumulative_seconds": 0.020015359
+        }
+      ],
+      [
+        "abbreviations.py:260:check",
+        {
+          "calls": 9,
+          "own_seconds": 0.013093806000000001,
+          "cumulative_seconds": 1.092834625
+        }
+      ],
+      [
+        "expand.py:168:fenced_lines",
+        {
+          "calls": 107741,
+          "own_seconds": 0.012738119000000001,
+          "cumulative_seconds": 0.024620538
+        }
+      ],
+      [
+        "expand.py:199:substitute",
+        {
+          "calls": 13,
+          "own_seconds": 0.011510641,
+          "cumulative_seconds": 0.207445126
+        }
+      ],
+      [
+        "submission_check.py:66:sections",
+        {
+          "calls": 120,
+          "own_seconds": 0.011058274,
+          "cumulative_seconds": 0.045998548
+        }
+      ],
+      [
+        "workspace.py:77:handle_endtag",
+        {
+          "calls": 18336,
+          "own_seconds": 0.011031848,
+          "cumulative_seconds": 0.017440698
+        }
+      ]
+    ],
+    "browser_inclusive_events": {
+      "Layout": 0.13969599999999996,
+      "ParseHTML": 0.07579200000000004,
+      "EvaluateScript": 0.07551300000000001,
+      "v8.run": 0.07457899999999998,
+      "UpdateLayoutTree": 0.016675000000000002,
+      "DocumentLoader::CommitNavigation": 0.016566,
+      "DocumentLoader::StartLoadingResponse": 0.012603,
+      "BackgroundJSStreamManager::RunScriptStreamingTask": 0.010515,
+      "v8.parseOnBackground": 0.010311999999999998,
+      "CorsURLLoaderFactory::CreateLoaderAndStart": 0.010276999999999998,
+      "v8.parseOnBackgroundParsing": 0.01018,
+      "CorsURLLoader::Start": 0.009256000000000004,
+      "CorsURLLoader::StartRequest": 0.009161000000000008,
+      "CorsURLLoader::StartNetworkRequest": 0.009009000000000001,
+      "DocumentLoader::CreateParserPostCommit": 0.007827999999999998,
+      "URLLoader::URLLoader": 0.0077090000000000014,
+      "v8.callFunction": 0.007263999999999998,
+      "URLLoader::ScheduleStart": 0.007081000000000004,
+      "PrePaint": 0.0068959999999999985,
+      "V8PerIsolateData::Initialize": 0.006067,
+      "FunctionCall": 0.005908,
+      "Paint": 0.005309000000000002,
+      "LocalWindowProxy::Initialize": 0.005241999999999999,
+      "DocumentLoader::FinishedLoading": 0.004795,
+      "ThrottlingURLLoader::OnReceiveResponse": 0.004335,
+      "EventDispatch": 0.00392600000000001,
+      "CorsURLLoader::HandleComplete": 0.0029130000000000007,
+      "LocalWindowProxy::CreateContext": 0.0026639999999999997,
+      "V8.DeserializeContext": 0.0026409999999999997,
+      "network::URLLoader::SendResponseToClient": 0.0024909999999999997
+    }
+  }
+}

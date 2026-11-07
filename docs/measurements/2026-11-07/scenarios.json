@@ -1,0 +1,83 @@
+[
+  {
+    "name": "pandoc_missing",
+    "violations": [],
+    "old_docx_preserved": true,
+    "valid_docx": true,
+    "mcp_alive": true,
+    "recovered": true,
+    "deadline_seconds": 30
+  },
+  {
+    "name": "pandoc_invalid",
+    "violations": [],
+    "old_docx_preserved": true,
+    "valid_docx": true,
+    "mcp_alive": true,
+    "recovered": true,
+    "deadline_seconds": 30
+  },
+  {
+    "name": "port_busy",
+    "violations": [],
+    "recovered": true
+  },
+  {
+    "name": "edit_during_build",
+    "violations": [],
+    "next_build_contains_agent_text": true,
+    "limitation": "The first build may represent the snapshot before the edit; only a subsequent build is verified here."
+  },
+  {
+    "name": "readonly_directory",
+    "violations": [],
+    "status": 500,
+    "preserved": true,
+    "recovered": true
+  },
+  {
+    "name": "corrupt_history",
+    "violations": [],
+    "status": 500,
+    "retry_status": 200,
+    "source_preserved": true,
+    "recovered": true
+  },
+  {
+    "name": "corrupt_table",
+    "violations": [],
+    "recovered": true
+  },
+  {
+    "name": "concurrent_writers",
+    "violations": [
+      "HTTP save acknowledged success after overwriting the independent writer; its text is absent from history"
+    ],
+    "site": "before_replace | portable.py:46:replace > review_storage.py:51:write_atomic > preview_sources.py:166:change_source > preview.py:361:<lambda>",
+    "writer": "in-place write",
+    "limitation": "An independent writer does not take review_lock. A change after the locked read and before publication can be overwritten without notice or recovery."
+  },
+  {
+    "name": "concurrent_atomic_writers",
+    "violations": [
+      "HTTP save acknowledged success after overwriting the independent writer; its text is absent from history"
+    ],
+    "site": "before_replace | portable.py:46:replace > review_storage.py:51:write_atomic > preview_sources.py:166:change_source > preview.py:361:<lambda>",
+    "writer": "atomic replacement",
+    "limitation": "An independent writer does not take review_lock. A change after the locked read and before publication can be overwritten without notice or recovery."
+  },
+  {
+    "name": "fuzz",
+    "violations": [],
+    "source_preserved": true
+  },
+  {
+    "name": "pandoc_hang",
+    "violations": [],
+    "old_docx_preserved": true,
+    "valid_docx": true,
+    "mcp_alive": true,
+    "recovered": true,
+    "deadline_seconds": 3
+  }
+]

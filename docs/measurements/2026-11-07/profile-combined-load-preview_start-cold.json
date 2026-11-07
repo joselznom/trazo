@@ -1,0 +1,221 @@
+{
+  "warning": "Diagnostic runs, nested spans and concurrent threads overlap; not an additive wall-time partition.",
+  "machine": {
+    "platform": "macOS-27.2-arm64-arm-64bit",
+    "machine": "arm64",
+    "cpu": "Apple M4",
+    "memory_bytes": "17179869184",
+    "python": "3.12.13 (main, Mar 25 2026, 03:16:06) [Clang 22.1.1 ]",
+    "pandoc": "pandoc 3.9.0.2",
+    "uv": "uv 0.11.3 (Homebrew 2026-04-01 aarch64-apple-darwin)",
+    "commit": "6ee0bae9a8a6904259bad18a736abf8cd8d9d776",
+    "renderer_sha256": "41dd04c3e8a95b79c8a404fb97a51f0b5a25e902f0b100adde44ee06023e0599",
+    "clock": "namespace(implementation='mach_absolute_time()', monotonic=True, adjustable=False, resolution=4.166666666666667e-08)",
+    "started_utc": "2026-11-07T00:01:40Z",
+    "chrome": {
+      "protocolVersion": "1.3",
+      "product": "Chrome/156.0.8078.80",
+      "revision": "@fb096c0011f9d50f0a264a9376420cdea9c421e3",
+      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/156.0.0.0 Safari/537.36",
+      "jsVersion": "15.6.75.27"
+    }
+  },
+  "operation": {
+    "operation": "preview_start",
+    "mode": "cold",
+    "instrumented_seconds": 1.7097588750184514,
+    "save_ack_seconds": null,
+    "overlapping_span_seconds": {
+      "filesystem_api": 0.11848198343068361,
+      "uv": 0.011922082980163395,
+      "project_script": 0.13118879200192168,
+      "trazo_child_overlapping": 0.2522843749902677,
+      "watcher_scan": 0.007746207993477583,
+      "pandoc": 0.5986302479868755,
+      "python_render_span": 0.9382290419889614
+    },
+    "span_counts": {
+      "filesystem_api": 4075,
+      "uv": 1,
+      "project_script": 3,
+      "trazo_child_overlapping": 1,
+      "watcher_scan": 1,
+      "pandoc": 11,
+      "python_render_span": 3
+    },
+    "render_spans": [
+      {
+        "document": "('manuscript',)",
+        "start_from_operation": 0.31025249999947846,
+        "duration": 0.7732089170021936,
+        "end_from_operation": 1.083461417001672
+      },
+      {
+        "document": "('supplementary',)",
+        "start_from_operation": 1.0834661250119098,
+        "duration": 0.08157295800629072,
+        "end_from_operation": 1.1650390830182005
+      },
+      {
+        "document": "('cover_letter',)",
+        "start_from_operation": 1.1650438750220928,
+        "duration": 0.08344716698047705,
+        "end_from_operation": 1.2484910420025699
+      }
+    ],
+    "whole_process_top_python_self": [
+      [
+        "crossref.py:390:equations",
+        {
+          "calls": 146052,
+          "own_seconds": 0.052771388,
+          "cumulative_seconds": 0.081254082
+        }
+      ],
+      [
+        "crossref.py:261:blocks_in",
+        {
+          "calls": 128769,
+          "own_seconds": 0.028406427,
+          "cumulative_seconds": 0.038145262
+        }
+      ],
+      [
+        "crossref_references.py:229:walk",
+        {
+          "calls": 73462,
+          "own_seconds": 0.019175533,
+          "cumulative_seconds": 0.038876166000000004
+        }
+      ],
+      [
+        "labels.py:120:cites",
+        {
+          "calls": 56445,
+          "own_seconds": 0.014885716,
+          "cumulative_seconds": 0.021135501
+        }
+      ],
+      [
+        "counts.py:77:<genexpr>",
+        {
+          "calls": 103229,
+          "own_seconds": 0.013285904000000001,
+          "cumulative_seconds": 0.017715556
+        }
+      ],
+      [
+        "abbreviations.py:31:uses",
+        {
+          "calls": 11257,
+          "own_seconds": 0.010708501,
+          "cumulative_seconds": 0.08008137500000001
+        }
+      ],
+      [
+        "abbreviations.py:226:canonical",
+        {
+          "calls": 33791,
+          "own_seconds": 0.0072288840000000005,
+          "cumulative_seconds": 0.012409258000000001
+        }
+      ],
+      [
+        "abbreviations.py:204:<genexpr>",
+        {
+          "calls": 84966,
+          "own_seconds": 0.006681086,
+          "cumulative_seconds": 0.009985144000000001
+        }
+      ],
+      [
+        "abbreviations.py:394:handle_data",
+        {
+          "calls": 3043,
+          "own_seconds": 0.004937578000000001,
+          "cumulative_seconds": 0.012236402
+        }
+      ],
+      [
+        "expand.py:168:fenced_lines",
+        {
+          "calls": 40869,
+          "own_seconds": 0.0049353010000000004,
+          "cumulative_seconds": 0.009450846
+        }
+      ],
+      [
+        "crossref.py:302:is_subfigure",
+        {
+          "calls": 50626,
+          "own_seconds": 0.004500456,
+          "cumulative_seconds": 0.006634039
+        }
+      ],
+      [
+        "submission_check.py:66:sections",
+        {
+          "calls": 43,
+          "own_seconds": 0.0043867490000000006,
+          "cumulative_seconds": 0.016804793000000002
+        }
+      ],
+      [
+        "expand.py:199:substitute",
+        {
+          "calls": 5,
+          "own_seconds": 0.0043266630000000006,
+          "cumulative_seconds": 0.012479167000000001
+        }
+      ],
+      [
+        "crossref_references.py:233:<genexpr>",
+        {
+          "calls": 33882,
+          "own_seconds": 0.004196575,
+          "cumulative_seconds": 0.006297989
+        }
+      ],
+      [
+        "preview_blocks.py:202:<genexpr>",
+        {
+          "calls": 361,
+          "own_seconds": 0.003957523,
+          "cumulative_seconds": 0.0039899490000000004
+        }
+      ]
+    ],
+    "browser_inclusive_events": {
+      "EvaluateScript": 0.060134999999999994,
+      "v8.run": 0.05964,
+      "ParseHTML": 0.059222,
+      "Layout": 0.053531999999999996,
+      "UpdateLayoutTree": 0.007901,
+      "CorsURLLoaderFactory::CreateLoaderAndStart": 0.007161,
+      "CorsURLLoader::Start": 0.006585999999999997,
+      "CorsURLLoader::StartRequest": 0.006546,
+      "CorsURLLoader::StartNetworkRequest": 0.006468,
+      "URLLoader::URLLoader": 0.0058350000000000025,
+      "BackgroundJSStreamManager::RunScriptStreamingTask": 0.004242,
+      "v8.parseOnBackground": 0.0041589999999999995,
+      "v8.parseOnBackgroundParsing": 0.004101,
+      "URLLoader::ScheduleStart": 0.003732000000000003,
+      "DocumentLoader::CommitNavigation": 0.0031660000000000004,
+      "v8.callFunction": 0.0031260000000000003,
+      "PrePaint": 0.0030369999999999998,
+      "Paint": 0.002553,
+      "FunctionCall": 0.002475999999999999,
+      "ThrottlingURLLoader::OnReceiveResponse": 0.002460000000000001,
+      "DocumentLoader::StartLoadingResponse": 0.00246,
+      "DocumentLoader::CreateParserPostCommit": 0.0022930000000000003,
+      "DecodedDataDocumentParser::AppendBytes": 0.0015320000000000002,
+      "FireAnimationFrame": 0.001385,
+      "NavigationBodyLoader::StartLoadingBody": 0.0013720000000000002,
+      "NavigationBodyLoader::OnReadable": 0.001354,
+      "NavigationBodyLoader::ReadFromDataPipe": 0.001352,
+      "DocumentLoader::BodyDataReceivedImpl": 0.001346,
+      "DocumentLoader::HandleData": 0.001337,
+      "DocumentLoader::CommitData": 0.001336
+    }
+  }
+}

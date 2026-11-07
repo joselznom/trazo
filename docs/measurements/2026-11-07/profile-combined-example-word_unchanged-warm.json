@@ -1,0 +1,163 @@
+{
+  "warning": "Diagnostic runs, nested spans and concurrent threads overlap; not an additive wall-time partition.",
+  "machine": {
+    "platform": "macOS-27.2-arm64-arm-64bit",
+    "machine": "arm64",
+    "cpu": "Apple M4",
+    "memory_bytes": "17179869184",
+    "python": "3.12.13 (main, Mar 25 2026, 03:16:06) [Clang 22.1.1 ]",
+    "pandoc": "pandoc 3.9.0.2",
+    "uv": "uv 0.11.3 (Homebrew 2026-04-01 aarch64-apple-darwin)",
+    "commit": "6ee0bae9a8a6904259bad18a736abf8cd8d9d776",
+    "renderer_sha256": "41dd04c3e8a95b79c8a404fb97a51f0b5a25e902f0b100adde44ee06023e0599",
+    "clock": "namespace(implementation='mach_absolute_time()', monotonic=True, adjustable=False, resolution=4.166666666666667e-08)",
+    "started_utc": "2026-11-07T00:01:20Z",
+    "chrome": {
+      "protocolVersion": "1.3",
+      "product": "Chrome/156.0.8078.80",
+      "revision": "@fb096c0011f9d50f0a264a9376420cdea9c421e3",
+      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/156.0.0.0 Safari/537.36",
+      "jsVersion": "15.6.75.27"
+    }
+  },
+  "operation": {
+    "operation": "word_unchanged",
+    "mode": "warm",
+    "instrumented_seconds": 0.1634050830034539,
+    "save_ack_seconds": null,
+    "overlapping_span_seconds": {
+      "filesystem_api": 0.005674924701452255,
+      "trazo_child_overlapping": 0.16045812499942258,
+      "pandoc": 0.05787812502239831
+    },
+    "span_counts": {
+      "filesystem_api": 431,
+      "trazo_child_overlapping": 1,
+      "pandoc": 2
+    },
+    "render_spans": [],
+    "whole_process_top_python_self": [
+      [
+        "expand.py:199:substitute",
+        {
+          "calls": 4,
+          "own_seconds": 0.0006476140000000001,
+          "cumulative_seconds": 0.0028951660000000002
+        }
+      ],
+      [
+        "expand.py:168:fenced_lines",
+        {
+          "calls": 5250,
+          "own_seconds": 0.000636443,
+          "cumulative_seconds": 0.0012070790000000002
+        }
+      ],
+      [
+        "submission_check.py:66:sections",
+        {
+          "calls": 12,
+          "own_seconds": 0.000391304,
+          "cumulative_seconds": 0.0014909580000000001
+        }
+      ],
+      [
+        "expand.py:237:include_lines",
+        {
+          "calls": 990,
+          "own_seconds": 0.000387047,
+          "cumulative_seconds": 0.000907868
+        }
+      ],
+      [
+        "expand.py:267:form_sections",
+        {
+          "calls": 12,
+          "own_seconds": 0.000255647,
+          "cumulative_seconds": 0.001305292
+        }
+      ],
+      [
+        "build_graph.py:227:digest",
+        {
+          "calls": 18,
+          "own_seconds": 0.00020626200000000003,
+          "cumulative_seconds": 0.014696624
+        }
+      ],
+      [
+        "expand.py:245:expand_file",
+        {
+          "calls": 44,
+          "own_seconds": 0.00018491900000000002,
+          "cumulative_seconds": 0.002384209
+        }
+      ],
+      [
+        "abbreviations.py:53:<genexpr>",
+        {
+          "calls": 1904,
+          "own_seconds": 0.00018188000000000001,
+          "cumulative_seconds": 0.00059585
+        }
+      ],
+      [
+        "frontmatter.py:133:render",
+        {
+          "calls": 12,
+          "own_seconds": 0.00017604000000000003,
+          "cumulative_seconds": 0.05942104100000001
+        }
+      ],
+      [
+        "expand.py:290:expand_files",
+        {
+          "calls": 12,
+          "own_seconds": 0.00015158400000000002,
+          "cumulative_seconds": 0.09081454200000001
+        }
+      ],
+      [
+        "mcp_calls.py:82:run",
+        {
+          "calls": 2,
+          "own_seconds": 0.000116124,
+          "cumulative_seconds": 0.32062545800000003
+        }
+      ],
+      [
+        "expand.py:120:_replace",
+        {
+          "calls": 736,
+          "own_seconds": 0.00011177300000000002,
+          "cumulative_seconds": 0.001760159
+        }
+      ],
+      [
+        "expand.py:297:<genexpr>",
+        {
+          "calls": 4,
+          "own_seconds": 0.00010504200000000002,
+          "cumulative_seconds": 0.013839124000000001
+        }
+      ],
+      [
+        "frontmatter.py:74:_front",
+        {
+          "calls": 8,
+          "own_seconds": 0.00010402700000000001,
+          "cumulative_seconds": 0.000305416
+        }
+      ],
+      [
+        "build_graph.py:578:pandoc_docx",
+        {
+          "calls": 4,
+          "own_seconds": 0.00010382800000000001,
+          "cumulative_seconds": 0.17054954300000003
+        }
+      ]
+    ],
+    "browser_inclusive_events": {}
+  }
+}
