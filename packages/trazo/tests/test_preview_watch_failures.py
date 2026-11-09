@@ -164,11 +164,12 @@ class WatcherBackoffTests(unittest.TestCase):
 
         with patch.object(preview, "build", side_effect=build), \
                 patch.dict(preview.STATE, {name: {} for name in preview.DOCS}), \
-                patch.dict(preview.WATCHER, {"synced": 0.0, "rebuild": {"manuscript"}, "outputs": []}), \
+                patch.dict(preview.WATCHER, {"synced": 0.0, "rebuild": {"manuscript", "supplementary"}, "outputs": []}), \
                 patch.object(preview_watch.time, "monotonic", side_effect=itertools.count(1000, 100)), \
                 contextlib.redirect_stdout(io.StringIO()):  # the clock jumps: every retry is due
             preview.watch(stop_event=Mock(**{"wait.side_effect": tick}))
-        self.assertEqual(built, ["manuscript"] * 4, "a retry rebuilt (and reloaded) a page that had built")
+        self.assertEqual(built, ["manuscript", "supplementary"] + ["manuscript"] * 3,
+                         "a retry rebuilt (and reloaded) a page that had built")
 
 
 if __name__ == "__main__":

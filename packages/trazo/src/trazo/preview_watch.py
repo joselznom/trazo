@@ -256,11 +256,11 @@ def watch(interval=0.5, stop_event=None, previous=None, numbers=None, failure=""
                 if (now := numbered()) != shown:
                     failed |= build_all([name for name in preview.DOCS if name not in targets])
             shown = now
-            if rendered:  # every output is now what its spec makes: no note on one edited by hand holds
-                with preview.LOCK:
-                    preview.WATCHER["outputs"] = []
-            elif failure or any(p.is_relative_to(table.OUTPUT_DIR) for p in changed):
-                preview_edit_review.check_outputs()  # only an output changed by itself may differ
+            # A render above replaced the outputs it could, so a note on one edited by hand may no
+            # longer hold (and a hand edit during it must still be noted); otherwise only an output
+            # changed by itself may differ.
+            if failure or rendered or any(p.is_relative_to(table.OUTPUT_DIR) for p in changed):
+                preview_edit_review.check_outputs()
             if failed:  # retried like any failure: a fix without an edit (a permission) still shows
                 raise PageFailed(failed)
             if failure:
@@ -269,8 +269,9 @@ def watch(interval=0.5, stop_event=None, previous=None, numbers=None, failure=""
         except Exception as exc:  # keep watching; every page says why it is old
             # Nothing of this pass is lost: table work that failed stays pending, and
             # the retry rebuilds the pages that failed (every page after a watcher failure).
-            with preview.LOCK:
-                cast(set[str], preview.WATCHER["rebuild"]).update(requested)
+            if not isinstance(exc, PageFailed):  # after one, every page asked for was built
+                with preview.LOCK:
+                    cast(set[str], preview.WATCHER["rebuild"]).update(requested)
             failure = report_failure(exc, failure)
             preview.WATCHER["synced"] = checked  # the status describes these sources: its error says the page is old
             failed_on, failures = None if current is None else sources(current), failures + 1
