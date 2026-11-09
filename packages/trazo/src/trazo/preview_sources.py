@@ -91,12 +91,11 @@ def change_source(request):
     only if the file is still exactly what that save wrote; with {expect:
     save_id} only if that save is still the file's latest (409 otherwise,
     and the save stays undoable). Undoing a rejection of edits (kind
-    "reject") makes those edits pending again.
+    "reject") makes those edits pending again. A save that wrote answers
+    with its `save_id`, what `expect` names.
 
-    An answer that wrote the file adds `written`, the time.time() after the
-    write: the page's build has it once the watcher's `synced` (in
-    /__workspace) is later. A save that wrote adds `save_id`, what `expect`
-    names.
+    Every write sets WATCHER["written"] (trazo.preview), so a page holds its
+    reload until the watcher has built it.
     """
     from . import preview
     if not isinstance(request, dict):
@@ -126,7 +125,8 @@ def change_source(request):
                 preview_edit_review.absorb(file, old, entry["before_text"])
             del entries[mine[-1]]
             save_file_history(entries)
-            wrote = {"written": time.time()}
+            mark_written()
+            wrote = {}
         else:
             text = request.get("text")
             if not isinstance(text, str):
@@ -144,9 +144,18 @@ def change_source(request):
                 save_file_history(entries)
                 write_atomic(path, new)
                 preview_edit_review.absorb(file, old, text)
-                wrote = {"written": time.time(), "save_id": at}
+                mark_written()
+                wrote = {"save_id": at}
         data, text = read_source(path)
         return {**source_state(file, path, data, text), **wrote}
+
+
+def mark_written():
+    """A manuscript file was just written: pages hold their reload until the
+    watcher's `synced` is later (both in /__workspace)."""
+    from . import preview
+    with preview.LOCK:
+        preview.WATCHER["written"] = time.time()
 
 
 def latest_change(doc):

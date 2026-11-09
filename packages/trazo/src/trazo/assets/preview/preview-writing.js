@@ -117,11 +117,27 @@
 
   const refusal = (payload) => payload.refused || payload.error || "the server refused";
 
+  // A request of the save queue; a server that does not answer refuses it.
+  async function postQueued(path, body) {
+    try {
+      return await postJson(path, body);
+    } catch (e) {
+      return { ok: false, status: 0, payload: { error: "the preview server did not answer" } };
+    }
+  }
+
+  // Keys wait while a join or an undo waits for its answer: what is typed meanwhile would be lost.
+  function holdKeys(ed, on) {
+    ed.joining = on;
+    ed.el.contentEditable = on ? "false" : "plaintext-only";
+    if (!on) ed.el.focus({ preventScroll: true });
+  }
+
   // One at a time and in order: a save may need the key the one before it got.
   // `group` are the paragraphs the block becomes, the first being the one sent.
+  // A save that was done becomes `step` of the history (preview-history.js), with what `results()` gives.
   let saveQueue = Promise.resolve();
-  // `saved` runs after a save that was done, with its answer and what was sent (preview-history.js).
-  function sendBlock(ed, body, { path = "/__block", group = [ed], block = group[0], refused = showFailure, done = null, when = null, saved = null } = {}) {
+  function sendBlock(ed, body, { path = "/__block", group = [ed], block = group[0], refused = showFailure, done = null, when = null, step = null, results = null } = {}) {
     saves++;
     showSaveState("Saving…");
     saveQueue = saveQueue.then(async () => {
@@ -134,12 +150,7 @@
       }
       const { file, h: key } = block.mark.dataset;
       const sent = typeof body === "function" ? body() : body;
-      let result;
-      try {
-        result = await postJson(path, { file, h: key, ...sent });
-      } catch (e) {
-        result = { ok: false, status: 0, payload: { error: "the preview server did not answer" } };
-      }
+      const result = await postQueued(path, { file, h: key, ...sent });
       saves--;
       if (!result.ok || !result.payload.saved) {
         showSaveState("", false);
@@ -148,7 +159,7 @@
       }
       if (done) { showSaveState("Saved", true); done(result.payload); }
       else blockSaved(ed, result.payload, group, sent);
-      if (saved) saved(result.payload, sent);
+      if (step) addStep(step, { payload: result.payload, results: results(), saved: sent.before });
     });
   }
 

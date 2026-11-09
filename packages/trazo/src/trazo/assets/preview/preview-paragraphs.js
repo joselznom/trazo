@@ -120,7 +120,8 @@
         }
         showFailure(...failure);
       },
-      saved: (payload, sent) => addStep(step, { payload, results: [[first.el, left], [second.el, right]], saved: sent.before }),
+      step,
+      results: () => [[first.el, left], [second.el, right]],
     });
     return spaceAfter;
   }
@@ -151,16 +152,13 @@
     }
     if (ed.draftOf) saveBlock(ed);
     const step = newStep("join", ed, [previous, ed.el]);
-    // What is typed before the answer would be lost with this paragraph.
-    ed.joining = true;
-    ed.el.contentEditable = "false";
+    holdKeys(ed, true);
     sendBlock(ed, () => ({ before: ed.before, after: textOf(ed.el), previous: textOf(previous), into: mark.dataset.h, ...mentionsIn(ed.el) }), {
       done: (payload) => joinTo(ed, previous, payload),
-      saved: (payload, sent) => addStep(step, { payload, results: [[previous, textOf(previous)]], saved: sent.before }),
+      step,
+      results: () => [[previous, textOf(previous)]],
       refused: (_, status, payload) => {
-        ed.joining = false;
-        ed.el.contentEditable = "plaintext-only";
-        ed.el.focus({ preventScroll: true });
+        holdKeys(ed, false);
         toast(`Not joined: ${refusal(payload)}.`);
       },
     });

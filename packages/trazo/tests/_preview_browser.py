@@ -38,6 +38,8 @@ class PreviewBrowserTestCase(unittest.TestCase):
             "HISTORY_PATH": root / "history.json",
             "EDITS_PATH": root / "edits.json",
             "STATE": {name: dict(state) for name, state in preview.STATE.items()},
+            # No watcher runs here: a test that builds a save sets `synced` as it would.
+            "WATCHER": {"synced": 0.0, "written": 0.0, "rebuild": set(), "outputs": []},
         }.items():
             patcher = patch.object(preview, name, value)
             patcher.start()

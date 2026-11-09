@@ -19,8 +19,8 @@ Characters from U+E800 in `after` are new chips, named by {mentions}
 (trazo.preview_mentions). U+F8FF in `after` is a paragraph break: the block becomes several, each checked
 alone (in a list, new items). An empty `after` deletes the block. {into, previous}
 joins the block to the one before it, whose key and text they are. The answer's
-`parts` are the keys of the blocks the edit left; one that wrote the file adds
-change_source's `written` and `save_id`, for the page's reload and its undo.
+`parts` are the keys of the blocks the edit left, and `save_id` names its save
+for an undo of just that save (change_source).
 """
 
 from __future__ import annotations
@@ -276,11 +276,6 @@ def _holds_more(text: str, block: Block) -> bool:
     return len(following) - len(following.lstrip()) > len(prefix) - len(prefix.lstrip())
 
 
-def _wrote(state: dict[str, Any]) -> dict[str, Any]:
-    """What a save's answer passes on from change_source: when it wrote, and its undo id."""
-    return {key: state[key] for key in ("written", "save_id") if key in state}
-
-
 def change_block(request: Any) -> dict[str, Any]:
     """Write an edit of one block; see the module's docstring."""
     if not isinstance(request, dict):
@@ -316,4 +311,4 @@ def change_block(request: Any) -> dict[str, Any]:
     if BREAK in new and len(parts) != new.count(BREAK) + 1:
         return {"refused": "a paragraph cannot start there", "file": file, "markdown": source}
     wrote = change_source({"file": file, "text": changed, "base_sha256": state["sha256"]})
-    return {"saved": True, "file": file, "markdown": written, "parts": parts, **_wrote(wrote)}
+    return {"saved": True, "file": file, "markdown": written, "parts": parts, "save_id": wrote.get("save_id")}

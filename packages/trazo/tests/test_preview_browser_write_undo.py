@@ -7,7 +7,6 @@ own undo has nothing of theirs to take back; the viewer's history does.
 import json
 import time
 import unittest
-from unittest.mock import patch
 
 from _preview_writing import WritingCase
 
@@ -180,9 +179,6 @@ class WriteUndoTests(WritingCase):
 
 class ReloadAfterSavesTests(WritingCase):
     def test_the_page_waits_for_the_build_of_its_last_save(self):
-        watcher = patch.object(preview, "WATCHER", {"synced": 0.0, "rebuild": set(), "outputs": []})
-        watcher.start()
-        self.addCleanup(watcher.stop)
         self.build(TEXT)
         self.evaluate("window.samePage = true")
         self.write_in("Next")

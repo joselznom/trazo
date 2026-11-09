@@ -171,9 +171,6 @@ class SourceEditTests(PreviewBrowserTestCase):
         self.assertFalse(self.evaluate("document.querySelector('.pv-figsview').hidden"))
 
     def test_source_save_keeps_reading_anchor_and_source_selection_after_reflow(self):
-        watcher = patch.object(preview, "WATCHER", {"synced": 0.0, "rebuild": set(), "outputs": []})
-        watcher.start()
-        self.addCleanup(watcher.stop)
         source = _support.ROOT / "manuscript/main/99_reading_position.md"
         self.addCleanup(source.unlink, missing_ok=True)
         self.keep_files(preview.FILE_HISTORY_PATH)

@@ -66,7 +66,8 @@
         ed.restore = snapshotOf(ed.el);
         if (writing === ed) { selection.removeAllRanges(); selection.addRange(range); pressFormatButtons(); }
       },
-      saved: (payload, sent) => addStep(step, { payload, results: [[ed.el, textOf(ed.el)]], saved: sent.before }),
+      step,
+      results: () => [[ed.el, textOf(ed.el)]],
     });
   }
 

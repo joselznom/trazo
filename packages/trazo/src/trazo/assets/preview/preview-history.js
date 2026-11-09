@@ -14,6 +14,7 @@
   let undoSteps = [], redoSteps = [];
   let historyRun = 0;     // a step answered after the author left the text belongs to no history
   let replaying = false;  // a step Cmd+Shift+Z makes again keeps the steps still to redo
+  const MAX_STEPS = 100;  // each keeps the nodes of the blocks it changed
 
   const blockOf = (el) => { const item = itemOf(el); return item && item !== el ? item : el; };
   // A selection as positions, not a live Range: a step's own changes would move one.
@@ -36,13 +37,13 @@
       children: [...parent.childNodes],
       subtrees: outers.map(snapshotOf),
       data: within(".pv-src, .pv-head, .pv-atom").map((node) => [node, { ...node.dataset }]),
-      blocks: [...blockMark].filter(([el]) => outers.some((outer) => outer.contains(el))),
+      blocks: within(`p, li, ${HEADINGS}`).filter((el) => blockMark.has(el)).map((el) => [el, blockMark.get(el)]),
     };
   }
 
   function putBackState(state) {
-    const { parent, children } = state;
-    for (const node of [...parent.childNodes]) if (!children.includes(node)) node.remove();
+    const { parent, children } = state, kept = new Set(children);
+    for (const node of [...parent.childNodes]) if (!kept.has(node)) node.remove();
     // Only what moved is put back in its place: moving the rest would collapse their comments' ranges.
     let next = null;
     for (let i = children.length - 1; i >= 0; i--) {
@@ -69,8 +70,9 @@
   // Called once the action is on the page and, but for a new empty paragraph, in the file.
   // `results`: [paragraph, text] it left; `saved`: the file's text for the target once undone.
   function addStep(step, { payload, ...rest }) {
-    if (step.run !== historyRun || (payload && payload.save_id === undefined)) return;  // a save that wrote nothing
+    if (step.run !== historyRun || (payload && payload.save_id == null)) return;  // a save that wrote nothing
     undoSteps.push({ ...step, ...rest, file: payload?.file, saveId: payload?.save_id });
+    if (undoSteps.length > MAX_STEPS) undoSteps.shift();
     if (!step.keepRedo) redoSteps = [];
   }
 
@@ -103,23 +105,13 @@
     undoSteps.pop();
     if (!step.saveId) { putBack(step); return true; }
     const ed = writing;
-    ed.joining = true;  // keys wait: what is typed before the answer would be lost
-    ed.el.contentEditable = "false";
+    holdKeys(ed, true);
     saves++;
     showSaveState("Undoing…");
     saveQueue = saveQueue.then(async () => {
-      let result;
-      try {
-        result = await postJson("/__source", { op: "undo", file: step.file, expect: step.saveId });
-      } catch (e) {
-        result = { ok: false, payload: { error: "the preview server did not answer" } };
-      }
+      const result = await postQueued("/__source", { op: "undo", file: step.file, expect: step.saveId });
       saves--;
-      if (writing === ed) {
-        ed.joining = false;
-        ed.el.contentEditable = "plaintext-only";
-        ed.el.focus({ preventScroll: true });
-      }
+      if (writing === ed) holdKeys(ed, false);
       if (!result.ok) {
         showSaveState("", false);
         toast(`Not undone: ${refusal(result.payload)}.`);
