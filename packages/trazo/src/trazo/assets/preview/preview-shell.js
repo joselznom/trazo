@@ -75,7 +75,7 @@
     `<section class="pv-pane" data-pane="comments">` +
     `<div class="pv-csum"><div class="pv-cfilter" role="group" aria-label="Show comments">` +
     `<button type="button" data-filter="active" aria-pressed="true" title="Open and to check">Active <span class="n"></span></button>` +
-    `<button type="button" data-filter="resolved" aria-pressed="false">Resolved <span class="n"></span></button></div><div class="pv-stepper">` +
+    `<button type="button" data-filter="resolved" aria-pressed="false">Resolved <span class="n"></span></button></div><div class="pv-cpick"></div><div class="pv-stepper">` +
     `<button type="button" class="pv-icon-btn" data-step="-1" aria-label="Previous open comment" title="Previous open comment (k or ⌥↑)">${ICONS.up}</button>` +
     `<button type="button" class="pv-icon-btn" data-step="1" aria-label="Next open comment" title="Next open comment (j or ⌥↓)">${ICONS.down}</button></div></div>` +
     `<div class="pv-csum-text" aria-live="polite"></div><div class="pv-pane-scroll"></div></section>` +

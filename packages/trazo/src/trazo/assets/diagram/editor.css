@@ -332,7 +332,7 @@ textarea.input { height: auto; min-height: 64px; padding: 8px 9px; resize: verti
 .composer .pin-to b { color: var(--text); font-weight: 600; }
 .composer .pin-to button { margin-left: auto; }
 .composer .foot { display: flex; align-items: center; justify-content: space-between; margin-top: 8px; }
-.cfilter { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 14px 4px; }
+.cfilter { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 4px 8px; padding: 10px 14px 4px; }
 .cfilter .seg { display: inline-flex; }
 .cfilter .seg button { display: inline-flex; align-items: center; gap: 5px; padding: 0 10px; }
 .cfilter .n { color: var(--text-3); font-variant-numeric: tabular-nums; }
@@ -371,10 +371,6 @@ textarea.input { height: auto; min-height: 64px; padding: 8px 9px; resize: verti
 .ccard .del:hover { color: var(--err); }
 .ccard .reply-box { margin-top: 8px; }
 .ccard .reply-box .foot { display: flex; justify-content: flex-end; gap: 6px; margin-top: 6px; }
-.cfoot { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin: 12px 14px 8px; padding-top: 8px;
-  border-top: 1px solid var(--border); }
-.cfoot button { padding: 0; border: 0; background: none; color: var(--text-3); font-size: 12px; }
-.cfoot button:hover { color: var(--text); }
 
 /* ---------- floating layers ---------- */
 

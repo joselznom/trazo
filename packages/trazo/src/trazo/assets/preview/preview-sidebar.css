@@ -16,6 +16,8 @@
 .pv-csum-text { flex: none; padding: 7px 14px 0; color: var(--pv-muted); font-size: 12px; }
 .pv-csum-text b { color: var(--pv-accent); font-weight: 600; }
 .pv-stepper { flex: none; display: flex; gap: 2px; }
+.pv-cpick { flex: 1; display: flex; flex-wrap: wrap; justify-content: flex-end; min-width: 0; }
+.pv-cpick:empty { display: none; }
 .pv-card {
   position: relative; background: var(--pv-card); border: 1px solid var(--pv-line); border-radius: 8px;
   padding: 10px 12px 8px; margin-bottom: 8px; cursor: pointer; min-width: 0; transition: border-color 0.15s, box-shadow 0.15s;
@@ -68,9 +70,6 @@
 .pv-hint { margin: 0; padding: 4px 2px 0; color: var(--pv-muted); font-size: 12px; }
 .pv-empty { margin: 0; padding: 36px 12px; text-align: center; color: var(--pv-muted); font-size: 13px; }
 .pv-empty b { display: block; margin-bottom: 4px; color: var(--pv-ink-2); font-weight: 600; }
-.pv-cfoot { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin: 12px 0 8px; padding: 8px 4px 0; border-top: 1px solid var(--pv-line); }
-.pv-cfoot button { color: var(--pv-muted); font-size: 12px; }
-.pv-cfoot button:hover { color: var(--pv-ink); }
 
 /* Source tab. */
 .pv-source { display: flex; flex-direction: column; flex: 1; min-height: 0; }
