@@ -71,8 +71,8 @@ independent writes, silent:
 | Protocol | In-place | Atomic | Late, through an open file |
 | --- | ---: | ---: | ---: |
 | Before (6a60168) | 288 | 267 | 500 |
-| Exchange (APFS) | 0 (314 got 409) | 0 (280 got 409) | 0 (500 kept as late copies) |
-| No exchange, simulated | 3 | 12 | 500 |
+| Exchange (APFS) | 0 (285 got 409) | 0 (264 got 409) | 0 (500 kept as late copies) |
+| No exchange, simulated | 7 | 16 | 500 |
 
 The simulated row reports an `exfat` filesystem type to trazo on the same APFS
 disk; no disk image was mounted. Browser text was never lost by trazo: every
