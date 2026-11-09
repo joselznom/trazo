@@ -157,6 +157,13 @@
     if (Array.isArray(st.conflicts)) copies.set(file, st.conflicts);
     if (st.exact === false) inexact = true;
   }
+  function hideNote(op) {
+    if (op === "hide-copies") sset("preview-src-copies:" + cur, (copies.get(cur) || []).join("\n"));
+    else sset("preview-src-inexact", "seen");
+    updateSourceUi();
+  }
+  // Notes are live regions: rewriting the same text on every keystroke could re-announce them.
+  const setText = (el, text) => { if (el.textContent !== text) el.textContent = text; };
 
   async function sourceOperation(file, action) {
     if (!file || sourceBusy.has(file)) return;
@@ -199,13 +206,13 @@
     undoBtn.disabled = !b || busy || !b.canUndo;
     srcConflict.hidden = !(b && b.conflict);
     const kept = b && b.conflict ? b.conflict.kept : [];
-    $("span", srcConflict).textContent = kept.length
+    setText($("span", srcConflict), kept.length
       ? `Another program changed this file while it was being saved. Its version is on disk; your text is still here, and a copy is at ${kept.join(", ")}.`
-      : "The file changed on disk.";
+      : "The file changed on disk.");
     const copied = (cur && copies.get(cur)) || [];
     copiesNote.hidden = !copied.length || sget("preview-src-copies:" + cur) === copied.join("\n");
-    $("span", copiesNote).textContent = `trazo kept ${copied.length === 1 ? "a copy" : copied.length + " copies"} of text written ` +
-      `while another program wrote this file too: ${copied.join(", ")}. trazo never deletes them.`;
+    setText($("span", copiesNote), `trazo kept ${copied.length === 1 ? "a copy" : copied.length + " copies"} of text written ` +
+      `while another program wrote this file too: ${copied.join(", ")}. trazo never deletes them.`);
     inexactNote.hidden = !inexact || sget("preview-src-inexact") === "seen";
     $(".dirty", rtabs).hidden = ![...buffers.values()].some(isDirty);
   }
@@ -311,11 +318,3 @@
       }
     });
   }
-
-  srcBox.addEventListener("click", (e) => {
-    const op = e.target.dataset && e.target.dataset.op;
-    if (op === "hide-copies") sset("preview-src-copies:" + cur, (copies.get(cur) || []).join("\n"));
-    else if (op === "hide-inexact") sset("preview-src-inexact", "seen");
-    else return;
-    updateSourceUi();
-  });

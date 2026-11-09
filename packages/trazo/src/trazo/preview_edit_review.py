@@ -207,6 +207,7 @@ def change_edits(request: Any) -> dict[str, Any]:
                 store["files"][name] = edit_diff.accept(store["files"].get(name, ""), chosen)
                 continue
             new = edit_diff.reject(text, chosen).encode("utf-8")
+            # Read before publishing: a damaged history must stop the rejection first.
             history = read_file_history() if history is None else history
             history.append({"time": time.strftime("%Y-%m-%d %H:%M:%S"), "at": time.time_ns(), "file": name, "kind": "reject",
                             "before_text": text, "before_sha": sha256_of(data), "after_sha": sha256_of(new)})

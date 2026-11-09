@@ -68,23 +68,28 @@ def _libc() -> Any:
     return ctypes.CDLL(None, use_errno=True)
 
 
-def filesystem_type(folder: str | os.PathLike[str]) -> str:
-    """The type of the filesystem `folder` is on ("apfs", "ext4"...); "" when unknown."""
+@functools.cache
+def _statfs() -> Any:
     import ctypes
     libc = _libc()
     if libc is None:
-        return ""
+        return None
+    # Intel Macs name the 64-bit-inode struct statfs$INODE64; Apple silicon has only that one.
+    statfs = getattr(libc, "statfs$INODE64", None) if sys.platform == "darwin" else None
+    statfs = statfs or libc.statfs
+    statfs.argtypes = [ctypes.c_char_p, ctypes.c_char_p]
+    return statfs
+
+
+def filesystem_type(folder: str | os.PathLike[str]) -> str:
+    """The type of the filesystem `folder` is on ("apfs", "ext4"...); "" when unknown."""
+    import ctypes
+    statfs = _statfs()
     buffer = ctypes.create_string_buffer(4096)  # larger than struct statfs on either system
-    if sys.platform == "darwin":
-        # Intel Macs name the 64-bit-inode struct statfs$INODE64; Apple silicon has only that one.
-        statfs = getattr(libc, "statfs$INODE64", None) or libc.statfs
-        statfs.argtypes = [ctypes.c_char_p, ctypes.c_char_p]
-        if statfs(os.fsencode(folder), buffer) != 0:
-            return ""
-        return buffer.raw[72:88].split(b"\0", 1)[0].decode("ascii", "replace")  # f_fstypename
-    libc.statfs.argtypes = [ctypes.c_char_p, ctypes.c_char_p]
-    if libc.statfs(os.fsencode(folder), buffer) != 0:
+    if statfs is None or statfs(os.fsencode(folder), buffer) != 0:
         return ""
+    if sys.platform == "darwin":
+        return buffer.raw[72:88].split(b"\0", 1)[0].decode("ascii", "replace")  # f_fstypename
     magic = ctypes.c_long.from_buffer(buffer).value & 0xFFFFFFFF  # f_type comes first
     return _LINUX_FILESYSTEMS.get(magic, f"{magic:#x}")
 

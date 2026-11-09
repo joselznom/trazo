@@ -100,7 +100,7 @@ def source_state(file, path, data, text):
     sha = sha256_of(data)
     entries = [e for e in read_file_history() if e.get("file") == file]
     source_publish.sweep(path, file, lambda: {sha} | {e["after_sha"] for e in entries}
-                         | {sha256_of(e["before_text"].encode("utf-8")) for e in entries})
+                         | {e.get("before_sha") or sha256_of(e["before_text"].encode("utf-8")) for e in entries})
     return {"file": file, "text": text, "sha256": sha,
             "can_undo": bool(entries) and entries[-1].get("after_sha") == sha,
             "conflicts": source_publish.conflicts(file), "exact": can_exchange(path.parent)}
@@ -187,7 +187,7 @@ def change_source(request):
                 raise Conflict("the file changed on disk since it was loaded",
                                sha256=current)
             new = text.encode("utf-8")
-            reply = {}
+            reply: dict[str, Any] = {}
             if new != data:
                 entries.append({"time": time.strftime("%Y-%m-%d %H:%M:%S"), "at": time.time_ns(), "file": file,
                                 "before_text": old, "before_sha": current,
@@ -198,7 +198,7 @@ def change_source(request):
                     entries.pop()
                     save_file_history(entries)
                     raise collided(file, path, result)
-                reply = {"exact": result.exact, **({"warning": result.warning} if result.warning else {})}
+                reply = {"exact": result.exact, "warning": result.warning}
                 preview_edit_review.absorb(file, old, text)
             # What this save wrote, not a re-read: the browser keeps this sha256 as
             # its base, so a write landing after the rename must make its next save a 409.

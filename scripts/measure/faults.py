@@ -56,21 +56,24 @@ def files(root: Path) -> dict[str, bytes]:
             if path.is_file() and not path.name.endswith((".tmp", ".lock")) and "__pycache__" not in str(path)}
 
 
+def in_history(root: Path, old: bytes) -> bool:
+    """Whether some undo history of the paper holds `old` as a previous text."""
+    history = []
+    for path in (root / "notes/review").glob("*history.json"):
+        try:
+            history.extend(json.loads(path.read_text()))
+        except (ValueError, TypeError):
+            pass
+    old_text = old.decode("utf-8")
+    return any(e.get("before") == old_text or e.get("before_text") == old_text for e in history if isinstance(e, dict))
+
+
 def violations(root: Path, operation: str, before: dict[str, bytes], after: dict[str, bytes]) -> list[str]:
     problems = []
     actual = files(root)
     user_file = USER_FILES.get(operation)
-    if user_file and actual.get(user_file) != before.get(user_file):
-        history = []
-        for path in (root / "notes/review").glob("*history.json"):
-            try:
-                history.extend(json.loads(path.read_text()))
-            except (ValueError, TypeError):
-                pass
-        old_text = before[user_file].decode("utf-8")
-        if not any(e.get("before") == old_text or e.get("before_text") == old_text
-                   for e in history if isinstance(e, dict)):
-            problems.append("previous user text is absent from both the file and undo history")
+    if user_file and actual.get(user_file) != before.get(user_file) and not in_history(root, before[user_file]):
+        problems.append("previous user text is absent from both the file and undo history")
     for name, data in actual.items():
         if data in (before.get(name), after.get(name)):
             continue
@@ -124,12 +127,7 @@ def housekeeping(root: Path, operation: str, response: dict, before: dict[str, b
     user_file = USER_FILES[operation] if operation == "source" else ""
     if not user_file or not (response.get("body") or {}).get("warning"):
         return ""
-    if files(root).get(user_file) != after.get(user_file):
-        return ""
-    old_text = before[user_file].decode("utf-8")
-    store = root / "notes/review/file_history.json"
-    history = json.loads(store.read_text()) if store.is_file() else []
-    if not any(e.get("before_text") == old_text for e in history):
+    if files(root).get(user_file) != after.get(user_file) or not in_history(root, before[user_file]):
         return ""
     return "post-publication housekeeping failed; save reported with a recovery warning, old text in undo history"
 

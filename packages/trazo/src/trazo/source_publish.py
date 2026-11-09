@@ -36,7 +36,7 @@ from pathlib import Path
 from uuid import uuid4
 
 from .portable import ExchangeUnsupported, exchange, replace
-from .review_storage import REVIEW_DIR, ROOT
+from .review_storage import REVIEW_DIR, ROOT, write_atomic
 
 CONFLICTS_DIR = REVIEW_DIR / "conflicts"
 DISPLACED_DIR = REVIEW_DIR / "displaced"
@@ -63,12 +63,16 @@ def shown(path: Path) -> str:
     return path.relative_to(ROOT).as_posix() if path.is_relative_to(ROOT) else str(path)
 
 
+def _copy_path(name: str, kind: str) -> Path:
+    folder = CONFLICTS_DIR / name
+    folder.mkdir(parents=True, exist_ok=True)
+    return folder / f"{time.strftime('%Y%m%d-%H%M%S')}-{uuid4().hex[:8]}.{kind}.md"
+
+
 def _keep(source: Path, name: str, kind: str) -> Path:
     """Move `source` into the conflict copies of `name`: the same file, so a
     program still writing to it writes into the copy."""
-    folder = CONFLICTS_DIR / name
-    folder.mkdir(parents=True, exist_ok=True)
-    target = folder / f"{time.strftime('%Y%m%d-%H%M%S')}-{uuid4().hex[:8]}.{kind}.md"
+    target = _copy_path(name, kind)
     try:
         os.replace(source, target)
     except OSError as exc:
@@ -80,12 +84,9 @@ def _keep(source: Path, name: str, kind: str) -> Path:
 
 
 def _keep_bytes(data: bytes, name: str, kind: str) -> Path:
-    folder = CONFLICTS_DIR / name
-    folder.mkdir(parents=True, exist_ok=True)
-    fd, tmp = tempfile.mkstemp(dir=folder, suffix=".tmp")
-    with os.fdopen(fd, "wb") as handle:
-        handle.write(data)
-    return _keep(Path(tmp), name, kind)
+    target = _copy_path(name, kind)
+    write_atomic(target, data)
+    return target
 
 
 def publish(path: Path, data: bytes, expected: bytes, name: str) -> Publication:
@@ -125,9 +126,11 @@ def publish(path: Path, data: bytes, expected: bytes, name: str) -> Publication:
 
 
 def _park(tmp: Path, expected: bytes, name: str) -> Publication:
-    """The save is published; set the displaced file aside for sweep()."""
+    """The save is published; set the displaced file aside for sweep(), after
+    sweeping the earlier ones, so files never opened in the Source tab expire too."""
     target = DISPLACED_DIR / name / f"{time.time_ns()}.{_sha(expected)}"
     try:
+        _sweep_parked(name)
         target.parent.mkdir(parents=True, exist_ok=True)
         os.replace(tmp, target)
     except OSError as exc:
@@ -174,16 +177,7 @@ def sweep(path: Path, name: str, known: Callable[[], set[str]]) -> None:
     after DISPLACED_GRACE. A `.swap` file left by a killed save is deleted when
     its sha256 is in known() (the current file and the undo history), else kept.
     """
-    parked_folder = DISPLACED_DIR / name
-    if parked_folder.is_dir():
-        for parked in parked_folder.iterdir():
-            stamp, _, sha = parked.name.partition(".")
-            if not stamp.isdigit():
-                continue
-            if _sha(parked.read_bytes()) != sha:
-                _keep(parked, name, "late")
-            elif time.time_ns() - int(stamp) > DISPLACED_GRACE * 10**9:
-                parked.unlink()
+    _sweep_parked(name)
     orphans = list(path.parent.glob(glob.escape(path.name) + ".*.swap"))
     hashes = known() if orphans else set()
     for orphan in orphans:
@@ -191,6 +185,20 @@ def sweep(path: Path, name: str, known: Callable[[], set[str]]) -> None:
             orphan.unlink()
         else:
             _keep(orphan, name, "recovered")
+
+
+def _sweep_parked(name: str) -> None:
+    folder = DISPLACED_DIR / name
+    if not folder.is_dir():
+        return
+    for parked in folder.iterdir():
+        stamp, _, sha = parked.name.partition(".")
+        if not stamp.isdigit():
+            continue
+        if _sha(parked.read_bytes()) != sha:
+            _keep(parked, name, "late")
+        elif time.time_ns() - int(stamp) > DISPLACED_GRACE * 10**9:
+            parked.unlink()
 
 
 def conflicts(name: str) -> list[str]:

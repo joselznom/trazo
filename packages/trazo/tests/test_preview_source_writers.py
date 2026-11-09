@@ -13,7 +13,7 @@ import sys
 import tempfile
 import threading
 import unittest
-from contextlib import ExitStack
+from contextlib import AbstractContextManager, nullcontext
 from pathlib import Path
 from unittest.mock import patch
 
@@ -80,7 +80,7 @@ class IndependentWriters(unittest.TestCase):
         else:
             self.path.write_text(new, encoding="utf-8")
 
-    def writing_in_the_window(self, atomic: bool, step: str = "save_file_history") -> ExitStack:
+    def writing_in_the_window(self, atomic: bool, step: str = "save_file_history") -> AbstractContextManager:
         """The other program writes once, right after the save's `step`: writing
         its undo entry, or (for an undo) reading the history."""
         original = getattr(preview_sources, step)
@@ -92,19 +92,14 @@ class IndependentWriters(unittest.TestCase):
                 done.append(True)
                 self.append(atomic)
             return result
-        stack = ExitStack()
-        stack.enter_context(patch.object(preview_sources, step, step_then_write))
-        return stack
+        return patch.object(preview_sources, step, step_then_write)
 
     def filesystems(self) -> list[str | None]:
         """None: the real one, when it can swap files atomically; else one that cannot."""
         return ([None] if portable.can_exchange(self.path.parent) else []) + [NO_EXCHANGE]
 
-    def as_filesystem(self, kind: str | None) -> ExitStack:
-        stack = ExitStack()
-        if kind is not None:
-            stack.enter_context(patch.object(portable, "filesystem_type", lambda folder: kind))
-        return stack
+    def as_filesystem(self, kind: str | None) -> AbstractContextManager:
+        return nullcontext() if kind is None else patch.object(portable, "filesystem_type", lambda folder: kind)
 
     def test_write_between_locked_read_and_publication_stays_on_disk(self) -> None:
         for kind in self.filesystems():
