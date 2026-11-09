@@ -141,3 +141,7 @@ class EditReviewTests(unittest.TestCase):
             path.write_text(path.read_text(encoding="utf-8") + "\nAdded by hand.\n", encoding="utf-8")
             preview_edit_review.check_outputs()
             self.assertEqual(preview.WATCHER["outputs"], ["tables/output/md/cohorts.md"])
+            preview.WATCHER["outputs"] = []
+            path.write_bytes(path.read_bytes() + "Café, saved as Latin-1.\n".encode("latin-1"))
+            preview_edit_review.check_outputs()  # not what the spec makes either: the next render replaces it
+            self.assertEqual(preview.WATCHER["outputs"], ["tables/output/md/cohorts.md"])

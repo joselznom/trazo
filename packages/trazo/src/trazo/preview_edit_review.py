@@ -243,11 +243,17 @@ def check_outputs() -> None:
     if not own_tables_stage(preview.PROJECT):
         for label in table.all_labels():
             try:
-                rendered = table.build(label)
-            except Exception:  # a broken spec is the table editor's to report
+                rendered = table.build(label)  # an invalid spec or data: in rendered.errors
+            except OSError:  # unreadable: the page build (spec) or the next table render (data) reports it
                 continue
             path = table.output_path(label)
-            if rendered.markdown is not None and path.is_file() and path.read_text(encoding="utf-8") != rendered.markdown:
+            if rendered.markdown is None or not path.is_file():
+                continue
+            try:
+                written = path.read_text(encoding="utf-8")
+            except UnicodeDecodeError:  # re-saved in another encoding: not what the spec makes either
+                written = None
+            if written != rendered.markdown:
                 notes.append(path.relative_to(preview.ROOT).as_posix())
     with preview.LOCK:
         preview.WATCHER["outputs"] = notes
