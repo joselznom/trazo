@@ -102,7 +102,6 @@ def publish(path: Path, data: bytes, expected: bytes, name: str) -> Publication:
         with os.fdopen(fd, "wb") as handle:
             handle.write(data)
         os.chmod(tmp, mode)  # mkstemp creates 0600
-        ours = tmp.stat().st_ino
         exchange(tmp, path)
     except ExchangeUnsupported:
         return _replace_checked(path, tmp, data, expected, name)
@@ -116,11 +115,12 @@ def publish(path: Path, data: bytes, expected: bytes, name: str) -> Publication:
     # Another program changed the file after the locked read: its version goes back.
     try:
         exchange(tmp, path)
-    except OSError:  # and then removed ours: keep both
-        return Publication(False, True, [_keep(tmp, name, "other-program"), _keep_bytes(data, name, "not-saved")])
-    if tmp.stat().st_ino == ours:
+    except FileNotFoundError:  # and then removed ours: its version stays at tmp
+        pass
+    # Normally tmp now holds our bytes again. If a third version had replaced ours,
+    # or a program wrote into ours meanwhile, it holds that: keep it and our bytes.
+    if tmp.read_bytes() == data:
         return Publication(False, True, [_keep(tmp, name, "not-saved")])
-    # A third version had replaced ours: the swap displaced it, so keep it too.
     return Publication(False, True, [_keep(tmp, name, "other-program"), _keep_bytes(data, name, "not-saved")])
 
 
