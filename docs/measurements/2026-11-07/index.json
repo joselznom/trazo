@@ -1,0 +1,130 @@
+[
+  {
+    "run": "baseline",
+    "paper": "example",
+    "commit": "ee13ca0a8c835749b9575a784171ce7a7007dde4",
+    "summary": "baseline-example.json",
+    "samples": "baseline-example.csv",
+    "observations": 280
+  },
+  {
+    "run": "baseline",
+    "paper": "load",
+    "commit": "ee13ca0a8c835749b9575a784171ce7a7007dde4",
+    "summary": "baseline-load.json",
+    "samples": "baseline-load.csv",
+    "observations": 280
+  },
+  {
+    "run": "history",
+    "paper": "example",
+    "commit": "6e92b9e01305a1ffd072007461a218041c6a9207",
+    "summary": "history-example.json",
+    "samples": "history-example.csv",
+    "observations": 280
+  },
+  {
+    "run": "history",
+    "paper": "load",
+    "commit": "6e92b9e01305a1ffd072007461a218041c6a9207",
+    "summary": "history-load.json",
+    "samples": "history-load.csv",
+    "observations": 280
+  },
+  {
+    "run": "deadline",
+    "paper": "example",
+    "commit": "6edd9451ec252f0aea5dacf6dfa977adef707b26",
+    "summary": "deadline-example.json",
+    "samples": "deadline-example.csv",
+    "observations": 280
+  },
+  {
+    "run": "deadline",
+    "paper": "load",
+    "commit": "6edd9451ec252f0aea5dacf6dfa977adef707b26",
+    "summary": "deadline-load.json",
+    "samples": "deadline-load.csv",
+    "observations": 280
+  },
+  {
+    "run": "table-errors",
+    "paper": "example",
+    "commit": "e0dab4a2b6ca06b8853c74b995d9d7982cf8b09c",
+    "summary": "table-errors-example.json",
+    "samples": "table-errors-example.csv",
+    "observations": 280
+  },
+  {
+    "run": "table-errors",
+    "paper": "load",
+    "commit": "e0dab4a2b6ca06b8853c74b995d9d7982cf8b09c",
+    "summary": "table-errors-load.json",
+    "samples": "table-errors-load.csv",
+    "observations": 280
+  },
+  {
+    "run": "source-history",
+    "paper": "example",
+    "commit": "09e4f45c81976d6ee5cf4ca6dff6afa672aa0173",
+    "summary": "source-history-example.json",
+    "samples": "source-history-example.csv",
+    "observations": 280
+  },
+  {
+    "run": "source-history",
+    "paper": "load",
+    "commit": "09e4f45c81976d6ee5cf4ca6dff6afa672aa0173",
+    "summary": "source-history-load.json",
+    "samples": "source-history-load.csv",
+    "observations": 280
+  },
+  {
+    "run": "preview-inputs",
+    "paper": "example",
+    "commit": "12dd3a685f5b84f8ada9b09d1c14950ef3bf508c",
+    "summary": "preview-inputs-example.json",
+    "samples": "preview-inputs-example.csv",
+    "observations": 280
+  },
+  {
+    "run": "preview-inputs",
+    "paper": "load",
+    "commit": "12dd3a685f5b84f8ada9b09d1c14950ef3bf508c",
+    "summary": "preview-inputs-load.json",
+    "samples": "preview-inputs-load.csv",
+    "observations": 280
+  },
+  {
+    "run": "polling",
+    "paper": "example",
+    "commit": "b6005a5b9c13a91a4eefdb1340d8755f189a13fd",
+    "summary": "polling-example.json",
+    "samples": "polling-example.csv",
+    "observations": 280
+  },
+  {
+    "run": "polling",
+    "paper": "load",
+    "commit": "b6005a5b9c13a91a4eefdb1340d8755f189a13fd",
+    "summary": "polling-load.json",
+    "samples": "polling-load.csv",
+    "observations": 280
+  },
+  {
+    "run": "combined",
+    "paper": "example",
+    "commit": "6ee0bae9a8a6904259bad18a736abf8cd8d9d776",
+    "summary": "combined-example.json",
+    "samples": "combined-example.csv",
+    "observations": 280
+  },
+  {
+    "run": "combined",
+    "paper": "load",
+    "commit": "6ee0bae9a8a6904259bad18a736abf8cd8d9d776",
+    "summary": "combined-load.json",
+    "samples": "combined-load.csv",
+    "observations": 280
+  }
+]

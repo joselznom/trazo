@@ -20,7 +20,7 @@ from common import MCP, SCRIPTS, command, dump, environment, request
 from faults import clone, launch
 
 NAMES = ("pandoc_missing", "pandoc_hang", "pandoc_invalid", "port_busy", "edit_during_build",
-         "readonly_directory", "corrupt_history", "corrupt_table", "concurrent_writers", "fuzz")
+         "readonly_directory", "corrupt_history", "corrupt_table", "concurrent_writers", "concurrent_atomic_writers", "fuzz")
 SOURCE_FILE = "manuscript/main/01_introduction.md"
 
 
@@ -103,15 +103,16 @@ def edit_during_build(root: Path) -> dict:
         (root / "trazo.toml").write_text(old)
 
 
-def concurrent_writers(root: Path) -> dict:
-    reference = root.parent / "race-reference"
+def concurrent_writers(root: Path, *, atomic: bool = False) -> dict:
+    prefix = "atomic-race" if atomic else "race"
+    reference = root.parent / f"{prefix}-reference"
     clone(root, reference)
-    result = launch(reference, "source", root.parent / "race-reference.json")
+    result = launch(reference, "source", root.parent / f"{prefix}-reference.json")
     if result["returncode"] or result["result"]["status"] != 200:
         raise RuntimeError(result)
-    sites = [json.loads(line) for line in (root.parent / "race-reference.sites.jsonl").read_text().splitlines()]
+    sites = [json.loads(line) for line in (root.parent / f"{prefix}-reference.sites.jsonl").read_text().splitlines()]
     site = next(s["site"] for s in sites if s["path"] == SOURCE_FILE and s["site"].startswith("before_replace"))
-    output = root.parent / "race.json"
+    output = root.parent / f"{prefix}.json"
     argv = [sys.executable, str(SCRIPTS / "fault_worker.py"), str(root), "source", str(output), "--fault", "race", "--site", site]
     with subprocess.Popen(argv, env=environment(root), stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                           text=True, start_new_session=True) as proc:
@@ -121,7 +122,10 @@ def concurrent_writers(root: Path) -> dict:
                 raise RuntimeError(proc.communicate())
             source = root / SOURCE_FILE
             marker = "Independently saved agent text must survive"
-            source.write_text(source.read_text() + f"\n\n{marker}.\n")
+            target = source.with_suffix(".agent.tmp") if atomic else source
+            target.write_text(source.read_text() + f"\n\n{marker}.\n")
+            if atomic:
+                os.replace(target, source)
             output.with_suffix(".sites.release").touch()
             stdout, stderr = proc.communicate(timeout=15)
         finally:
@@ -131,7 +135,9 @@ def concurrent_writers(root: Path) -> dict:
     retained = marker in source.read_text() or any(marker in p.read_text() for p in (root / "notes/review").glob("*history.json"))
     response = json.loads(output.read_text())
     return {"violations": [] if retained else ["HTTP save acknowledged success after overwriting the independent writer; its text is absent from history"],
-            "retained": retained, "response": response, "site": site, "log": stdout + stderr}
+            "retained": retained, "response": response, "site": site, "log": stdout + stderr,
+            "writer": "atomic replacement" if atomic else "in-place write",
+            "limitation": "An independent writer does not take review_lock. A change after the locked read and before publication can be overwritten without notice or recovery."}
 
 
 def browser_cases(root: Path, name: str) -> dict:
@@ -173,10 +179,16 @@ def browser_cases(root: Path, name: str) -> dict:
             history.parent.mkdir(parents=True, exist_ok=True)
             history.write_text('[{"before_text":')
             status, body = request(port, "/__source", payload)
+            preserved = source.read_bytes() == original
             retry_status, retry = request(port, "/__source", payload)
-            return {"violations": ["valid saves remain blocked until the history is manually repaired"] if retry_status >= 400 else [],
+            problems = []
+            if not preserved:
+                problems.append("a failed save changed the manuscript")
+            if retry_status >= 400:
+                problems.append("valid saves remain blocked until the history is manually repaired")
+            return {"violations": problems,
                     "status": status, "body": body, "retry_status": retry_status,
-                    "source_preserved": source.read_bytes() == original, "recovered": retry_status == 200}
+                    "source_preserved": preserved, "recovered": retry_status == 200}
         if name == "corrupt_table":
             target = root / "tables/output/data/summary.json"
             previous = target.read_bytes()
@@ -251,8 +263,8 @@ def main() -> int:
             result = pandoc_case(root, name)
         elif name == "edit_during_build":
             result = edit_during_build(root)
-        elif name == "concurrent_writers":
-            result = concurrent_writers(root)
+        elif name in ("concurrent_writers", "concurrent_atomic_writers"):
+            result = concurrent_writers(root, atomic=name == "concurrent_atomic_writers")
         else:
             result = browser_cases(root, name)
         results.append({"name": name, **result})
