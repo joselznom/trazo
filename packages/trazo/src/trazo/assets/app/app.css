@@ -57,15 +57,21 @@ html:not(:has(#pk-shell-ready)) body { visibility: hidden; }
 .pv-chip.warn { background: var(--pv-warn-soft); color: var(--pv-warn); box-shadow: inset 0 0 0 1px var(--pv-warn-line); }
 
 /* Comment panels (preview, table and diagram editors): the warning before a
- * deletion, the ticks of resolved comments, and a trash button that shows on
- * hover, focus or selection (always on touch screens). */
-.pk-row, .pk-foot { flex-wrap: wrap; }
+ * deletion, the selection bar and ticks of resolved comments, and a trash
+ * button that shows on hover, focus or selection (always on touch screens). */
+.pk-row { flex-wrap: wrap; }
 .pk-row.selected { outline: 1px solid var(--pv-accent); outline-offset: -1px; }
-.pk-foot-acts { display: flex; gap: 12px; }
+.pk-bar { flex: 1 1 auto; display: flex; align-items: center; gap: 6px; min-width: 0; min-height: 28px; color: var(--pv-ink-2); font: 12px var(--pv-sans); }
+.pk-all { display: inline-flex; align-items: center; gap: 6px; padding: 0 4px; font-weight: 500; cursor: pointer; }
+.pk-count { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--pv-muted); font-variant-numeric: tabular-nums; }
+/* Undo and Select, which move under the filter when the panel is too narrow for both. */
+.pk-bar-end { display: flex; align-items: center; gap: 4px; margin-left: auto; }
+.pk-bar + .pk-confirm { margin-bottom: 2px; }
+.pk-bar .pk-danger:disabled { opacity: .45; cursor: default; }
 .pk-confirm { flex-basis: 100%; margin-top: 8px; padding: 9px 10px; border: 1px solid var(--pv-err); border-radius: 8px; background: var(--pv-card); color: var(--pv-ink); font: 12px/1.45 var(--pv-sans); white-space: normal; cursor: default; }
 .pk-confirm b { display: block; margin-bottom: 2px; font-weight: 600; }
 .pk-confirm-acts { display: flex; justify-content: flex-end; gap: 6px; margin-top: 8px; }
 .pk-confirm .pv-btn { padding: 3px 9px; border: 1px solid var(--pv-line-strong); background: var(--pv-card); color: var(--pv-ink); font-size: 12px; }
-.pk-confirm .pk-danger, .pk-confirm .pk-danger:hover { background: var(--pv-err); border-color: var(--pv-err); color: #fff; }
+.pk-confirm .pk-danger, .pk-confirm .pk-danger:hover, .pk-bar .pk-danger, .pk-bar .pk-danger:hover { background: var(--pv-err); border-color: var(--pv-err); color: #fff; }
 .pk-check { flex: none; margin: 0; accent-color: var(--pv-accent); cursor: pointer; }
 @media (hover: hover) { .pk-row:not(:hover, :focus-within, .selected) .pk-del { opacity: 0; } }

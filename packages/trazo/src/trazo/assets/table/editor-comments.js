@@ -76,10 +76,11 @@
       const seg = (key, text, n) => h("button", { type: "button", class: cfilter === key ? "on" : null, dataset: { filter: key },
         "aria-pressed": String(cfilter === key), onclick: () => { cfilter = key; openDone = null; E.renderPanel(); } },
       text, h("span", { class: "te-cn", text: String(n) }));
-      const out = [h("div", { class: "te-cbar" }, h("div", { class: "te-seg", role: "group", "aria-label": "Show comments" },
+      const out = deletion.head("te-cbar", h("div", { class: "te-seg", role: "group", "aria-label": "Show comments" },
         seg("active", "Active", live.length), seg("resolved", "Resolved", done.length)),
       E.comments.undo ? h("button", { type: "button", class: "pv-btn sm ghost te-cundo", text: "↶ Undo",
-        title: `Undo the last comment change: ${E.comments.undo}`, onclick: () => undoComment(E.comments.undo_id) }) : null)];
+        title: `Undo the last comment change: ${E.comments.undo}`, onclick: () => undoComment(E.comments.undo_id) }) : null,
+      cfilter === "resolved" ? ids(done) : null);
       const empty = (title, text) => out.push(h("div", { class: "te-cempty" }, h("b", { text: title }), text || null));
       if (cfilter === "active") {
         if (live.length) {
@@ -101,7 +102,6 @@
       } else {
         if (!done.length) empty("No resolved comments");
         for (const c of done) out.push(commentCard(c));
-        if (done.length) out.push(deletion.foot(ids(done), "te-cfoot"));
       }
       return out;
     }
@@ -109,11 +109,10 @@
       const mode = cedit && cedit.id === c.id ? cedit.mode : null;
       if (c.status === "done" && openDone !== c.id && !mode) {
         return h("div", { class: `te-card done compact pk-row${deletion.ticked(c.id) ? " selected" : ""}`,
-          title: `${c.resolved ? `Resolved ${c.resolved}. ` : ""}Click to show the thread`,
-          onclick: () => { openDone = c.id; E.renderPanel(); } },
+          ...deletion.row(c.id, `${c.resolved ? `Resolved ${c.resolved}. ` : ""}Click to show the thread`,
+            () => { openDone = c.id; E.renderPanel(); }) },
         deletion.tick(c.id), h("span", { class: "te-cok", "aria-hidden": "true", text: "✓" }),
-        h("span", { class: "te-ctext", text: c.comment.split("\n")[0] }), h("span", { class: "te-cwhere", text: E.targetText(c.target) }),
-        deletion.trash(c.id, "te-icon te-del", TRASH), deletion.box(c.id));
+        h("span", { class: "te-ctext", text: c.comment.split("\n")[0] }), h("span", { class: "te-cwhere", text: E.targetText(c.target) }));
       }
       const key = `${c.id}:${mode}`;
       const close = () => { delete cdrafts[key]; cedit = null; E.renderPanel(); };
@@ -163,7 +162,14 @@
         del();
       }
       const done = c.status === "done";
-      return h("div", { class: `te-card pk-row ${c.status}${done && deletion.ticked(c.id) ? " selected" : ""}` },
+      // A second click on a resolved card folds it back to one line, unless it ends a text selection.
+      const fold = (e) => {
+        const sel = getSelection();
+        if (e.target.closest("a, button, input, textarea") || (!sel.isCollapsed && e.currentTarget.contains(sel.anchorNode))) return;
+        openDone = null;
+        E.renderPanel();
+      };
+      return h("div", { class: `te-card pk-row ${c.status}${done && deletion.ticked(c.id) ? " selected" : ""}`, onclick: done && !mode ? fold : null },
         h("div", { class: "te-meta" }, done ? deletion.tick(c.id) : null, h("span", { class: `te-state ${c.status}`, text: STATE_NAME[c.status] || c.status,
           title: c.status === "done" && c.resolved ? `Resolved ${c.resolved}` : null }),
         h("button", { type: "button", class: "te-target", text: E.targetText(c.target), title: "Select the target",

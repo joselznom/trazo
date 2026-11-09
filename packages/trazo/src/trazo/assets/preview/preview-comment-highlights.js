@@ -83,6 +83,10 @@
     }
     summaryEl.hidden = !summaryEl.textContent;
     $(".pv-stepper", right).hidden = cfilter !== "active";
+    // The Resolved list's Select button, or its selection bar in place of the filter.
+    const pickable = cfilter === "resolved" && done.length > 0;
+    $(".pv-cfilter", right).hidden = deletion.picking();
+    $(".pv-cpick", right).replaceChildren(...(pickable ? [deletion.bar(ids(done))] : []), deletion.box("bar") || "");
     for (const b of $$("[data-step]", right)) b.disabled = nav.length === 0;
 
     panel.textContent = "";
@@ -96,7 +100,6 @@
     } else {
       if (!done.length) empty("No resolved comments");
       for (const x of done) panel.append(card(x.c, x.hit, x));
-      if (done.length) panel.append(deletion.foot(ids(done), "pv-cfoot"));
     }
     if (!inFigs) renderIndex();
   }
