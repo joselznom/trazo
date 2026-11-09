@@ -203,28 +203,39 @@
     return themeButton;
   }
   // Deleting comments in the comment panels of the preview and both editors:
-  // a trash button per comment, ticks on resolved ones, and a warning first,
-  // since a deletion has no undo. `redraw` redraws the panel; `purge(body,
-  // message)` sends the deletion. The panel calls `sync` before drawing.
-  // What it adds stops its clicks, so the clickable row under it ignores them.
+  // a trash button in a card shown in full, a selection mode for the Resolved
+  // list (its bar and ticks), and a warning first, since a deletion has no
+  // undo. `redraw` redraws the panel; `purge(body, message)` sends the
+  // deletion and resolves truthy once it is saved. The panel calls `sync`
+  // before drawing. What it adds stops its clicks, so the clickable row under
+  // it ignores them.
   function commentDeletion(redraw, purge) {
     const ticked = new Set();
-    let asking = null;  // {ids, at}: `at` is the card's id or "foot"
+    let picking = false;  // the Resolved list is in selection mode
+    let resolved = null;  // the ids of the Resolved list while it is shown and not empty, else null
+    let asking = null;  // {ids, at}: `at` is the card's id or "bar"
     const ask = (ids, at) => { asking = { ids, at }; redraw(); };
     const quiet = (node) => { node.addEventListener("click", (e) => e.stopPropagation()); return node; };
     const cancel = () => { asking = null; redraw(); };
+    const unpick = () => { picking = false; ticked.clear(); };
+    // The ticks changed: a warning from the bar named other comments.
+    const changed = () => { if (asking && asking.at === "bar") asking = null; redraw(); };
+    const toggle = (id, on) => { ticked[on ? "add" : "delete"](id); changed(); };
     // The warning about the deletion asked at `at`, or null. Cancel takes the
     // focus unless the reader is elsewhere; Escape cancels.
     function box(at) {
       if (!asking || asking.at !== at) return null;
-      // The foot sends ids, which the server takes only when all are still resolved.
-      const { ids } = asking, n = ids.length, body = at === "foot" ? { op: "purge", ids } : { op: "purge", id: ids[0] };
+      // The bar sends ids, which the server takes only when all are still resolved.
+      const { ids } = asking, n = ids.length, body = at === "bar" ? { op: "purge", ids } : { op: "purge", id: ids[0] };
       const no = el("button", { type: "button", class: "pv-btn sm", text: "Cancel", onclick: cancel });
       const node = el("div", { class: "pk-confirm", role: "alertdialog", "aria-label": "Delete comments" },
         el("b", { text: n === 1 ? "Delete this comment?" : `Delete ${n} comments?` }),
         "Deleted comments are gone for good: Undo can't bring them back.",
         el("div", { class: "pk-confirm-acts" }, no, el("button", { type: "button", class: "pv-btn sm pk-danger", text: "Delete",
-          onclick: () => { asking = null; purge(body, `${n} comment${n === 1 ? "" : "s"} deleted`); } })));
+          onclick: async () => {
+            asking = null;
+            if (await purge(body, `${n} comment${n === 1 ? "" : "s"} deleted`) && at === "bar") { unpick(); redraw(); }
+          } })));
       node.addEventListener("keydown", (e) => { if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); cancel(); } });
       requestAnimationFrame(() => {
         const a = document.activeElement;
@@ -232,17 +243,46 @@
       });
       return quiet(node);
     }
-    const button = (text, onclick) => el("button", { type: "button", text, onclick });
+    const button = (text, onclick, cls, disabled) => el("button", { type: "button", class: `pv-btn sm ${cls}`, text, onclick, disabled });
+    // The Resolved list's bar while that list is shown and not empty, else
+    // null: a Select button beside the filter, or in selection mode the
+    // whole bar, in place of the filter.
+    function bar() {
+      if (!resolved) return null;
+      if (!picking) return button("Select", () => { picking = true; redraw(); }, "ghost");
+      const n = ticked.size, done = resolved;
+      const all = quiet(el("input", { type: "checkbox", class: "pk-check", checked: n > 0 && n === done.length,
+        onchange: (e) => {
+          ticked.clear();
+          if (e.target.checked) for (const id of done) ticked.add(id);
+          changed();
+        } }));
+      all.indeterminate = n > 0 && n < done.length;
+      return el("div", { class: "pk-bar", role: "toolbar", "aria-label": "Delete resolved comments" },
+        el("label", { class: "pk-all" }, all, "All"), el("span", { class: "pk-count", text: `${n} selected` }),
+        button("Cancel", () => { unpick(); cancel(); }, "ghost"),
+        button(n ? `Delete ${n}` : "Delete", () => ask([...ticked], "bar"), "pk-danger", n === 0));
+    }
     return {
       box,
-      // Keep only ticks on `done` and a warning about `shown` (comment ids).
-      sync(done, shown) {
+      picking: () => picking,
+      // Keep only ticks on `done` and a warning about `shown` (comment ids);
+      // `onResolved` says the panel shows the Resolved list. Selection mode
+      // ends when it shows another list or the resolved one is empty.
+      sync(done, shown, onResolved) {
+        resolved = onResolved && done.length ? done : null;
+        if (!resolved) unpick();
         for (const id of ticked) if (!done.includes(id)) ticked.delete(id);
         if (asking && !asking.ids.every((id) => shown.includes(id))) asking = null;
       },
       ticked: (id) => ticked.has(id),
-      tick: (id) => quiet(el("input", { type: "checkbox", class: "pk-check", "aria-label": "Select for deletion", checked: ticked.has(id),
-        onchange: (e) => { ticked[e.target.checked ? "add" : "delete"](id); if (asking && asking.at === "foot") asking = null; redraw(); } })),
+      // The title and click of a resolved comment's one-line row: the click
+      // shows it in full (`show`), or ticks it in selection mode.
+      row: (id, title, show) => ({ title: picking ? "Click to select it" : title,
+        onclick: () => (picking ? toggle(id, !ticked.has(id)) : show()) }),
+      // The comment's tick in selection mode, else null.
+      tick: (id) => (picking ? quiet(el("input", { type: "checkbox", class: "pk-check", "aria-label": "Select for deletion",
+        checked: ticked.has(id), onchange: (e) => toggle(id, e.target.checked) })) : null),
       // The comment's trash button, in the panel's class, with `icon` (markup or a node).
       trash(id, cls, icon) {
         const node = el("button", { type: "button", "data-op": "delete", class: `${cls} pk-del`, "aria-label": "Delete comment", title: "Delete",
@@ -250,17 +290,25 @@
         if (typeof icon === "string") node.innerHTML = icon; else node.append(icon);
         return node;
       },
-      // The foot of the Resolved list (`done`: its ids), with the panel's class.
-      foot(done, cls) {
-        const n = ticked.size, all = button(n ? `Delete ${n}` : "Delete all resolved", () => ask(n ? [...ticked] : done, "foot"));
-        return el("div", { class: `${cls} pk-foot` }, el("span", { text: n ? `${n} selected` : "" }),
-          n ? el("span", { class: "pk-foot-acts" }, button("Cancel", () => { ticked.clear(); cancel(); }), all) : all, box("foot"));
+      bar,
+      // An editor's filter bar (class `cls`): its `filter`, `extra` (an Undo
+      // button) and the bar above, then the warning about the ticked comments.
+      head(cls, filter, extra) {
+        const pick = bar();
+        return el("div", { class: cls }, picking ? pick
+          : [filter, extra || pick ? el("span", { class: "pk-bar-end" }, extra, pick) : null], box("bar"));
       },
     };
+  }
+  // A click on a comment card itself, not on one of its controls and not the
+  // end of a text selection inside it: one that may fold the card.
+  function plainClick(e) {
+    const sel = getSelection();
+    return !e.target.closest("a, button, input, textarea") && (sel.isCollapsed || !e.currentTarget.contains(sel.anchorNode));
   }
   const review = {
     load: (scope, name) => api(`/__review?scope=${scope}${name == null ? "" : "&name=" + encodeURIComponent(name)}`),
     change: (scope, body) => api("/__review", { ...body, scope }),
   };
-  window.Trazo = { api, watch, el, commentDeletion, readPrefs, savePrefs, theme, mountTheme, editorLink, returnUrl, review, reveal, reload, path: pagePath, search: pageSearch, replaceHash, applyTheme };
+  window.Trazo = { api, watch, el, commentDeletion, plainClick, readPrefs, savePrefs, theme, mountTheme, editorLink, returnUrl, review, reveal, reload, path: pagePath, search: pageSearch, replaceHash, applyTheme };
 })();

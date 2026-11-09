@@ -60,7 +60,7 @@
       if (!comments.some((x) => x.id === key.split(":")[0])) delete drafts[key];
     }
     const ids = (list) => list.map((x) => x.c.id);
-    deletion.sync(ids(done), ids(shown));
+    deletion.sync(ids(done), ids(shown), cfilter === "resolved");
     // An inline editor only exists for a card that is on screen; a draft
     // for a card in another view comes back when that card is shown again.
     if (editing && !shown.some((x) => x.c.id === editing.id)) editing = null;
@@ -83,6 +83,9 @@
     }
     summaryEl.hidden = !summaryEl.textContent;
     $(".pv-stepper", right).hidden = cfilter !== "active";
+    // The Resolved list's Select button, or its selection bar in place of the filter.
+    $(".pv-cfilter", right).hidden = deletion.picking();
+    $(".pv-cpick", right).replaceChildren(deletion.bar() || "", deletion.box("bar") || "");
     for (const b of $$("[data-step]", right)) b.disabled = nav.length === 0;
 
     panel.textContent = "";
@@ -96,7 +99,6 @@
     } else {
       if (!done.length) empty("No resolved comments");
       for (const x of done) panel.append(card(x.c, x.hit, x));
-      if (done.length) panel.append(deletion.foot(ids(done), "pv-cfoot"));
     }
     if (!inFigs) renderIndex();
   }

@@ -172,7 +172,7 @@
     const review = live.filter((c) => c.status === "review").length;
     const done = comments.filter((c) => c.status === "done").sort((a, b) => resolvedAt(b).localeCompare(resolvedAt(a)));
     const ids = (list) => list.map((c) => c.id);
-    deletion.sync(ids(done), ids(filter === "active" ? live : done));
+    deletion.sync(ids(done), ids(filter === "active" ? live : done), filter === "resolved");
     ed.setTabBadge("comments", live.length, review ? "accent" : "");
     const scroll = root.scrollTop;
     if (!S.name) {
@@ -195,7 +195,7 @@
         el("button", { type: "button", class: "btn small primary", onclick: add }, "Comment")));
     const tab = (key, label, n) => el("button", { type: "button", class: filter === key ? "on" : null, "data-filter": key,
       "aria-pressed": String(filter === key), onclick: () => { filter = key; draw(); } }, label, el("span", { class: "n" }, String(n)));
-    const filters = el("div", { class: "cfilter" }, el("div", { class: "seg", role: "group", "aria-label": "Show comments" },
+    const filters = deletion.head("cfilter", el("div", { class: "seg", role: "group", "aria-label": "Show comments" },
       tab("active", "Active", live.length), tab("resolved", "Resolved", done.length)),
     undoLabel ? el("button", { type: "button", class: "btn small ghost", title: `Undo the last comment change: ${undoLabel}`,
       onclick: () => undoComment(undoId) }, ic("undo"), "Undo") : null);
@@ -212,7 +212,6 @@
     } else {
       if (!done.length) empty("check", "No resolved comments");
       for (const item of done) root.append(card(item));
-      if (done.length) root.append(deletion.foot(ids(done), "cfoot"));
     }
     root.scrollTop = scroll;
     if (focusId) {
@@ -230,10 +229,10 @@
     if (item.status === "done" && focusId !== item.id && editing !== item.id) {
       /* A resolved comment is one line; a click shows the thread. */
       const line = el("div", { class: `ccard done compact pk-row${deletion.ticked(item.id) ? " selected" : ""}`,
-        title: `${item.resolved ? `Resolved ${item.resolved}. ` : ""}Click to show the thread`,
-        onclick: () => { focusId = item.id; showTarget(item); } },
+        ...deletion.row(item.id, `${item.resolved ? `Resolved ${item.resolved}. ` : ""}Click to show the thread`,
+          () => { focusId = item.id; showTarget(item); }) },
       deletion.tick(item.id), el("span", { class: "ok", "aria-hidden": "true" }, "✓"),
-      el("span", { class: "body" }, item.comment.split("\n")[0]), el("span", { class: "where" }, where(item)), trash(), deletion.box(item.id));
+      el("span", { class: "body" }, item.comment.split("\n")[0]), el("span", { class: "where" }, where(item)));
       line.dataset.id = item.id;
       return line;
     }

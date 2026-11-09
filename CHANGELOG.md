@@ -53,12 +53,13 @@ Internal changes (tests, CI, refactoring) stay out.
   document, a comment or a saved paragraph, where before it undid only
   comments (#25).
 - Deleting a review comment now removes it for good, after a warning, in
-  the preview and in the table and diagram editors. Each comment has a
-  trash button, shown when you point at it. Under Resolved you can tick
-  several comments and delete them together, or delete every resolved one.
-  The Deleted list is gone: comments left in it show as resolved, so you
-  can delete them too. The agent can delete resolved comments when you ask
-  it to (`trazo review delete`) (#14).
+  the preview and in the table and diagram editors. A comment shown in full
+  has a trash button, shown when you point at it. Under Resolved, **Select**
+  next to the filter lets you tick several comments, or **All**, and delete
+  them together. The Deleted list is gone: comments left in it show as
+  resolved, so you can delete them too. The agent can delete resolved
+  comments when you ask it to (`trazo review delete`) (#14, #40).
+- A second click on a resolved comment folds it back to one line (#40).
 - The table editor speaks plainly: double-click a header or a row label to
   rename it, change decimals with − and +, add marks (a, *, †) and bold
   cells from a format bar, and ask the agent for new columns, rows or

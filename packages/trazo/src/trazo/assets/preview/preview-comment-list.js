@@ -44,15 +44,15 @@
     const near = c.status === "review" && !isEditing ? editsNear(hit) : [];
     el.dataset.id = c.id;
     if (c.status === "done" && openDone !== c.id && !isEditing) {
-      el.className = `pv-card done compact pk-row${deletion.ticked(c.id) ? " selected" : ""}`;
-      el.title = `${c.resolved ? `Resolved ${c.resolved}. ` : ""}Click to show the thread`;
-      el.append(deletion.tick(c.id), h("span", { class: "pv-ok", text: "✓", "aria-hidden": "true" }),
-        h("span", { class: "pv-ctext", text: c.comment.split("\n")[0] }), h("span", { class: "pv-cwhere", text: prefix + place }),
-        deletion.trash(c.id, "pv-del", ICONS.trash), deletion.box(c.id) || "");
-      el.addEventListener("click", () => {
+      const row = deletion.row(c.id, `${c.resolved ? `Resolved ${c.resolved}. ` : ""}Click to show the thread`, () => {
         openDone = navId = c.id;
         renderComments();
       });
+      el.className = `pv-card done compact pk-row${deletion.ticked(c.id) ? " selected" : ""}`;
+      el.title = row.title;
+      el.append(deletion.tick(c.id) || "", h("span", { class: "pv-ok", text: "✓", "aria-hidden": "true" }),
+        h("span", { class: "pv-ctext", text: c.comment.split("\n")[0] }), h("span", { class: "pv-cwhere", text: prefix + place }));
+      el.addEventListener("click", row.onclick);
       return el;
     }
     const ticked = c.status === "done" && deletion.ticked(c.id);
@@ -62,7 +62,7 @@
       (c.quote ? `<blockquote></blockquote>` : "") +
       `<div class="pv-text"></div><div class="pv-thread"></div><div class="pv-actions"></div>`;
     // An open resolved card keeps its tick (see the one-line form above).
-    if (c.status === "done") $(".pv-card-head", el).prepend(deletion.tick(c.id));
+    if (c.status === "done") $(".pv-card-head", el).prepend(deletion.tick(c.id) || "");
     $(".pv-where", el).textContent = `${prefix}${place}${lost ? " · text changed" : ""}` +
       (live && hit && hit.changed ? " · target rewritten" : "") +
       (live && hit && hit.moved ? ` · moved from ${c.section}` : "");
@@ -178,6 +178,13 @@
       if (op === "show") { showResolved(c, hit); return; }
       if (op === "reopen") { openDone = null; send({ op: "update", id: c.id, status: "open" }, "Comment reopened for Claude"); return; }
       if (e.target.closest("textarea, button")) return;
+      if (c.status === "done") {  // a second click folds it back to one line
+        if (!App.plainClick(e)) return;
+        openDone = null;
+        if (navId === c.id) navId = null;
+        renderComments();
+        return;
+      }
       navId = c.id;
       renderComments();
       if (!archived(c)) showCommentTarget(c, hit);
