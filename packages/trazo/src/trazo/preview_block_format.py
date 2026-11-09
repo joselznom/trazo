@@ -20,7 +20,7 @@ from typing import Any
 from .local_server import RequestError
 from .preview_block_patch import Offsets, masked
 from .preview_block_save import DEFINITION, _comparable, _definitions, _find, _spans, _squashed, alone_html
-from .preview_blocks import atoms, editable
+from .preview_blocks import PROTECTED, atoms, editable
 from .preview_sources import change_source, get_source, source_path
 
 MARKER = {"strong": "**", "em": "*"}
@@ -88,9 +88,9 @@ def _brackets(source: str) -> str:
     """`source` masked, with the `]` of a link's `](url)` or `][ref]` back:
     the mask hides it, and its `[` is still there."""
     plain = list(masked(source))
-    for i, ch in enumerate(plain):
-        if ch == "\0" and source[i] == "]" and (not i or plain[i - 1] != "\0") and source[i + 1:i + 2] in ("(", "["):
-            plain[i] = "]"
+    for m in PROTECTED.finditer(source):
+        if m[0].startswith(("](", "][")):
+            plain[m.start()] = "]"
     return "".join(plain)
 
 
@@ -131,19 +131,38 @@ def _with_underline(source: str, at: int, end: int) -> str:
     return f"{source[:at]}[{''.join(out)}{source[last:end]}]{{.underline}}{source[end:]}"
 
 
+def _underlined(text: str) -> str:
+    """Text left of a span the selection leaves: underlined again, unless it is
+    only emphasis markers, which stay as they are to pair with their other half."""
+    return f"[{text}]{{.underline}}" if text.strip("*_") else text
+
+
 def _without_underline(source: str, at: int, end: int) -> str | None:
-    """`source` with the underline span around source[at:end] closed before it
-    and open again after it, or None if none holds it whole."""
-    holding = [span for span in _underlines(source) if span[0] < at and end <= span[1]]
-    if not holding:
+    """`source` without underline on source[at:end]: each span over it loses its
+    brackets, and its text outside the selection stays underlined. None if no
+    span is over it."""
+    spans = [span for span in _underlines(source) if span[0] < end and at < span[1]]
+    # A span inside another is the outer one's text.
+    spans = [s for s in spans if not any(o[0] < s[0] and s[2] <= o[2] for o in spans)]
+    if not spans:
         return None
-    open_at, close, close_end = max(holding)
-    left, right = source[open_at + 1:at], source[end:close]
-    words = left.rstrip()
-    head = f"[{words}]{{.underline}}{left[len(words):]}" if words else left
-    words = right.lstrip()
-    tail = f"{right[:len(right) - len(words)]}[{words}]{{.underline}}" if words else right
-    return f"{source[:open_at]}{head}{source[at:end]}{tail}{source[close_end:]}"
+    edits = []
+    for open_at, close, close_end in spans:
+        if open_at < at:
+            left = source[open_at + 1:at]
+            words = left.rstrip()
+            edits.append((open_at, at, _underlined(words) + left[len(words):] if words else left))
+        else:
+            edits.append((open_at, open_at + 1, ""))
+        if end < close:
+            right = source[end:close]
+            words = right.lstrip()
+            edits.append((end, close_end, right[:len(right) - len(words)] + _underlined(words) if words else right))
+        else:
+            edits.append((close, close_end, ""))
+    for start, stop, text in sorted(edits, reverse=True):
+        source = source[:start] + text + source[stop:]
+    return source
 
 
 def _with_style(source: str, at: int, end: int, style: str) -> str:
