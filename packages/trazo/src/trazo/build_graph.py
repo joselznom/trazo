@@ -53,7 +53,6 @@ from .build_inputs import (
     ATTEMPTS,
     Snapshot,
     changes,
-    expand_includes,  # noqa: F401 (its callers import it from here)
     expand_inputs,
     image_targets,
     missing_resources,
@@ -333,11 +332,11 @@ class Builder:
             return
         self.python()
         started = snapshot(hashed())  # after uv sync, which may write uv.lock
+        writes = outputs if writes is None else writes
         self.did(label or key)
-        self.guarded(key, outputs if writes is None else writes,
-                     lambda: self.run_python(run, label or key))
+        self.guarded(key, writes, lambda: self.run_python(run, label or key))
         now = hashed()  # with the inputs the script recorded
-        after = self.held_still(started, label or key, now, self.files(outputs if writes is None else writes))
+        after = self.held_still(started, label or key, now, self.files(writes))
         written = record_outputs() if record_outputs else self.files(outputs)
         missing = [out for out in outputs if not any(p.is_file() and p.stat().st_size for p in self.files([out]))]
         if missing:
@@ -539,7 +538,7 @@ class Builder:
         fails, keeping the earlier file."""
         for attempt in range(1, ATTEMPTS + 1):
             try:
-                return self.pandoc_docx_once(name, indexes, snapshot(watched(self.project, name)))
+                return self.pandoc_docx_once(name, indexes)
             except InputsChanged as exc:
                 changed = f"docx: {name}: {', '.join(exc.names)} changed during the build"
                 if attempt == ATTEMPTS:
@@ -547,8 +546,8 @@ class Builder:
                                      "Build again once the edits are saved") from None
                 self.log(f"[build] {changed}; building again")
 
-    def pandoc_docx_once(self, name: str, indexes, started: Snapshot) -> None:
-        """One attempt; `started` snapshots what it reads before Pandoc."""
+    def pandoc_docx_once(self, name: str, indexes) -> None:
+        started = snapshot(watched(self.project, name))  # what it reads before Pandoc
         output = self.project.document_docx(name)
         source = self.expand(name)
         numbering = self.project.path("build") / f"{name}-numbering.json"

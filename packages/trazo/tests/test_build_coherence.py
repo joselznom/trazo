@@ -32,7 +32,7 @@ if text == "1":
 # (other Pandoc runs, such as reading the metadata, pass through). "once"
 # edits during the first Word file only, "always" on every attempt (each
 # time with different bytes).
-SHIM = """import os, sys
+SHIM = """import os, subprocess, sys
 from pathlib import Path
 real, mode, target, *args = sys.argv[1:]
 word = "--to=json" in args and any(arg.startswith("--bibliography") for arg in args)
@@ -42,15 +42,18 @@ if word and (mode == "always" or not Path("edited").exists()):
     Path(target + ".tmp").write_bytes(data if count == 1 else data + b"\\n%% edit %d\\n" % count)
     os.replace(target + ".tmp", target)
     Path("edited").write_text(str(count))
-os.execv(real, [real, *args]) if os.name != "nt" else sys.exit(__import__("subprocess").call([real, *args]))
+sys.exit(subprocess.call([real, *args]))
 """
 
 FIGURE = "figures/plot.png"
 
 
-def run(root, *args, env=None):
-    env = {**os.environ, **(env or {}), "TRAZO_ROOT": str(root), "PYTHONPATH": str(PACKAGE_DIR.parent)}
-    return subprocess.run([sys.executable, "-m", "trazo", *args], cwd=root, env=env,
+def env(root):
+    return {**os.environ, "TRAZO_ROOT": str(root), "PYTHONPATH": str(PACKAGE_DIR.parent)}
+
+
+def run(root, *args):
+    return subprocess.run([sys.executable, "-m", "trazo", *args], cwd=root, env=env(root),
                           capture_output=True, text=True, timeout=180)
 
 
@@ -147,10 +150,9 @@ class DiagramInputs(unittest.TestCase):
                 shutil.copy(diagrams / "example.json", diagrams / f"{name}.json")
             (diagrams / "example.json").unlink()
             first = diagrams / "a1.json"
-            env = {**os.environ, "TRAZO_ROOT": str(root), "PYTHONPATH": str(PACKAGE_DIR.parent),
-                   "PYTHONUNBUFFERED": "1"}
             output = []
-            with subprocess.Popen([sys.executable, "-m", "trazo", "run", "diagrams"], cwd=root, env=env,
+            with subprocess.Popen([sys.executable, "-m", "trazo", "run", "diagrams"], cwd=root,
+                                  env={**env(root), "PYTHONUNBUFFERED": "1"},
                                   stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True) as proc:
                 for line in proc.stdout:
                     output.append(line)

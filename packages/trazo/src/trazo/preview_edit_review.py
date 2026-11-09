@@ -139,7 +139,7 @@ def reader() -> tuple[Callable[[Path], str] | None, Callable[[], None]]:
 def page_files(doc: str) -> list[str]:
     """The tracked files a document's page is built from, in page order."""
     from . import preview
-    from .build_graph import expand_includes
+    from .build_inputs import expand_includes
     names = {path.resolve(): name for name, path in tracked().items()}
     found = (names.get(path.resolve()) for path in expand_includes(preview.PROJECT.document_files(doc)))
     return list(dict.fromkeys(name for name in found if name))

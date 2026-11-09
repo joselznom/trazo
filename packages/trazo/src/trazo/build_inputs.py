@@ -108,11 +108,12 @@ def recorded_inputs(paths: Iterable[Path]) -> list[str]:
     return found
 
 
-def expand_inputs(project: Project, name: str) -> list[Path]:
-    """What expanding document `name` reads, besides the labels of the others."""
-    return [*expand_includes(project.document_files(name)), project.path("values"),
-            project.path("table_specs") / "_shared.json", project.path("metadata"),
-            project.root / "trazo.toml"]
+def expand_inputs(project: Project, name: str, documents: Iterable[str] = ()) -> list[Path]:
+    """What expanding document `name` reads, besides the labels of the
+    others; with the sources of `documents` too."""
+    sources = [path for doc in dict.fromkeys([name, *documents]) for path in project.document_files(doc)]
+    return [*expand_includes(sources), project.path("values"), project.path("table_specs") / "_shared.json",
+            project.path("metadata"), project.root / "trazo.toml"]
 
 
 def watched(project: Project, name: str) -> list[Path]:
@@ -120,8 +121,7 @@ def watched(project: Project, name: str) -> list[Path]:
     expand inputs and every document's sources (the numbering reads the
     labels of the documents it cites; hashing all of them is cheaper than
     finding which, at the cost of a retry when another one changes)."""
-    return [*expand_inputs(project, name),
-            *(path for doc in project.documents for path in expand_includes(project.document_files(doc)))]
+    return expand_inputs(project, name, project.documents)
 
 
 def snapshot(paths: Iterable[Path]) -> Snapshot:
