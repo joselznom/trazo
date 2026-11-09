@@ -1262,8 +1262,7 @@ def patch(label: str, ops: Any, base_sha256: str | None = None) -> list[str]:
         data = dump_spec(spec)
         if data == before:
             return []
-        write_atomic(path, data)
-        HISTORY.record(HISTORY.file_entry(path, before, data,
+        HISTORY.publish(path, data, HISTORY.file_entry(path, before, data,
                                           f"patch {label}: {'; '.join(summary)}"[:300]))
     render_one(label)
     return summary
@@ -1305,12 +1304,11 @@ def patch_shared(ops: Any, base_sha256: str | None = None,
         data = dump_spec(shared)
         if data == before:
             return []
-        write_atomic(SHARED_PATH, data)
         entry = HISTORY.file_entry(SHARED_PATH, before, data,
                                    f"patch shared: {'; '.join(summary)}"[:300])
         if label:
             entry["table"] = label
-        HISTORY.record(entry)
+        HISTORY.publish(SHARED_PATH, data, entry)
     render_all()
     return summary
 
