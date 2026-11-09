@@ -128,7 +128,7 @@ class SpecWriters(Restore):
                         self.assertIn(MARKER, path.read_text(encoding="utf-8"))
                         self.assertTrue(any(typed in k for k in self.kept()), body)
                         if path == self.diagram:  # what the editor's Keep mine and Load theirs use
-                            self.assertEqual(body["text"], path.read_text(encoding="utf-8"))
+                            self.assertEqual(body["text"], path.read_bytes().decode("utf-8"))
                         path.write_bytes(before)
                         shutil.rmtree(preview.REVIEW_DIR / "conflicts")
 

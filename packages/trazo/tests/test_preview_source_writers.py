@@ -28,6 +28,11 @@ MARKER = "Text another program saved meanwhile."
 NO_EXCHANGE = "exfat"  # a filesystem type without atomic exchange
 
 
+def exact(path: Path) -> str:
+    """A file's text with its line endings (read_text turns Windows' CRLF into LF)."""
+    return path.read_bytes().decode("utf-8")
+
+
 class IndependentWriters(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
@@ -113,7 +118,7 @@ class IndependentWriters(unittest.TestCase):
                         status, body = self.save(state, browser)
                     self.assertEqual(status, 409, body)
                     self.assertIn(MARKER, self.path.read_text(encoding="utf-8"))
-                    kept = [(_support.ROOT / p).read_text(encoding="utf-8") for p in body["kept"]]
+                    kept = [exact(_support.ROOT / p) for p in body["kept"]]
                     self.assertIn(browser, kept)
                     state = self.load()
                     self.assertFalse(state["can_undo"])  # the save that did not happen has no undo
@@ -130,7 +135,7 @@ class IndependentWriters(unittest.TestCase):
             status, body = self.call("/__source", {"op": "undo", "file": FILE})
         self.assertEqual(status, 409, body)
         self.assertIn(MARKER, self.path.read_text(encoding="utf-8"))
-        self.assertIn(state["text"], [(_support.ROOT / p).read_text(encoding="utf-8") for p in body["kept"]])
+        self.assertIn(state["text"], [exact(_support.ROOT / p) for p in body["kept"]])
 
     def test_a_save_answers_the_hash_of_what_it_wrote(self) -> None:
         state = self.load()
@@ -160,20 +165,20 @@ class IndependentWriters(unittest.TestCase):
 
     def test_a_killed_save_leaves_no_unique_text_behind(self) -> None:
         unique = self.path.with_name(self.path.name + ".killed.swap")
-        unique.write_text("Only copy of a version a killed save displaced.\n", encoding="utf-8")
+        unique.write_bytes(b"Only copy of a version a killed save displaced.\n")
         duplicate = self.path.with_name(self.path.name + ".dup.swap")
         duplicate.write_bytes(self.path.read_bytes())
         # A save killed after recording its undo entry: the history names the
         # new text by its hash only, so its .swap is the one copy of that text.
         pending = "Text of a save killed before it was published.\n"
         unsent = self.path.with_name(self.path.name + ".pending.swap")
-        unsent.write_text(pending, encoding="utf-8")
+        unsent.write_bytes(pending.encode())
         preview.FILE_HISTORY_PATH.write_text(json.dumps([{
-            "file": FILE, "before_text": self.path.read_text(encoding="utf-8"),
+            "file": FILE, "before_text": exact(self.path),
             "after_sha": hashlib.sha256(pending.encode()).hexdigest()}]), encoding="utf-8")
         state = self.load()
         self.assertFalse(unique.exists() or unsent.exists())
-        kept = sorted((_support.ROOT / p).read_text(encoding="utf-8") for p in state["conflicts"])
+        kept = sorted(exact(_support.ROOT / p) for p in state["conflicts"])
         self.assertEqual(kept, sorted(["Only copy of a version a killed save displaced.\n", pending]))
         # A known copy may still be open in another program: it stays for the grace window.
         self.assertTrue(duplicate.exists())
@@ -191,12 +196,12 @@ class IndependentWriters(unittest.TestCase):
         state = self.load()
         browser = state["text"] + "\nThe browser's paragraph.\n"
         status, body = self.save(state, browser)
-        self.assertEqual((status, self.path.read_text(encoding="utf-8")), (200, browser), body)
+        self.assertEqual((status, exact(self.path)), (200, browser), body)
         self.assertTrue(body["warning"] and body["can_undo"], body)
         # The replaced file stays beside the source, where a program holding it open still writes.
         self.assertEqual(len(swaps()), 1)
         self.load()
-        self.assertEqual([p.read_text(encoding="utf-8") for p in swaps()], [state["text"]])
+        self.assertEqual([exact(p) for p in swaps()], [state["text"]])
         status, undone = self.call("/__source", {"op": "undo", "file": FILE})
         self.assertEqual((status, undone["text"]), (200, state["text"]), undone)
         self.assertTrue(undone["warning"], undone)
