@@ -149,8 +149,9 @@ def watch(interval=0.5, stop_event=None, previous=None, numbers=None, failure=""
     recovery every page rebuilds so none of those edits is skipped.
 
     A pass that fails for any other reason shows the error on every page;
-    it is retried at once when the sources change again, otherwise after
-    1, 2, 4 ... 30 s, and once it completes every page is rebuilt, so no
+    it is retried at once when the sources change again (not the table
+    outputs or data a generator writes), otherwise after 1, 2, 4 ... 30 s,
+    and once it completes every page is rebuilt, so no
     change made before or during the failure is skipped."""
     from . import preview
     previous = snapshot() if previous is None else previous
@@ -163,6 +164,14 @@ def watch(interval=0.5, stop_event=None, previous=None, numbers=None, failure=""
     if snapshot() != previous:
         shown = None
     failures, retry_at, failed_on = 0, 0.0, None
+    outputs = [preview.ROOT / preview.PROJECT.relative(key) for key in ("table_output", "table_data")]
+
+    def generated(path):
+        return any(path.is_relative_to(folder) for folder in outputs)
+
+    def sources(stamps):  # a failed table step may still have written its outputs
+        return {path: stamp for path, stamp in stamps.items() if not generated(path)}
+
     while True:
         if stop_event is None:
             time.sleep(interval)
@@ -172,7 +181,7 @@ def watch(interval=0.5, stop_event=None, previous=None, numbers=None, failure=""
         current, checked = None, time.time()
         try:
             current = snapshot()
-            if failure and current == failed_on and time.monotonic() < retry_at:
+            if failure and sources(current) == failed_on and time.monotonic() < retry_at:
                 preview.WATCHER["synced"] = checked  # the pages already show the error for these sources
                 continue
             with preview.LOCK:  # pages asked for although no source changed (accepted edits)
@@ -207,8 +216,6 @@ def watch(interval=0.5, stop_event=None, previous=None, numbers=None, failure=""
                 tables_pending = render_pending = False
                 # Absorb generated outputs only. Source edits made while the
                 # generator was running must still trigger the next rebuild.
-                outputs = [preview.ROOT / preview.PROJECT.relative(key) for key in ("table_output", "table_data")]
-                generated = lambda p: any(p.is_relative_to(d) for d in outputs)  # noqa: E731
                 previous = {p: stamp for p, stamp in previous.items() if not generated(p)}
                 previous.update({p: stamp for p, stamp in snapshot().items() if generated(p)})
                 targets = list(preview.DOCS)
@@ -240,5 +247,5 @@ def watch(interval=0.5, stop_event=None, previous=None, numbers=None, failure=""
                 cast(set[str], preview.WATCHER["rebuild"]).update(requested)
             failure = report_failure(exc, failure)
             preview.WATCHER["synced"] = checked  # the status describes these sources: its error says the page is old
-            failed_on, failures = current, failures + 1
-            retry_at = time.monotonic() + min(30.0, 2.0 ** (failures - 1))
+            failed_on, failures = None if current is None else sources(current), failures + 1
+            retry_at = time.monotonic() + min(30.0, 2.0 ** min(failures - 1, 5))  # a bounded exponent

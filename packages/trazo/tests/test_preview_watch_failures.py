@@ -1,6 +1,8 @@
 """Preview: a watcher pass that fails for an unexpected reason shows it and recovers."""
 
+import contextlib
 import http.client
+import io
 import json
 import os
 import shutil
@@ -8,10 +10,12 @@ import tempfile
 import time
 import unittest
 from pathlib import Path
+from unittest.mock import Mock, patch
 
 import _support  # noqa: F401  (sets TRAZO_ROOT before trazo loads)
 from test_mcp import Session, free_port, make_project, wait_until
 
+from trazo import preview, preview_watch
 from trazo.build_lock import lock_path
 from trazo.project import DEFAULTS, Project
 
@@ -82,6 +86,38 @@ class WatcherFailureTests(unittest.TestCase):
         self.assertTrue(wait_until(lambda: status(port)["manuscript"]["ok"]
                                    and b"ReadableAgain" in get(port, "/manuscript.html")),
                         "the watcher did not rebuild after the file became readable")
+
+
+class WatcherBackoffTests(unittest.TestCase):
+    def test_outputs_a_failed_table_step_wrote_do_not_skip_the_backoff(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            spec, output = root / "tables/specs/example.json", root / "tables/output/md/example.md"
+            spec.parent.mkdir(parents=True)
+            output.parent.mkdir(parents=True)
+            spec.write_text("original")
+            runs, polls = [], 0
+
+            def tick(_):  # the watcher's wait between passes; True stops it
+                nonlocal polls
+                polls += 1
+                if polls == 1:
+                    spec.write_text("edited")
+                return polls > 6
+
+            def regenerate():  # writes its outputs, then fails in a way it does not expect
+                runs.append(len(runs))
+                output.write_text(f"run {len(runs)}")
+                raise UnicodeDecodeError("utf-8", b"\xf1", 0, 1, "invalid continuation byte")
+
+            with patch.object(preview, "ROOT", root), patch.object(preview, "build"), \
+                    patch.object(preview, "regenerate_tables", side_effect=regenerate), \
+                    patch.dict(preview.STATE, clear=True), \
+                    patch.dict(preview.WATCHER, {"synced": 0.0, "rebuild": set(), "outputs": []}), \
+                    patch.object(preview_watch.time, "monotonic", return_value=1000.0), \
+                    contextlib.redirect_stdout(io.StringIO()):  # the clock stands still: no backoff ends
+                preview.watch(stop_event=Mock(**{"wait.side_effect": tick}))
+            self.assertEqual(len(runs), 1, "the outputs of the failed run were taken as a new change")
 
 
 if __name__ == "__main__":
