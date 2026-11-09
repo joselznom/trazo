@@ -239,6 +239,7 @@ def check_outputs() -> None:
     The status shows them as `outputs`."""
     from . import preview, table
     from .preview_watch import own_tables_stage
+    from .review_storage import holds_text
     notes = []
     if not own_tables_stage(preview.PROJECT):
         for label in table.all_labels():
@@ -247,10 +248,8 @@ def check_outputs() -> None:
             except OSError:  # unreadable: the page build (spec) or the next table render (data) reports it
                 continue
             path = table.output_path(label)
-            # surrogateescape: bytes that are not UTF-8 (a hand edit re-saved in another
-            # encoding) never equal the rendered Markdown, so they count as edited by hand.
-            if rendered.markdown is not None and path.is_file() and path.read_text(
-                    encoding="utf-8", errors="surrogateescape") != rendered.markdown:
+            # A hand edit re-saved in another encoding counts as edited by hand too.
+            if rendered.markdown is not None and path.is_file() and not holds_text(path, rendered.markdown):
                 notes.append(path.relative_to(preview.ROOT).as_posix())
     with preview.LOCK:
         preview.WATCHER["outputs"] = notes
