@@ -7,6 +7,7 @@ owner decision. Nothing is integrated; prototypes are diffs against `b775566`.
 Details and failing-first tests are in [`open-points/`](open-points/), with an
 independent [cross-check](open-points/verification.md); raw evidence is in
 `.build/open-points/` of the `t3-investigate-open-workflows` worktree.
+Line numbers are at `b775566`; merging develop's #27 moved none of them.
 
 ## Not verified
 
