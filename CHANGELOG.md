@@ -28,7 +28,7 @@ Internal changes (tests, CI, refactoring) stay out.
   new one, Backspace at its start joins the one before, and blank lines in a
   paste make paragraphs. Select text and press ⌘B or ⌘I, or B or I in the
   selection bar, to toggle bold and italic. While you write, ⌘Z takes back
-  your typing and then Enter, Backspace, bold and italic, one at a time, and
+  your typing and then Enter, Backspace and styles, one at a time, and
   ⌘⇧Z does them again. `@` opens a list of your references,
   figures, tables and values. If trazo cannot place a change exactly in the
   Markdown, it saves nothing, keeps your text and asks what to do (#20,

@@ -3,7 +3,7 @@
 A click in a paragraph, list item or heading writes there, with no mode to
 enter. Leaving it, or ⌘↵, saves the words that changed to the Markdown. Esc
 discards what you typed since the last save; Enter, Backspace at the start and
-bold or italic save at once, and ⌘Z takes them back. Citations, values, math,
+bold, italic or underline save at once, and ⌘Z takes them back. Citations, values, math,
 code, note calls and images are locked chips.
 
 - **Enter** breaks a paragraph or opens a new one, at its start before it. In a
@@ -30,7 +30,8 @@ and so do lines that hold a raw TeX environment or HTML, and the lines next to
 them with no blank line between.
 
 Inside the text, ⌘Z undoes your typing and then, one at a time, the Enter,
-Backspace, bold or italic before it: the page and the file go back together.
+Backspace, bold, italic or underline before it: the page and the file go back
+together. Enter and Backspace wait for a style still saving in their paragraph.
 ⌘⇧Z does them again. If the file changed since, nothing is undone and a notice
 says why. Leaving the text ends that history: outside the text, ⌘Z undoes your
 latest change in the document, a comment or a saved paragraph.
