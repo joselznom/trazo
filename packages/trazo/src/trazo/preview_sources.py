@@ -88,8 +88,15 @@ def change_source(request):
     save: {file, text, base_sha256} writes only if the file on disk still has
     the loaded sha256 (409 with the current sha otherwise). The previous
     content goes to file_history.json. undo: {op: "undo", file} restores it,
-    only if the file is still exactly what that save wrote. Undoing a
-    rejection of edits (kind "reject") makes those edits pending again.
+    only if the file is still exactly what that save wrote; with {expect:
+    save_id} only if that save is still the file's latest (409 otherwise,
+    and the save stays undoable). Undoing a rejection of edits (kind
+    "reject") makes those edits pending again.
+
+    An answer that wrote the file adds `written`, the time.time() after the
+    write: the page's build has it once the watcher's `synced` (in
+    /__workspace) is later. A save that wrote adds `save_id`, what `expect`
+    names.
     """
     from . import preview
     if not isinstance(request, dict):
@@ -107,6 +114,8 @@ def change_source(request):
             if not mine:
                 raise CommentError("nothing to undo")
             entry = entries[mine[-1]]
+            if "expect" in request and entry.get("at") != request["expect"]:
+                raise Conflict("the file has a newer save", sha256=current)
             if entry.get("after_sha") != current:
                 del entries[mine[-1]]
                 save_file_history(entries)
@@ -117,6 +126,7 @@ def change_source(request):
                 preview_edit_review.absorb(file, old, entry["before_text"])
             del entries[mine[-1]]
             save_file_history(entries)
+            wrote = {"written": time.time()}
         else:
             text = request.get("text")
             if not isinstance(text, str):
@@ -125,15 +135,18 @@ def change_source(request):
                 raise Conflict("the file changed on disk since it was loaded",
                                sha256=current)
             new = text.encode("utf-8")
+            wrote = {}
             if new != data:
-                entries.append({"time": time.strftime("%Y-%m-%d %H:%M:%S"), "at": time.time_ns(), "file": file,
+                at = time.time_ns()
+                entries.append({"time": time.strftime("%Y-%m-%d %H:%M:%S"), "at": at, "file": file,
                                 "before_text": old, "before_sha": current,
                                 "after_sha": sha256_of(new)})
                 save_file_history(entries)
                 write_atomic(path, new)
                 preview_edit_review.absorb(file, old, text)
+                wrote = {"written": time.time(), "save_id": at}
         data, text = read_source(path)
-        return source_state(file, path, data, text)
+        return {**source_state(file, path, data, text), **wrote}
 
 
 def latest_change(doc):

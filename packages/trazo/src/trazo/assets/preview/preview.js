@@ -167,7 +167,10 @@
         loadAll().then(() => { if (view === "figures" && !hasUnsaved()) renderFigs(); });
       }
       const stale = (view !== "doc" ? docNames : [doc]).some((n) => versions[n] !== loaded[n]);
-      if (stale && !busy && await App.reload(() => !hasUnsaved())) return;
+      // A newer build may still lack this page's last save: a reload to it would
+      // take back what the author left on the page until the next one.
+      const building = lastWritten > (all.synced ?? Infinity);
+      if (stale && !busy && !building && await App.reload(() => !hasUnsaved())) return;
       hold.hidden = !(busy && stale);
       if (view === "doc") for (const n of docNames) if (n !== doc) loaded[n] = versions[n];  // not shown here
       // Refresh copies fetched at another version, or before the first

@@ -120,9 +120,10 @@ def status():
     inputs = digest(json.dumps({str(p): stamp for p, stamp in snapshot().items()
                                if not p.is_relative_to(ASSETS_DIR)}, sort_keys=True).encode())
     with preview.LOCK:
-        outputs = list(preview.WATCHER["outputs"])
+        outputs, synced = list(preview.WATCHER["outputs"]), preview.WATCHER["synced"]
+    # `synced`: a page holds its reload until it is later than its last save's `written`.
     return {"documents": docs, "comments": preview.comments_stamp(), "docx": preview.docx_status(),
-            "outputs": outputs,
+            "outputs": outputs, "synced": synced,
             "diagrams": diagrams, "tables": tables, "catalog": revision, "inputs": inputs,
             "review": review.revision(),
             "assets": fingerprint(p for p in ASSETS_DIR.rglob("*") if p.is_file())}

@@ -232,6 +232,19 @@ class SaveTests(SaveCase):
         preview.change_source({"op": "undo", "file": CHAPTER})
         self.assertEqual(self.chapter.read_text(encoding="utf-8"), text)
 
+    def test_an_undo_that_names_its_save_is_refused_after_a_newer_one(self):
+        text = "The quick fox.\n"
+        key, rendered = self.block(text, "quick")
+        first = self.save(key, rendered, "The slow fox.")
+        key, rendered = self.block(None, "slow")
+        second = self.save(key, rendered, "The slow red fox.")
+        with self.assertRaises(preview.Conflict):
+            preview.change_source({"op": "undo", "file": CHAPTER, "expect": first["save_id"]})
+        self.assertEqual(self.chapter.read_text(encoding="utf-8"), "The slow red fox.\n")
+        preview.change_source({"op": "undo", "file": CHAPTER, "expect": second["save_id"]})
+        preview.change_source({"op": "undo", "file": CHAPTER, "expect": first["save_id"]})
+        self.assertEqual(self.chapter.read_text(encoding="utf-8"), text)
+
     def test_a_save_keeps_a_windows_files_line_endings(self):
         text = "First line\r\nof the block.\r\n\r\nNext.\r\n"
         key, rendered = self.block(text, "First")

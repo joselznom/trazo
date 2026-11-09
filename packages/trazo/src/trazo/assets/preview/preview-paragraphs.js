@@ -84,6 +84,7 @@
     const ed = writing, selection = getSelection(), item = itemOf(ed.el);
     if (isHeading(ed.el)) { goTo(true, true); return ""; }  // a heading stays one line: Enter goes on to the text
     if (item && item.querySelector(SUBLIST)) return;  // the new item would take the sublist from this one
+    const step = newStep("break", ed, [ed.el]);
     if (!selection.isCollapsed) selection.deleteFromDocument();
     if (!textOf(ed.el)) return;  // the file has no empty paragraphs
     if (ed.draftOf && !atEdge(ed, false)) saveBlock(ed);
@@ -104,6 +105,8 @@
       saveBlock(first);
       second.draftOf = first;
       second.above = above;
+      // The file has no empty paragraphs: taking this one back is the page's alone.
+      addStep(step, { kind: "draft", draft: second, results: [[el, ""]], saved: () => first.queued ?? first.before });
       return spaceAfter;
     }
     first.brokenInto = second;
@@ -117,6 +120,7 @@
         }
         showFailure(...failure);
       },
+      saved: (payload, sent) => addStep(step, { payload, results: [[first.el, left], [second.el, right]], saved: sent.before }),
     });
     return spaceAfter;
   }
@@ -146,11 +150,13 @@
       return;
     }
     if (ed.draftOf) saveBlock(ed);
+    const step = newStep("join", ed, [previous, ed.el]);
     // What is typed before the answer would be lost with this paragraph.
     ed.joining = true;
     ed.el.contentEditable = "false";
     sendBlock(ed, () => ({ before: ed.before, after: textOf(ed.el), previous: textOf(previous), into: mark.dataset.h, ...mentionsIn(ed.el) }), {
       done: (payload) => joinTo(ed, previous, payload),
+      saved: (payload, sent) => addStep(step, { payload, results: [[previous, textOf(previous)]], saved: sent.before }),
       refused: (_, status, payload) => {
         ed.joining = false;
         ed.el.contentEditable = "plaintext-only";

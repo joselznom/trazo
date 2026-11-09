@@ -1,6 +1,7 @@
 """Viewer regressions in Chrome: caption and Source tab edits saved to the Markdown sources."""
 
 import json
+import time
 import unittest
 from unittest.mock import patch
 
@@ -170,6 +171,9 @@ class SourceEditTests(PreviewBrowserTestCase):
         self.assertFalse(self.evaluate("document.querySelector('.pv-figsview').hidden"))
 
     def test_source_save_keeps_reading_anchor_and_source_selection_after_reflow(self):
+        watcher = patch.object(preview, "WATCHER", {"synced": 0.0, "rebuild": set(), "outputs": []})
+        watcher.start()
+        self.addCleanup(watcher.stop)
         source = _support.ROOT / "manuscript/main/99_reading_position.md"
         self.addCleanup(source.unlink, missing_ok=True)
         self.keep_files(preview.FILE_HISTORY_PATH)
@@ -216,8 +220,9 @@ class SourceEditTests(PreviewBrowserTestCase):
                 self.wait_for("document.querySelector('.pv-src-msg').textContent.startsWith('Saved')")
                 self.assertEqual(source.read_text(), original.replace(long_text, replacement))
                 page.write_text(current_html.replace('<p>' + long_text + '</p>', rendered))
-                with preview.LOCK:
+                with preview.LOCK:  # as the watcher does once it has built the save
                     preview.STATE["manuscript"]["version"] += 1
+                    preview.WATCHER["synced"] = time.time()
                 self.wait_for(f"performance.timeOrigin !== {before['origin']} && document.readyState === 'complete' && "
                               "document.querySelector('.pv-src-text')?.value.includes('Reading paragraph 44')")
                 if shortening:

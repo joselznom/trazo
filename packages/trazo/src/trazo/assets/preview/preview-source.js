@@ -170,8 +170,13 @@
     if (!res.ok) throw new Error(payload.error || res.status);
     return payload;
   }
+  // The server's time of the latest write this page made (`written`, see
+  // trazo.preview_sources.change_source): poll() in preview.js does not
+  // reload before the watcher has built it.
+  let lastWritten = 0;
   async function postJson(path, body) {
     const result = await App.api(path, body);
+    if (typeof result.data?.written === "number") lastWritten = Math.max(lastWritten, result.data.written);
     return { ...result, payload: result.data };
   }
 

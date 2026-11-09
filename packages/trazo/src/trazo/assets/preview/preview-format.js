@@ -54,6 +54,7 @@
     // In characters, as the server counts them: an emoji is two units of a JavaScript string.
     const from = [...textOf(head.cloneContents())].length, to = [...textOf(upTo.cloneContents())].length;
     saveBlock(ed);
+    const step = newStep("format", ed, [ed.el], { style });
     sendBlock(ed, () => ({ before: ed.before, style, from, to }), {
       path: "/__block-format",
       when: () => !failed.has(ed.el),  // the offsets are into text that did not save
@@ -65,6 +66,7 @@
         ed.restore = snapshotOf(ed.el);
         if (writing === ed) { selection.removeAllRanges(); selection.addRange(range); pressFormatButtons(); }
       },
+      saved: (payload, sent) => addStep(step, { payload, results: [[ed.el, textOf(ed.el)]], saved: sent.before }),
     });
   }
 

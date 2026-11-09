@@ -120,7 +120,8 @@
   // One at a time and in order: a save may need the key the one before it got.
   // `group` are the paragraphs the block becomes, the first being the one sent.
   let saveQueue = Promise.resolve();
-  function sendBlock(ed, body, { path = "/__block", group = [ed], block = group[0], refused = showFailure, done = null, when = null } = {}) {
+  // `saved` runs after a save that was done, with its answer and what was sent (preview-history.js).
+  function sendBlock(ed, body, { path = "/__block", group = [ed], block = group[0], refused = showFailure, done = null, when = null, saved = null } = {}) {
     saves++;
     showSaveState("Saving…");
     saveQueue = saveQueue.then(async () => {
@@ -143,8 +144,11 @@
       if (!result.ok || !result.payload.saved) {
         showSaveState("", false);
         refused(ed, result.status, result.payload);
-      } else if (done) { showSaveState("Saved", true); done(result.payload); }
+        return;
+      }
+      if (done) { showSaveState("Saved", true); done(result.payload); }
       else blockSaved(ed, result.payload, group, sent);
+      if (saved) saved(result.payload, sent);
     });
   }
 
@@ -297,12 +301,16 @@
   page.addEventListener("focusout", (e) => {
     // Another window taking the focus leaves the paragraph the active element, and that is not leaving it.
     if (writing && !writing.joining && e.target === writing.el && document.activeElement !== e.target
-        && !(e.relatedTarget && writing.el.contains(e.relatedTarget))) saveBlock(stopWriting());
+        && !(e.relatedTarget && writing.el.contains(e.relatedTarget))) {
+      endHistory();
+      saveBlock(stopWriting());
+    }
   });
   page.addEventListener("input", () => { if (writing) fab.hidden = true; });
   document.addEventListener("keydown", (e) => {
     if (writing && !writing.joining && e.key === "Escape") {
       e.preventDefault();
+      endHistory();
       discardWriting(stopWriting());
       getSelection().removeAllRanges();
     }
