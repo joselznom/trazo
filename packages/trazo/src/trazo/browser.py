@@ -264,10 +264,9 @@ class Chrome:
             if self.proc is not None:
                 try:
                     if self.proc.poll() is None:
-                        try:
-                            self.call("Browser.close", timeout=min(self.timeout, _CLOSE_TIMEOUT))
-                        except BrowserError:
-                            pass
+                        self.call("Browser.close", timeout=min(self.timeout, _CLOSE_TIMEOUT))
+                except BrowserError:
+                    pass
                 finally:  # whatever the reply was (a malformed one raises): Chrome must not outlive its profile
                     try:
                         self.proc.wait(timeout=_CLOSE_TIMEOUT)

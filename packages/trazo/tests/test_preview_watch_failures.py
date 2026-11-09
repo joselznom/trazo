@@ -12,12 +12,17 @@ from pathlib import Path
 import _support  # noqa: F401  (sets TRAZO_ROOT before trazo loads)
 from test_mcp import Session, free_port, make_project, wait_until
 
+from trazo.build_lock import lock_path
+from trazo.project import DEFAULTS, Project
+
 
 def get(port: int, path: str) -> bytes:
     connection = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
     try:
         connection.request("GET", path)
-        return connection.getresponse().read()
+        response = connection.getresponse()
+        assert response.status == 200, response.read()
+        return response.read()
     finally:
         connection.close()
 
@@ -44,7 +49,7 @@ class WatcherFailureTests(unittest.TestCase):
         root = self.project()
         port = self.start(root)
         self.assertTrue(wait_until(lambda: status(port)["manuscript"]["ok"]))
-        lock = next((root / ".cache/trazo").glob("build-*.lock"))
+        lock = lock_path(Project(root, DEFAULTS, True))
         lock.chmod(0o400)  # the tables stage cannot open the build lock: not an error it expects
         spec = root / "tables/specs/results.json"
         section = root / "manuscript/main/01_introduction.md"

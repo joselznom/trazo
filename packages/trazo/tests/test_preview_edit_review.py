@@ -143,5 +143,5 @@ class EditReviewTests(unittest.TestCase):
             self.assertEqual(preview.WATCHER["outputs"], ["tables/output/md/cohorts.md"])
             preview.WATCHER["outputs"] = []
             path.write_bytes(path.read_bytes() + "Café, saved as Latin-1.\n".encode("latin-1"))
-            preview_edit_review.check_outputs()  # not what the spec makes either: the next render replaces it
+            preview_edit_review.check_outputs()  # not what the spec makes either
             self.assertEqual(preview.WATCHER["outputs"], ["tables/output/md/cohorts.md"])

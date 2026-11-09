@@ -141,7 +141,8 @@ class BrowserTests(unittest.TestCase):
         self.peer("garbage-close")
         checker = diagram_editor.SharedChrome()
         checker.chrome = chrome = browser.Chrome(timeout=2)
-        self.addCleanup(lambda: chrome.proc.poll() is None and (chrome.proc.kill(), chrome.proc.wait(5)))
+        self.addCleanup(chrome.proc.wait, 5)
+        self.addCleanup(chrome.proc.kill)  # runs first; a no-op once Chrome was reaped
         log = io.StringIO()
         with contextlib.redirect_stdout(log):
             checker.drop()

@@ -6,6 +6,7 @@ there when it runs (preview.NAME), so patching them on trazo.preview reaches it.
 
 import subprocess
 import time
+from typing import cast
 
 from . import dependencies, labels, preview_edit_review, table
 from .build_lock import build_lock, child_env
@@ -147,21 +148,18 @@ def watch(interval=0.5, stop_event=None, previous=None, numbers=None, failure=""
     failed. A failed table render stays pending across prose edits; after
     recovery every page rebuilds so none of those edits is skipped.
 
-    A pass that fails for any other reason keeps its changes and shows the
-    error on every page; it is retried at once when the sources change
-    again, otherwise after 1, 2, 4 ... 30 s, and once it completes every
-    page is rebuilt."""
+    A pass that fails for any other reason shows the error on every page;
+    it is retried at once when the sources change again, otherwise after
+    1, 2, 4 ... 30 s, and once it completes every page is rebuilt, so no
+    change made before or during the failure is skipped."""
     from . import preview
     previous = snapshot() if previous is None else previous
     # The numbers the pages used; unknown when sources changed during the
     # first builds or while reading them, so the first rebuild then covers
     # every page.
     tables_pending, render_pending = False, False
-    recover = bool(failure)  # the next complete pass rebuilds every page
-    try:
-        shown = numbered() if numbers is None else numbers
-    except Exception:  # the first pass reads them again, and reports a failure
-        shown, recover = None, True
+    # After a failure (`failure` is its message) the next complete pass rebuilds every page.
+    shown = numbered() if numbers is None and not failure else numbers
     if snapshot() != previous:
         shown = None
     failures, retry_at, failed_on = 0, 0.0, None
@@ -170,15 +168,16 @@ def watch(interval=0.5, stop_event=None, previous=None, numbers=None, failure=""
             time.sleep(interval)
         elif stop_event.wait(interval):
             return
-        base, requested, current, checked = previous, set(), None, time.time()
+        requested: set[str] = set()
+        current, checked = None, time.time()
         try:
             current = snapshot()
             if failure and current == failed_on and time.monotonic() < retry_at:
                 preview.WATCHER["synced"] = checked  # the pages already show the error for these sources
                 continue
             with preview.LOCK:  # pages asked for although no source changed (accepted edits)
-                requested, preview.WATCHER["rebuild"] = preview.WATCHER["rebuild"], set()
-            if current == previous and not requested and not recover:
+                requested, preview.WATCHER["rebuild"] = cast(set[str], preview.WATCHER["rebuild"]), set()
+            if current == previous and not requested and not failure:
                 preview.WATCHER["synced"] = checked  # preview_start waits for it (trazo.preview_inputs)
                 continue
             changed = {p for p in current.keys() | previous.keys()
@@ -194,7 +193,7 @@ def watch(interval=0.5, stop_event=None, previous=None, numbers=None, failure=""
             if render_pending and not tables_pending:
                 if not preview.render_spec_tables():
                     # The table error replaces the watcher's, and its recovery rebuilds every page.
-                    failure, failures, recover = "", 0, False
+                    failure, failures = "", 0
                     continue  # unrelated prose edits must not hide the table error
                 render_pending, rendered = False, True
                 output_dir = table.OUTPUT_DIR
@@ -203,7 +202,7 @@ def watch(interval=0.5, stop_event=None, previous=None, numbers=None, failure=""
                                  if p.is_relative_to(output_dir)})
             if tables_pending:
                 if not preview.regenerate_tables():
-                    failure, failures, recover = "", 0, False  # as for a failed render above
+                    failure, failures = "", 0  # as for a failed render above
                     continue  # keep the error visible until the text is fixed
                 tables_pending = render_pending = False
                 # Absorb generated outputs only. Source edits made while the
@@ -215,7 +214,7 @@ def watch(interval=0.5, stop_event=None, previous=None, numbers=None, failure=""
                 targets = list(preview.DOCS)
             else:
                 targets = list(preview.DOCS) if rendered else changed_documents(changed) if changed else []
-            if recover:  # every page shows the failure until it builds again
+            if failure:  # every page shows the failure until it builds again
                 targets = list(preview.DOCS)
             targets += [name for name in preview.DOCS if name in requested and name not in targets]
             # One label index for the pages built now: an edit meanwhile
@@ -229,16 +228,17 @@ def watch(interval=0.5, stop_event=None, previous=None, numbers=None, failure=""
                     build_all([name for name in preview.DOCS if name not in targets])
             shown = now
             # A spec or data change re-rendered the outputs above; only an output changed by itself may differ.
-            if recover or any(p.is_relative_to(table.OUTPUT_DIR) for p in changed):
+            if failure or any(p.is_relative_to(table.OUTPUT_DIR) for p in changed):
                 preview_edit_review.check_outputs()
             if failure:
                 print("[preview] watcher recovered", flush=True)
-            failure, failures, recover = "", 0, False
+            failure, failures = "", 0
         except Exception as exc:  # keep watching; every page says why it is old
-            previous = base  # the changes of this pass are still to show
+            # Nothing of this pass is lost: table work that failed stays pending, and
+            # the retry rebuilds every page and checks the outputs again.
             with preview.LOCK:
-                preview.WATCHER["rebuild"].update(requested)
+                cast(set[str], preview.WATCHER["rebuild"]).update(requested)
             failure = report_failure(exc, failure)
             preview.WATCHER["synced"] = checked  # the status describes these sources: its error says the page is old
-            failed_on, recover, failures = current, True, failures + 1
+            failed_on, failures = current, failures + 1
             retry_at = time.monotonic() + min(30.0, 2.0 ** (failures - 1))
