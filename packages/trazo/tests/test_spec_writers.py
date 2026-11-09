@@ -122,15 +122,17 @@ class SpecWriters(Restore):
                     with self.subTest(filesystem=kind or "native", file=path.name, atomic=atomic), \
                          self.as_filesystem(kind):
                         before = path.read_bytes()
-                        with self.writing_in_the_window(path, atomic):
-                            status, body = save()
-                        self.assertEqual(status, 409, body)
-                        self.assertIn(MARKER, path.read_text(encoding="utf-8"))
-                        self.assertTrue(any(typed in k for k in self.kept()), body)
-                        if path == self.diagram:  # what the editor's Keep mine and Load theirs use
-                            self.assertEqual(body["text"], path.read_bytes().decode("utf-8"))
-                        path.write_bytes(before)
-                        shutil.rmtree(preview.REVIEW_DIR / "conflicts")
+                        try:
+                            with self.writing_in_the_window(path, atomic):
+                                status, body = save()
+                            self.assertEqual(status, 409, body)
+                            self.assertIn(MARKER, path.read_text(encoding="utf-8"))
+                            self.assertTrue(any(typed in k for k in self.kept()), body)
+                            if path == self.diagram:  # what the editor's Keep mine and Load theirs use
+                                self.assertEqual(body["text"], path.read_bytes().decode("utf-8"))
+                        finally:  # the next case starts from the fixture, whatever this one did
+                            path.write_bytes(before)
+                            shutil.rmtree(preview.REVIEW_DIR / "conflicts", ignore_errors=True)
 
     def test_a_collision_records_no_undo(self) -> None:
         path, before = table.spec_path("results"), table.spec_path("results").read_bytes()

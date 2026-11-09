@@ -112,20 +112,23 @@ class IndependentWriters(unittest.TestCase):
         for kind in self.filesystems():
             for atomic in (False, True):
                 with self.subTest(filesystem=kind or "native", atomic=atomic), self.as_filesystem(kind):
-                    state = self.load()
-                    browser = state["text"] + "\nThe browser's paragraph.\n"
-                    with self.writing_in_the_window(atomic):
-                        status, body = self.save(state, browser)
-                    self.assertEqual(status, 409, body)
-                    self.assertIn(MARKER, self.path.read_text(encoding="utf-8"))
-                    kept = [exact(_support.ROOT / p) for p in body["kept"]]
-                    self.assertIn(browser, kept)
-                    state = self.load()
-                    self.assertFalse(state["can_undo"])  # the save that did not happen has no undo
-                    self.assertEqual(state["exact"], kind is None)
-                    self.assertEqual(sorted(state["conflicts"]), sorted(body["conflicts"]))
-                    self.path.write_text(state["text"].replace(f"\n{MARKER}\n", ""), encoding="utf-8")
-                    shutil.rmtree(preview.REVIEW_DIR / "conflicts")
+                    before = self.path.read_bytes()
+                    try:
+                        state = self.load()
+                        browser = state["text"] + "\nThe browser's paragraph.\n"
+                        with self.writing_in_the_window(atomic):
+                            status, body = self.save(state, browser)
+                        self.assertEqual(status, 409, body)
+                        self.assertIn(MARKER, self.path.read_text(encoding="utf-8"))
+                        kept = [exact(_support.ROOT / p) for p in body["kept"]]
+                        self.assertIn(browser, kept)
+                        state = self.load()
+                        self.assertFalse(state["can_undo"])  # the save that did not happen has no undo
+                        self.assertEqual(state["exact"], kind is None)
+                        self.assertEqual(sorted(state["conflicts"]), sorted(body["conflicts"]))
+                    finally:  # the next case starts from the fixture, whatever this one did
+                        self.path.write_bytes(before)
+                        shutil.rmtree(preview.REVIEW_DIR / "conflicts", ignore_errors=True)
 
     def test_undo_collides_like_a_save(self) -> None:
         state = self.load()
