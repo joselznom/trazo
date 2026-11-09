@@ -35,7 +35,8 @@ from typing import Any, cast
 
 from . import edit_diff, preview_blocks
 from .local_server import RequestError
-from .review_storage import StoreError, review_lock, write_atomic, write_json
+from .review_storage import StoreError, review_lock, write_json
+from .source_publish import publish
 
 MAX_ITEMS = 10_000
 
@@ -179,7 +180,9 @@ def _items(request: Any) -> tuple[str, dict[str, list[str]]]:
 
 def change_edits(request: Any) -> dict[str, Any]:
     """Accept or reject edits; those that changed since the page was built
-    are left as they are and listed as missed ({file, id})."""
+    are left as they are and listed as missed ({file, id}), as are those of
+    a file another program wrote while their rejection was being published
+    (source_publish keeps that version and the rejected text)."""
     from . import preview
     from .preview_sources import read_file_history, read_source, save_file_history, sha256_of, source_path
     op, by_file = _items(request)
@@ -207,7 +210,10 @@ def change_edits(request: Any) -> dict[str, Any]:
             history = read_file_history() if history is None else history
             history.append({"time": time.strftime("%Y-%m-%d %H:%M:%S"), "at": time.time_ns(), "file": name, "kind": "reject",
                             "before_text": text, "before_sha": sha256_of(data), "after_sha": sha256_of(new)})
-            write_atomic(path, new)
+            if not publish(path, new, data, name).published:
+                history.pop()
+                done -= len(chosen)
+                missed += [{"file": asked, "id": e.id} for e in chosen]
         if history is not None:
             save_file_history(history)
         if op == "accept" and done:
