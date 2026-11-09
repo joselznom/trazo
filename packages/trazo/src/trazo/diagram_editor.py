@@ -92,6 +92,7 @@ from .expand import ValuesError, load_values
 from .local_server import Conflict, NotFound, RequestError
 from .project import ASSETS_DIR, PROJECT
 from .review_comments import CommentStore
+from .review_storage import review_lock
 
 ROOT = PROJECT.root
 
@@ -126,6 +127,8 @@ def list_diagrams() -> list[dict[str, Any]]:
 
 def get_diagram(name: str) -> dict[str, Any]:
     path = diagram_file(name)
+    with review_lock():
+        dg.HISTORY.sweep(path)
     data = path.read_bytes()
     state = file_state(path)
     state.pop("bytes")

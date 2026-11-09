@@ -179,8 +179,11 @@ def table_state(label: Any, hidden: bool = False) -> dict[str, Any]:
 
 
 def get_table(query: dict[str, list[str]]) -> dict[str, Any]:
-    return errors_to_http(lambda: table_state(query.get("label", [None])[0],
-                                              query.get("hidden", ["0"])[0] == "1"))
+    label = query.get("label", [None])[0]
+    if isinstance(label, str) and tb.LABEL_RE.fullmatch(label):
+        with tb.review_lock():
+            tb.HISTORY.sweep(tb.spec_path(label))
+    return errors_to_http(lambda: table_state(label, query.get("hidden", ["0"])[0] == "1"))
 
 
 def body(request: Any) -> dict[str, Any]:
@@ -204,8 +207,9 @@ def save_table(request: Any) -> dict[str, Any]:
     label = spec_file(request.get("label"))
     if not isinstance(request.get("base_sha256"), str):
         raise RequestError("base_sha256 is required")
+    tb.HISTORY.take_warning()
     errors_to_http(lambda: tb.patch(label, request.get("ops"), request["base_sha256"]))
-    return table_state(label, bool(request.get("hidden")))
+    return {**table_state(label, bool(request.get("hidden"))), **warned()}
 
 
 def save_shared(request: Any) -> dict[str, Any]:
@@ -218,8 +222,15 @@ def save_shared(request: Any) -> dict[str, Any]:
         raise RequestError("base_sha256 must be a string or null")
     if base is None and tb.SHARED_PATH.is_file():
         raise RequestError("base_sha256 is required when _shared.json exists")
+    tb.HISTORY.take_warning()
     errors_to_http(lambda: tb.patch_shared(request.get("ops"), base, label))
-    return table_state(label, bool(request.get("hidden"))) if label else {}
+    return {**(table_state(label, bool(request.get("hidden"))) if label else {}), **warned()}
+
+
+def warned() -> dict[str, str]:
+    """The warning of the publication this request just made, if any (review_history)."""
+    warning = tb.HISTORY.take_warning()
+    return {"warning": warning} if warning else {}
 
 
 def undo_table(request: Any) -> dict[str, Any]:

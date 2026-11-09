@@ -120,11 +120,11 @@ def violations(root: Path, operation: str, before: dict[str, bytes], after: dict
 
 
 def housekeeping(root: Path, operation: str, response: dict, before: dict[str, bytes], after: dict[str, bytes]) -> str:
-    """The one accepted success after an injected failure: a source save that
-    published, then could not set the replaced file aside, and says so. Accepted
-    only when the file holds the complete new text and the old text is in undo
-    history; otherwise "" and the failure counts."""
-    user_file = USER_FILES[operation] if operation == "source" else ""
+    """The one accepted success after an injected failure: a source, table or
+    diagram save that published, then could not set the replaced file aside, and
+    says so. Accepted only when the file holds the complete new text and the old
+    text is in undo history; otherwise "" and the failure counts."""
+    user_file = USER_FILES.get(operation, "")
     if not user_file or not (response.get("body") or {}).get("warning"):
         return ""
     if files(root).get(user_file) != after.get(user_file) or not in_history(root, before[user_file]):

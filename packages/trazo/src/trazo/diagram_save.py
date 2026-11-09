@@ -2,7 +2,10 @@
 
 A save writes figures/diagrams/NAME.json only if the file still has the
 base_sha256 the editor loaded, and records it for undo; autosaves from one
-client are coalesced (COALESCE_SECONDS, COALESCE_SPAN).
+client are coalesced (COALESCE_SECONDS, COALESCE_SPAN). A program that writes
+the file during the save keeps its version and the save answers 409, as when
+the file changed before it (review_history.History.publish). The reply's
+sha256 is that of the bytes written; `warning` reports trouble after publishing.
 """
 
 from __future__ import annotations
@@ -69,15 +72,18 @@ def save_diagram(name: str, request: Any) -> dict[str, Any]:
             raise Conflict(why,
                            sha256=current_sha,
                            text=current.decode("utf-8", "replace") if current is not None else None)
-        recorded = None
+        recorded, warning = None, ""
         if data != current:
-            recorded = record_save(path, current, data, autosave, client, label[:200])
-    return {**file_state(path), "changed": recorded is not None, "history": recorded}
+            recorded, warning = record_save(path, current, data, autosave, client, label[:200])
+    # What this save wrote, not a re-read: the editor keeps this sha256 as its base,
+    # so a write landing right after the save must make its next save a 409.
+    return {**file_state(path), "sha256": dg.sha256_bytes(data), "changed": recorded is not None,
+            "history": recorded, **({"warning": warning} if warning else {})}
 
 
 def record_save(path: Path, before: bytes | None, data: bytes, autosave: bool,
-                client: str, label: str) -> str:
-    """Publish an editor save with undo; return its grouping."""
+                client: str, label: str) -> tuple[str, str]:
+    """Publish an editor save with undo; return its grouping and any warning."""
     history = dg.load_history()
     now = time.time()
     file = dg.rel(path)
@@ -101,5 +107,6 @@ def record_save(path: Path, before: bytes | None, data: bytes, autosave: bool,
             "after_sha": dg.sha256_bytes(data), "source": "editor", "autosave": autosave,
             "client": client, "started": now, "epoch": now, "saves": 1})
         outcome = "new"
-    dg.HISTORY.publish(path, data, history[-1], replace_last=outcome == "merged")
-    return outcome
+    # `before` is what the caller read under the lock; a merged entry's "before" is older.
+    warning = dg.HISTORY.publish(path, data, history[-1], before, replace_last=outcome == "merged")
+    return outcome, warning

@@ -63,10 +63,17 @@ def shown(path: Path) -> str:
     return path.relative_to(ROOT).as_posix() if path.is_relative_to(ROOT) else str(path)
 
 
+def _under(folder: Path, name: str) -> Path:
+    """The folder kept for the file `name`: its repository path, or for a file
+    outside the project its absolute path below "outside"."""
+    path = Path(name)
+    return folder / "outside" / path.relative_to(path.anchor) if path.is_absolute() else folder / path
+
+
 def _copy_path(name: str, kind: str) -> Path:
-    folder = CONFLICTS_DIR / name
+    folder = _under(CONFLICTS_DIR, name)
     folder.mkdir(parents=True, exist_ok=True)
-    return folder / f"{time.strftime('%Y%m%d-%H%M%S')}-{uuid4().hex[:8]}.{kind}.md"
+    return folder / f"{time.strftime('%Y%m%d-%H%M%S')}-{uuid4().hex[:8]}.{kind}{Path(name).suffix or '.md'}"
 
 
 def _keep(source: Path, name: str, kind: str) -> Path:
@@ -128,7 +135,7 @@ def publish(path: Path, data: bytes, expected: bytes, name: str) -> Publication:
 def _park(tmp: Path, expected: bytes, name: str) -> Publication:
     """The save is published; set the displaced file aside for sweep(), after
     sweeping the earlier ones, so files never opened in the Source tab expire too."""
-    target = DISPLACED_DIR / name / f"{time.time_ns()}.{_sha(expected)}"
+    target = _under(DISPLACED_DIR, name) / f"{time.time_ns()}.{_sha(expected)}"
     try:
         _sweep_parked(name)
         target.parent.mkdir(parents=True, exist_ok=True)
@@ -192,7 +199,7 @@ def sweep(path: Path, name: str, known: Callable[[], set[str]]) -> None:
 
 
 def _sweep_parked(name: str) -> None:
-    folder = DISPLACED_DIR / name
+    folder = _under(DISPLACED_DIR, name)
     if not folder.is_dir():
         return
     for parked in folder.iterdir():
@@ -207,5 +214,5 @@ def _sweep_parked(name: str) -> None:
 
 def conflicts(name: str) -> list[str]:
     """The conflict copies kept for `name`, oldest first."""
-    folder = CONFLICTS_DIR / name
+    folder = _under(CONFLICTS_DIR, name)
     return sorted(shown(p) for p in folder.iterdir() if p.is_file()) if folder.is_dir() else []
