@@ -206,4 +206,4 @@
 
   }
   let polling = false, commentStamp = null, docxFinished = null;
-  App.watch(poll);
+  App.watch(poll, { preview: true });
