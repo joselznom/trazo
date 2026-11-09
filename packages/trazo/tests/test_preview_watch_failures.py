@@ -35,9 +35,9 @@ def status(port: int) -> dict:
     return json.loads(get(port, "/__status"))
 
 
-@unittest.skipUnless(shutil.which("pandoc"), "needs Pandoc")
-@unittest.skipIf(os.name == "nt" or os.geteuid() == 0, "file modes must deny access")
-class WatcherFailureTests(unittest.TestCase):
+class PreviewCase(unittest.TestCase):
+    """A copy of the fixture paper and a preview started on it through MCP."""
+
     def project(self) -> Path:
         # Entered before the session, so the session closes first.
         return make_project(Path(self.enterContext(tempfile.TemporaryDirectory())).resolve())
@@ -48,6 +48,32 @@ class WatcherFailureTests(unittest.TestCase):
         start = session.tool("preview_start", project=str(root))
         self.assertFalse(start["isError"], start["content"])
         return start["structuredContent"]["port"]
+
+
+@unittest.skipUnless(shutil.which("pandoc"), "needs Pandoc")
+class TableOutputTests(PreviewCase):
+    def test_a_hand_edit_in_another_encoding_is_noted_until_the_next_render_rebuilds_it(self) -> None:
+        root = self.project()
+        config = root / "trazo.toml"  # trazo renders the spec tables itself: their outputs are checked
+        config.write_text("\n".join(row for row in config.read_text().splitlines()
+                                    if not row.startswith("tables = ")) + "\n")
+        port = self.start(root)
+        self.assertTrue(wait_until(lambda: status(port)["manuscript"]["ok"]))
+        output, spec = root / "tables/output/md/results.md", root / "tables/specs/results.json"
+        output.write_bytes(output.read_bytes() + "Café, saved as Latin-1.\n".encode("latin-1"))
+        outputs = lambda: json.loads(get(port, "/__workspace"))["outputs"]  # noqa: E731
+        self.assertTrue(wait_until(lambda: outputs() == ["tables/output/md/results.md"]))
+        settled = time.time()  # the hand edit's pass is over: the render below is a pass of its own
+        self.assertTrue(wait_until(lambda: status(port)["synced"] > settled))
+        spec.write_text(spec.read_text() + " ")  # the next table render
+        self.assertTrue(wait_until(lambda: outputs() == []), "the banner outlived the render that rebuilt the output")
+        self.assertNotIn(b"Latin-1", output.read_bytes())
+        self.assertEqual(status(port)["manuscript"]["error"], "")
+
+
+@unittest.skipUnless(shutil.which("pandoc"), "needs Pandoc")
+@unittest.skipIf(os.name == "nt" or os.geteuid() == 0, "file modes must deny access")
+class WatcherFailureTests(PreviewCase):
 
     def test_a_failed_pass_is_reported_retried_and_keeps_its_changes(self) -> None:
         root = self.project()

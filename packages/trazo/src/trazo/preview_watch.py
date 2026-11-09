@@ -248,8 +248,9 @@ def watch(interval=0.5, stop_event=None, previous=None, numbers=None, failure=""
                 if (now := numbered()) != shown:
                     failed += build_all([name for name in preview.DOCS if name not in targets])
             shown = now
-            # A spec or data change re-rendered the outputs above; only an output changed by itself may differ.
-            if failure or any(p.is_relative_to(table.OUTPUT_DIR) for p in changed):
+            # A render above replaced the outputs it could (a note on one edited by hand no longer
+            # holds); otherwise only an output changed by itself may differ.
+            if failure or rendered or any(p.is_relative_to(table.OUTPUT_DIR) for p in changed):
                 preview_edit_review.check_outputs()
             if failed:  # retried like any failure: a fix without an edit (a permission) still shows
                 raise PageFailed("; ".join(failed))
