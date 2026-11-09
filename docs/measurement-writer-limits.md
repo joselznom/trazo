@@ -1,10 +1,12 @@
 # Independent writer limits
 
 A source save from the preview (the Source tab, writing on the page, captions,
-undo and rejecting an edit) now keeps the text of a program that ignores
-trazo's lock, such as an agent, an editor or a sync client, on filesystems that
-can swap two files atomically. Elsewhere it narrows the loss to one instant and
-says so. This is not a universal no-loss guarantee.
+undo and rejecting an edit) and a table or diagram spec save (the table and
+diagram editors, their undo, `trazo table` and `trazo diagram` patches) now keep
+the text of a program that ignores trazo's lock, such as an agent, an editor or
+a sync client, on filesystems that can swap two files atomically. Elsewhere they
+narrow the loss to one instant and say so. This is not a universal no-loss
+guarantee.
 
 ## The contract
 
@@ -56,7 +58,9 @@ save makes the next save a 409 instead of overwriting it.
   displaced file is not parked, so late writes through an open file are lost.
 - Post-publication housekeeping: when parking fails (a full disk, a read-only
   folder) the save is published and answers 200 with a `warning`, shown by
-  every editor that saves a source. The replaced text stays in undo history,
+  every editor that saves a source; the table and diagram editors' replies carry
+  it and the `trazo table` and `trazo diagram` commands print it, but those two
+  editors do not show it (their scripts are over the file-size limit). The replaced text stays in undo history,
   and the replaced file stays beside the source as a `.swap` for the same 600
   seconds (measured from its ctime, which the exchange updates: checked on
   APFS, not on Linux), so a writer holding it open still writes into a kept
@@ -80,6 +84,30 @@ independent writes, silent:
 The simulated row reports an `exfat` filesystem type to trazo on the same APFS
 disk; no disk image was mounted. Browser text was never lost by trazo: every
 409 left a copy in `conflicts/`.
+
+The same race against the table editor save, the diagram editor save and the
+table editor's undo (`review_history.History.publish` and `revert_file`), with
+the writer keeping the spec valid JSON. Saves add the same 1 ms to the history
+write; the undo keeps its natural window, so it loses less before the fix:
+
+| Path, protocol | In-place | Atomic | Late, through an open file |
+| --- | ---: | ---: | ---: |
+| Table save, before | 324 | 284 | 500 |
+| Table save, exchange | 0 (329 got 409) | 0 (312 got 409) | 0 (500 kept) |
+| Table save, no exchange | 6 | 17 | 500 |
+| Diagram save, before | 303 | 275 | 500 |
+| Diagram save, exchange | 0 (341 got 409) | 0 (340 got 409) | 0 (500 kept) |
+| Diagram save, no exchange | 9 | 33 | 500 |
+| Table undo, before | 15 | 0 | 500 |
+| Table undo, exchange | 0 (47 got 409) | 0 (23 got 409) | 0 (500 kept) |
+| Table undo, no exchange | 4 | 9 | 500 |
+
+A spec collision answers the editors' existing 409 (the table editor's
+"changed on disk" banner, the diagram editor's Keep mine and Load theirs); the
+reply names the copy, which the editors do not show. A diagram save now answers
+the sha256 of the bytes it wrote, as a source save does. A new spec (a table
+typed by hand, `base_sha256` null for a diagram) is still created with a plain
+rename: there is no existing file to exchange with.
 
 ## Reproduction
 

@@ -137,8 +137,8 @@ scenario uses real directory permissions. Every case retains its site, result,
 stderr and recovery result. Failed copies are retained. `--operation`, `--fault`
 and `--site` replay an exact case in a new output folder. Exit 1 means an invariant
 failed, as expected while auditing unfixed code. One success after an injected
-failure is accepted and listed as such: a source save that published, then could
-not set the replaced file aside, and answered with a `warning`. It counts only when
+failure is accepted and listed as such: a source, table or diagram save that
+published, then could not set the replaced file aside, and answered with a `warning`. It counts only when
 the file holds the complete new text and the old text is in undo history.
 
 The static AST inventory covers source-level candidates, including all 19 broad

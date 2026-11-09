@@ -72,7 +72,7 @@ normal operation works. This preserves damaged bytes, not a promise to reconstru
 old undo entries from them. Keyboard undo now shows the same error.
 
 Independent writers that ignore `review_lock` no longer lose text to a
-concurrent source save on filesystems with atomic exchange (APFS; Linux ext4,
+concurrent source, table or diagram save on filesystems with atomic exchange (APFS; Linux ext4,
 XFS, Btrfs and tmpfs): the save swaps its file in, compares what it displaced
 and, on a difference, swaps back and answers 409 with the browser text kept in
 `notes/review/conflicts/`. Both harness scenarios pass on APFS. Elsewhere the
