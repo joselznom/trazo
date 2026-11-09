@@ -176,8 +176,9 @@ def _replace_checked(path: Path, tmp: Path, data: bytes, expected: bytes, name: 
     return Publication(True, False)
 
 
-def sweep(path: Path, name: str, known: Callable[[], set[str]]) -> None:
-    """Keep what late writes and killed saves left behind for `name` (at `path`).
+def sweep(path: Path, name: str, known: Callable[[], set[str]]) -> list[Path]:
+    """Keep what late writes and killed saves left behind for `name` (at `path`);
+    return the conflict copies made.
 
     A parked file whose bytes changed was written through a descriptor opened
     before its save: it becomes a conflict copy; an unchanged one is deleted
@@ -188,28 +189,36 @@ def sweep(path: Path, name: str, known: Callable[[], set[str]]) -> None:
     renamed or written (its ctime), so a writer holding it open still writes
     into a kept file.
     """
-    _sweep_parked(name)
+    return _sweep_parked(name) + sweep_orphans(path, name, known)
+
+
+def sweep_orphans(path: Path, name: str, known: Callable[[], set[str]]) -> list[Path]:
+    """The `.swap` half of sweep(), for a caller about to publish(), which sweeps the parked files."""
+    copies = []
     orphans = list(path.parent.glob(glob.escape(path.name) + ".*.swap"))
     hashes = known() if orphans else set()
     for orphan in orphans:
         if _sha(orphan.read_bytes()) not in hashes:
-            _keep(orphan, name, "recovered")
+            copies.append(_keep(orphan, name, "recovered"))
         elif time.time_ns() - orphan.stat().st_ctime_ns > DISPLACED_GRACE * 10**9:
             orphan.unlink()
+    return copies
 
 
-def _sweep_parked(name: str) -> None:
+def _sweep_parked(name: str) -> list[Path]:
+    copies: list[Path] = []
     folder = _under(DISPLACED_DIR, name)
     if not folder.is_dir():
-        return
+        return copies
     for parked in folder.iterdir():
         stamp, _, sha = parked.name.partition(".")
         if not stamp.isdigit():
             continue
         if _sha(parked.read_bytes()) != sha:
-            _keep(parked, name, "late")
+            copies.append(_keep(parked, name, "late"))
         elif time.time_ns() - int(stamp) > DISPLACED_GRACE * 10**9:
             parked.unlink()
+    return copies
 
 
 def conflicts(name: str) -> list[str]:

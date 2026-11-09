@@ -74,7 +74,12 @@ def save_diagram(name: str, request: Any) -> dict[str, Any]:
                            text=current.decode("utf-8", "replace") if current is not None else None)
         recorded, warning = None, ""
         if data != current:
-            recorded, warning = record_save(path, current, data, autosave, client, label[:200])
+            try:
+                recorded, warning = record_save(path, current, data, autosave, client, label[:200])
+            except dg.DiagramError as exc:  # with `extra`: another program wrote the file meanwhile
+                if not hasattr(exc, "extra"):
+                    raise
+                raise Conflict(str(exc), **exc.extra) from exc
     # What this save wrote, not a re-read: the editor keeps this sha256 as its base,
     # so a write landing right after the save must make its next save a 409.
     return {**file_state(path), "sha256": dg.sha256_bytes(data), "changed": recorded is not None,

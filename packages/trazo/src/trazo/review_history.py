@@ -15,8 +15,9 @@ previous undo entry, so a failed replacement can be reconciled on the next read.
 save can evict the oldest entries at the history limits even if publication fails.
 An existing file is replaced through source_publish: a program that ignores the
 lock and writes the file after the caller's read keeps its version, the text not
-saved goes to the conflict copies, the history is left as it was and `collision`
-(the tool's error and an HTTP 409) is raised.
+saved goes to the conflict copies, the history is left as it was and `error` is
+raised with `extra` (the file now on disk and the copies), which the editors
+answer as HTTP 409.
 """
 
 from __future__ import annotations
@@ -31,7 +32,6 @@ from pathlib import Path
 from typing import Any
 
 from . import source_publish
-from .local_server import Conflict
 from .review_storage import ROOT, read_list, review_lock, write_atomic
 
 HISTORY_LIMIT = 200
@@ -64,9 +64,6 @@ class History:
         self.path = path
         self.kinds = kinds
         self.error = error  # raised (with a user-facing message) when undo is refused
-        # A write by another program during a publication: the tool's error, for its
-        # CLI, and an HTTP 409 with the file now on disk, for its editor.
-        self.collision: type[Exception] = type(error.__name__, (error, Conflict), {})
         self._thread = threading.local()  # this thread's last publication warning
 
     def take_warning(self) -> str:
@@ -125,18 +122,20 @@ class History:
             before = path.read_bytes() if path.exists() else None
             self.publish(path, data, self.file_entry(path, before, data, label))
 
-    def publish(self, path: Path, data: bytes, entry: Entry, expected: bytes | None | str = "before",
+    def publish(self, path: Path, data: bytes, entry: Entry, expected: bytes | None = None,
                 replace_last: bool = False) -> str:
         """Journal the prior text and undo entry before replacing a file, under the lock.
 
-        `expected` is the file as the caller read it under the lock (None: it did
-        not exist); by default the entry's "before", which is that text. The
-        pending record resolves from the file contents on the next read. This
-        avoids a second commit whose failure could break an existing autosave group.
-        Returns a warning about trouble after publishing, or "".
+        `expected` is the file as the caller read it under the lock; None takes the
+        entry's "before", which is that text (None there too: the file did not
+        exist). The pending record resolves from the file contents on the next
+        read. This avoids a second commit whose failure could break an existing
+        autosave group. Returns a warning about trouble after publishing, or "",
+        also kept for take_warning().
         """
-        if isinstance(expected, str):
-            expected = None if entry["before"] is None else entry["before"].encode("utf-8")
+        if expected is None and entry["before"] is not None:
+            expected = entry["before"].encode("utf-8")
+        self._thread.warning = ""
         history = self.load()
         unchanged = list(history)
         pending = {"before_sha": sha256_bytes(expected) if expected is not None else None,
@@ -150,50 +149,59 @@ class History:
         if expected is None:
             write_atomic(path, data)
             return ""
-        result = self._replace(path, data, expected, history)
+        result = self._replace(path, data, expected)
         if not result.published:
             self.save(unchanged)
             raise self._collided(path, result, "it was being saved")
-        return result.warning
-
-    def sweep(self, path: Path, current: bytes | None = None, history: list[Entry] | None = None) -> None:
-        """Keep what late writes and killed saves left beside `path` (source_publish.sweep);
-        `current` is the file as read under the lock. Under review_lock; the editors'
-        reads call it, as the Source tab's do."""
-        name = rel(path)
-        if current is None and path.is_file():
-            current = path.read_bytes()
-
-        def known() -> set[str]:  # the texts this history can still restore
-            entries = self.load() if history is None else history
-            return ({sha256_bytes(current)} if current is not None else set()) | {
-                sha256_bytes(e["before"].encode("utf-8")) for e in entries
-                if e.get("file") == name and isinstance(e.get("before"), str)}
-        source_publish.sweep(path, name, known)
-
-    def _replace(self, path: Path, data: bytes, expected: bytes, history: list[Entry]) -> source_publish.Publication:
-        name = rel(path)
-        self.sweep(path, expected, history)
-        result = source_publish.publish(path, data, expected, name)
         self._thread.warning = result.warning
         if result.warning:  # the CLI's user and the server log see it too
             print(f"trazo: {result.warning}", file=sys.stderr)
-        return result
+        return result.warning
+
+    def sweep(self, path: Path) -> None:
+        """Keep what late writes and killed saves left beside `path` (source_publish.sweep).
+        Under review_lock; the editors' reads call it, as the Source tab's do."""
+        self._report(path, source_publish.sweep(path, rel(path), self._known(path, None)))
+
+    def _known(self, path: Path, current: bytes | None) -> Callable[[], set[str]]:
+        """The texts of `path` this history can still restore, and the file itself
+        (`current`, else read when asked; the caller holds the lock)."""
+        name = rel(path)
+
+        def known() -> set[str]:
+            data = current if current is not None else path.read_bytes() if path.is_file() else None
+            return ({sha256_bytes(data)} if data is not None else set()) | {
+                sha256_bytes(e["before"].encode("utf-8")) for e in self.load()
+                if e.get("file") == name and isinstance(e.get("before"), str)}
+        return known
+
+    @staticmethod
+    def _report(path: Path, copies: list[Path]) -> None:
+        for copy in copies:  # the editors have no place for them: the CLI's user and the server log
+            print(f"trazo: kept text another program wrote to {rel(path)} at {source_publish.shown(copy)}",
+                  file=sys.stderr)
+
+    def _replace(self, path: Path, data: bytes, expected: bytes) -> source_publish.Publication:
+        name = rel(path)  # publish() sweeps the parked files itself
+        self._report(path, source_publish.sweep_orphans(path, name, self._known(path, expected)))
+        return source_publish.publish(path, data, expected, name)
 
     def _collided(self, path: Path, result: source_publish.Publication, during: str) -> Exception:
         try:
             current: bytes | None = path.read_bytes()
         except OSError:
             current = None
-        kept = ", ".join(source_publish.shown(p) for p in result.kept)
-        error = self.collision(f"{rel(path)} changed on disk while {during}: its version stays, and the text "
-                               f"that was not saved is kept at {kept}")
-        error.extra = {"sha256": sha256_bytes(current) if current is not None else None,  # type: ignore[attr-defined]
-                       "text": current.decode("utf-8", "replace") if current is not None else None,
-                       "kept": [source_publish.shown(p) for p in result.kept]}
+        kept = [source_publish.shown(p) for p in result.kept]
+        error = self.error(f"{rel(path)} changed on disk while {during}: its version stays, and the text "
+                           f"that was not saved is kept at {', '.join(kept)}")
+        # The editors answer it as HTTP 409 with these fields; the error classes do not declare it.
+        setattr(error, "extra", {"sha256": sha256_bytes(current) if current is not None else None,
+                                 "text": current.decode("utf-8", "replace") if current is not None else None,
+                                 "kept": kept})
         return error
 
-    def revert_file(self, entry: Entry) -> None:
+    def revert_file(self, entry: Entry) -> str:
+        """Restore an entry's "before"; return a warning about trouble after publishing, or ""."""
         path = Path(entry["file"]) if Path(entry["file"]).is_absolute() else ROOT / entry["file"]
         current = path.read_bytes() if path.exists() else None
         if current is None or sha256_bytes(current) != entry["after_sha"]:
@@ -201,10 +209,11 @@ class History:
                              f"({entry['label']}); that entry was removed")
         if entry["before"] is None:
             path.unlink()
-        else:
-            result = self._replace(path, entry["before"].encode("utf-8"), current, self.load())
-            if not result.published:
-                raise self._collided(path, result, "the undo was being written")
+            return ""
+        result = self._replace(path, entry["before"].encode("utf-8"), current)
+        if not result.published:
+            raise self._collided(path, result, "the undo was being written")
+        return result.warning
 
     def undo(self, revert: Callable[[Entry], None] | None = None,
              match: Callable[[Entry], bool] | None = None) -> str:
@@ -216,9 +225,10 @@ class History:
             if not mine:
                 return "nothing to undo"
             entry = history.pop(mine[-1])
+            warning = ""
             try:
                 if entry["kind"] == "file":
-                    self.revert_file(entry)
+                    warning = self.revert_file(entry)
                 elif revert is not None:
                     revert(entry)
             except self.error:
@@ -227,5 +237,5 @@ class History:
             self.save(history)
             rest = [e for e in history if match is None or match(e)]
             following = rest[-1]["label"] if rest else "nothing"
-            warning = self.take_warning() if entry["kind"] == "file" else ""
-            return f"undone: {entry['label']}; next undo: {following}" + (f". {warning}" if warning else "")
+            # Before "; next undo", which the table editor cuts from what it shows.
+            return f"undone: {entry['label']}" + (f". {warning}" if warning else "") + f"; next undo: {following}"
