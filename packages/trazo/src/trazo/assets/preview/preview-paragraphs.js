@@ -84,6 +84,7 @@
     const ed = writing, selection = getSelection(), item = itemOf(ed.el);
     if (isHeading(ed.el)) { goTo(true, true); return ""; }  // a heading stays one line: Enter goes on to the text
     if (item && item.querySelector(SUBLIST)) return;  // the new item would take the sublist from this one
+    const step = newStep("break", ed, [ed.el]);
     if (!selection.isCollapsed) selection.deleteFromDocument();
     if (!textOf(ed.el)) return;  // the file has no empty paragraphs
     if (ed.draftOf && !atEdge(ed, false)) saveBlock(ed);
@@ -100,12 +101,18 @@
     const second = startWriting(el);
     el.focus({ preventScroll: true });
     selection.collapse(el, 1);
+    const afterwards = { left: [...step.before.parent.childNodes], afterBlocks: [first.el, el], afterTarget: el };
     if (!right) {
       saveBlock(first);
       second.draftOf = first;
       second.above = above;
+      // The file has no empty paragraphs: taking this one back is the page's alone. It changed
+      // no keys or chips, so it keeps those the saves before it give them (data: none).
+      addStep(step, { ...afterwards, kind: "draft", draft: second, above, results: [[el, ""]], saved: () => first.queued ?? first.before,
+        before: { ...step.before, data: [] } });
       return spaceAfter;
     }
+    addStep(step, { ...afterwards, results: [[first.el, left], [el, right]] });
     first.brokenInto = second;
     second.gap = gap;
     sendBlock(first, () => ({ before: first.before, after: left + BREAK + right, ...mentions }), {
@@ -117,6 +124,7 @@
         }
         showFailure(...failure);
       },
+      step,
     });
     return spaceAfter;
   }
@@ -146,15 +154,17 @@
       return;
     }
     if (ed.draftOf) saveBlock(ed);
-    // What is typed before the answer would be lost with this paragraph.
-    ed.joining = true;
-    ed.el.contentEditable = "false";
+    const step = newStep("join", ed, [previous, ed.el]);
+    addStep(step, { afterBlocks: [previous], afterTarget: previous });  // undoable once joined
+    holdKeys(ed, true);
     sendBlock(ed, () => ({ before: ed.before, after: textOf(ed.el), previous: textOf(previous), into: mark.dataset.h, ...mentionsIn(ed.el) }), {
-      done: (payload) => joinTo(ed, previous, payload),
+      done: (payload) => {
+        joinTo(ed, previous, payload);
+        Object.assign(step, { results: [[previous, textOf(previous)]], left: [...step.before.parent.childNodes] });
+      },
+      step,
       refused: (_, status, payload) => {
-        ed.joining = false;
-        ed.el.contentEditable = "plaintext-only";
-        ed.el.focus({ preventScroll: true });
+        holdKeys(ed, false);
         toast(`Not joined: ${refusal(payload)}.`);
       },
     });
@@ -175,11 +185,14 @@
     const text = e.clipboardData.getData("text/plain");
     const pieces = (isHeading(writing.el) ? [text] : text.split(/\r?\n[ \t]*\r?\n\s*/))
       .map((piece) => piece.replace(/\s+/g, " ")).filter((piece) => piece.trim());
-    let gap = "";  // the space before the text that follows, kept after the last piece
-    pieces.forEach((piece, i) => {
-      if (i) gap = breakParagraph() || gap;
-      document.execCommand("insertText", false, i === pieces.length - 1 ? piece + gap : piece);
-    });
+    const paste = () => {
+      let gap = "";  // the space before the text that follows, kept after the last piece
+      pieces.forEach((piece, i) => {
+        if (i) gap = breakParagraph() || gap;
+        document.execCommand("insertText", false, i === pieces.length - 1 ? piece + gap : piece);
+      });
+    };
+    if (pieces.length < 2 || !afterStyle(paste)) paste();
   });
   document.addEventListener("keydown", (e) => {
     if (!writing) {
@@ -195,10 +208,10 @@
     if (e.key === "Enter") {
       e.preventDefault();
       if (e.metaKey || e.ctrlKey) writing.el.blur();
-      else breakParagraph();
+      else if (!afterStyle(breakParagraph)) breakParagraph();
     } else if (e.key === "Backspace" && plain && getSelection().isCollapsed && atEdge(writing, false)) {
       e.preventDefault();
-      joinBack();
+      if (!afterStyle(joinBack)) joinBack();
     } else if (plain && e.key.startsWith("Arrow") && getSelection().isCollapsed) {
       const forward = e.key === "ArrowDown" || e.key === "ArrowRight";
       const sideways = e.key === "ArrowLeft" || e.key === "ArrowRight";

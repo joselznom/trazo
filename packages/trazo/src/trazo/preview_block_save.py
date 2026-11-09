@@ -19,7 +19,8 @@ Characters from U+E800 in `after` are new chips, named by {mentions}
 (trazo.preview_mentions). U+F8FF in `after` is a paragraph break: the block becomes several, each checked
 alone (in a list, new items). An empty `after` deletes the block. {into, previous}
 joins the block to the one before it, whose key and text they are. The answer's
-`parts` are the keys of the blocks the edit left.
+`parts` are the keys of the blocks the edit left, and `save_id` names its save
+for an undo of just that save (change_source).
 """
 
 from __future__ import annotations
@@ -309,5 +310,5 @@ def change_block(request: Any) -> dict[str, Any]:
     parts = [b.key for b in editable(changed) if start <= b.at < start + len(written)]
     if BREAK in new and len(parts) != new.count(BREAK) + 1:
         return {"refused": "a paragraph cannot start there", "file": file, "markdown": source}
-    change_source({"file": file, "text": changed, "base_sha256": state["sha256"]})
-    return {"saved": True, "file": file, "markdown": written, "parts": parts}
+    wrote = change_source({"file": file, "text": changed, "base_sha256": state["sha256"]})
+    return {"saved": True, "file": file, "markdown": written, "parts": parts, "save_id": wrote.get("save_id")}

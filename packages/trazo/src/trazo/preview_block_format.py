@@ -5,7 +5,8 @@ em or underline, and from and to are offsets into the block's rendered text, in 
 POST /__block takes it (trazo.preview_block_save). It is a toggle: text that
 all has the style loses it, and any other gets it. Markers go in or come out
 of the Markdown, and the block built alone must then have exactly the styles
-expected, character by character, or nothing is written ({refused}).
+expected, character by character, or nothing is written ({refused}). The
+answer's `save_id` names the save, as POST /__block's does.
 Underline is Pandoc's bracketed span `[text]{.underline}`, which Word gets as
 underlined text; bold and italic are `**` and `*`.
 """
@@ -269,6 +270,6 @@ def change_format(request: Any) -> dict[str, Any]:
     if new is None:
         return {"refused": why, "file": file}
     changed = text[:block.at] + new + text[block.end:]
-    change_source({"file": file, "text": changed, "base_sha256": state["sha256"]})
+    wrote = change_source({"file": file, "text": changed, "base_sha256": state["sha256"]})
     parts = [b.key for b in editable(changed) if b.at == block.at]
-    return {"saved": True, "file": file, "on": on, "parts": parts}
+    return {"saved": True, "file": file, "on": on, "parts": parts, "save_id": wrote.get("save_id")}
