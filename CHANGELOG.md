@@ -48,6 +48,13 @@ Internal changes (tests, CI, refactoring) stay out.
 
 ### Changed
 
+- The preview's selection bar tells apart what reaches Word from what does
+  not. **Underline**, the reading mark, is now **Highlight** and paints the
+  text violet; it still stays out of Word and out of the agent's list, and
+  your existing marks show as highlights. While you write, a separator is
+  followed by **B**, **I** and the new **U** (⌘U), a real underline that
+  reaches Word; each one shows pressed when the selected text already has
+  that style.
 - ⌘Z in the preview, outside the text, undoes your latest change in the
   document, a comment or a saved paragraph, where before it undid only
   comments (#25).

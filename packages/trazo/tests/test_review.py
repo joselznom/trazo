@@ -41,8 +41,8 @@ class ReviewTests(unittest.TestCase):
         review.change({"scope": "diagram", "op": "undo", "diagram": "example"})
         self.assertEqual(diagram_editor.COMMENTS.load()[0]["status"], "open")
         self.assertEqual(len(review.payload()["comments"]), 3)
-        # Underlines reach the viewer but not the agent's list.
-        preview.change_comments({"op": "add", "doc": "manuscript", "kind": "underline", "comment": "Underline"})
+        # Highlights reach the viewer but not the agent's list.
+        preview.change_comments({"op": "add", "doc": "manuscript", "kind": "highlight", "comment": "Highlight"})
         self.assertEqual(len(review.payload()["comments"]), 4)
         out = io.StringIO()
         with contextlib.redirect_stdout(out):

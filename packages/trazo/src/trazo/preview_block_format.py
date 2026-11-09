@@ -1,11 +1,13 @@
-"""Bold and italic on the preview's text.
+"""Bold, italic and underline on the preview's text.
 
-POST /__block-format {file, h, before, style, from, to}: `style` is strong or
-em, and from and to are offsets into the block's rendered text, in the form
+POST /__block-format {file, h, before, style, from, to}: `style` is strong,
+em or underline, and from and to are offsets into the block's rendered text, in the form
 POST /__block takes it (trazo.preview_block_save). It is a toggle: text that
 all has the style loses it, and any other gets it. Markers go in or come out
 of the Markdown, and the block built alone must then have exactly the styles
 expected, character by character, or nothing is written ({refused}).
+Underline is Pandoc's bracketed span `[text]{.underline}`, which Word gets as
+underlined text; bold and italic are `**` and `*`.
 """
 
 from __future__ import annotations
@@ -26,6 +28,11 @@ MARKER = {"strong": "**", "em": "*"}
 STYLES = {1: {"em"}, 2: {"strong"}, 3: {"strong", "em"}}
 # Underscores inside a word are text.
 RUN = re.compile(r"\*{1,3}|(?<!\w)_{1,3}|_{1,3}(?!\w)")
+UNDERLINE = "underline"
+# The end of an underline span; Pandoc also reads `.ul` as one.
+UNDERLINE_END = re.compile(r"\]\{\.(?:underline|ul)\}")
+# The style each tag of Pandoc's HTML stands for.
+TAGS = {"strong": "strong", "em": "em", "u": UNDERLINE}
 
 
 def _letters(text: str) -> str:
@@ -39,18 +46,18 @@ class _Styled(HTMLParser):
     def __init__(self) -> None:
         super().__init__(convert_charrefs=True)
         self.chars: list[tuple[str, frozenset[str]]] = []
-        self.depth = {"strong": 0, "em": 0}
+        self.depth = {style: 0 for style in TAGS.values()}
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
-        if tag in self.depth:
-            self.depth[tag] += 1
+        if tag in TAGS:
+            self.depth[TAGS[tag]] += 1
 
     def handle_endtag(self, tag: str) -> None:
-        if tag in self.depth:
-            self.depth[tag] -= 1
+        if tag in TAGS:
+            self.depth[TAGS[tag]] -= 1
 
     def handle_data(self, data: str) -> None:
-        styles = frozenset(tag for tag, depth in self.depth.items() if depth)
+        styles = frozenset(style for style, depth in self.depth.items() if depth)
         self.chars += [(ch, styles) for ch in _letters(data)]
 
 
@@ -72,8 +79,77 @@ def _pairs(masked: str) -> list[tuple[re.Match[str], re.Match[str]]]:
     return pairs
 
 
+def _unescaped(text: str, i: int) -> bool:
+    slashes = len(text[:i]) - len(text[:i].rstrip("\\"))
+    return slashes % 2 == 0
+
+
+def _brackets(source: str) -> str:
+    """`source` masked, with the `]` of a link's `](url)` or `][ref]` back:
+    the mask hides it, and its `[` is still there."""
+    plain = list(masked(source))
+    for i, ch in enumerate(plain):
+        if ch == "\0" and source[i] == "]" and (not i or plain[i - 1] != "\0") and source[i + 1:i + 2] in ("(", "["):
+            plain[i] = "]"
+    return "".join(plain)
+
+
+def _underlines(source: str) -> list[tuple[int, int, int]]:
+    """The underline spans of a block's Markdown: where its `[` is, and where
+    its `]{.underline}` starts and ends."""
+    plain, out = _brackets(source), []
+    for close in UNDERLINE_END.finditer(source):
+        if plain[close.start()] != "]" or not _unescaped(source, close.start()):
+            continue  # in code or math, or an escaped bracket
+        depth, i = 0, close.start() - 1
+        while i >= 0:
+            if plain[i] in "[]" and _unescaped(source, i):
+                if plain[i] == "]":
+                    depth += 1
+                elif not depth:
+                    break
+                else:
+                    depth -= 1
+            i -= 1
+        if i >= 0:
+            out.append((i, close.start(), close.end()))
+    return out
+
+
+def _with_underline(source: str, at: int, end: int) -> str:
+    """`source` with source[at:end] in one underline span, without those inside
+    it; a span the selection only starts or ends in joins it whole."""
+    for open_at, _, close_end in _underlines(source):
+        if open_at < at < close_end <= end or at <= open_at < end < close_end:
+            at, end = min(at, open_at), max(end, close_end)
+    inner = sorted(edge for open_at, close, close_end in _underlines(source)
+                   if at <= open_at and close_end <= end for edge in ((open_at, open_at + 1), (close, close_end)))
+    out, last = [], at
+    for start, stop in inner:
+        out.append(source[last:start])
+        last = stop
+    return f"{source[:at]}[{''.join(out)}{source[last:end]}]{{.underline}}{source[end:]}"
+
+
+def _without_underline(source: str, at: int, end: int) -> str | None:
+    """`source` with the underline span around source[at:end] closed before it
+    and open again after it, or None if none holds it whole."""
+    holding = [span for span in _underlines(source) if span[0] < at and end <= span[1]]
+    if not holding:
+        return None
+    open_at, close, close_end = max(holding)
+    left, right = source[open_at + 1:at], source[end:close]
+    words = left.rstrip()
+    head = f"[{words}]{{.underline}}{left[len(words):]}" if words else left
+    words = right.lstrip()
+    tail = f"{right[:len(right) - len(words)]}[{words}]{{.underline}}" if words else right
+    return f"{source[:open_at]}{head}{source[at:end]}{tail}{source[close_end:]}"
+
+
 def _with_style(source: str, at: int, end: int, style: str) -> str:
     """`source` with source[at:end] in the style, without the same style inside it."""
+    if style == UNDERLINE:
+        return _with_underline(source, at, end)
     inner = [run for pair in _pairs(masked(source)) for run in pair
              if at <= pair[0].start() and pair[1].end() <= end and style in STYLES[len(pair[0][0])]]
     out, last = [], at
@@ -92,6 +168,8 @@ def _kept(run: str, style: str) -> str:
 def _without_style(source: str, at: int, end: int, style: str) -> str | None:
     """`source` with the emphasis around source[at:end] closed before it and open
     again after it, or None if none holds it whole."""
+    if style == UNDERLINE:
+        return _without_underline(source, at, end)
     holding = [(a, b) for a, b in _pairs(masked(source))
                if a.end() <= at and end <= b.start() and style in STYLES[len(a[0])]]
     if not holding:
@@ -121,8 +199,8 @@ def _toggled(request: dict[str, Any], text: str, source: str, spans: list[tuple[
              heading: bool) -> tuple[str | None, bool, str]:
     """`source` with the style toggled, whether the style is now on, and why not."""
     style = request.get("style")
-    if style not in MARKER:
-        raise RequestError("style must be strong or em")
+    if style not in (*MARKER, UNDERLINE):
+        raise RequestError("style must be strong, em or underline")
     before = _squashed(request, "before")
     start, end = _range(request, before)
     if start == end:

@@ -51,6 +51,28 @@ class FormatTests(WritingCase):
         self.wait_for("document.querySelector('.pv-writing em')?.textContent === 'quick'")
         self.saved("A *quick* brown fox.\n")
 
+    def test_cmd_u_underlines_the_selection_for_word_and_again_takes_it_off(self):
+        self.build("A quick brown fox.\n")
+        self.select("quick")
+        self.chord("u", 85)
+        self.wait_for("document.querySelector('.pv-writing u')?.textContent === 'quick'")
+        self.saved("A [quick]{.underline} brown fox.\n")
+        self.chord("u", 85)
+        self.wait_for("!document.querySelector('.pv-writing u')")
+        self.saved("A quick brown fox.\n")
+
+    def test_the_bar_sets_the_formats_apart_and_presses_the_ones_the_selection_has(self):
+        self.build("A **quick** brown fox.\n")
+        self.select("quick")
+        self.wait_for("document.querySelector('.pv-fab [data-select=underline]')")
+        bar = """Array.from(document.querySelectorAll('.pv-fab > *'),
+          (el) => el.matches('.pv-fab-sep') ? '|' : el.textContent + (el.getAttribute('aria-pressed') === 'true' ? '*' : ''))"""
+        self.assertEqual(self.evaluate(bar), ["Comment", "Highlight", "|", "B*", "I", "U"])
+        self.click_text(".pv-fab [data-select=underline]")
+        self.wait_for("document.querySelector('.pv-fab [data-select=underline]').getAttribute('aria-pressed') === 'true'")
+        self.saved("A **[quick]{.underline}** brown fox.\n")
+        self.assertEqual(self.evaluate(bar), ["Comment", "Highlight", "|", "B*", "I", "U*"])
+
     def test_what_was_typed_is_saved_with_the_format(self):
         self.build("A quick brown fox.\n")
         self.write_in("brown")

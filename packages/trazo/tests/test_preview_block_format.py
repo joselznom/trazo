@@ -1,4 +1,4 @@
-"""Bold and italic on the preview's text: the markers in the Markdown and the check of the result."""
+"""Bold, italic and underline on the preview's text: the markers in the Markdown and the check of the result."""
 
 import shutil
 import tempfile
@@ -97,6 +97,39 @@ class FormatTests(unittest.TestCase):
         answer = self.toggle(text, "A bi", "em")
         self.assertIn("refused", answer)
         self.assertEqual(self.source(), text)
+
+    def test_underline_is_a_span_that_comes_off_whole_or_in_part(self):
+        answer = self.toggle("A big dog.\n", "big", "underline")
+        self.assertTrue(answer["on"])
+        self.assertEqual(self.source(), "A [big]{.underline} dog.\n")
+        for text in ("A [big]{.underline} dog.\n", "A [big]{.ul} dog.\n"):
+            answer = self.toggle(text, "big", "underline")
+            self.assertFalse(answer["on"], answer)
+            self.assertEqual(self.source(), "A big dog.\n")
+        self.toggle("A [very big black]{.underline} dog.\n", "big", "underline")
+        self.assertEqual(self.source(), "A [very]{.underline} big [black]{.underline} dog.\n")
+
+    def test_underline_adds_up_with_bold_and_swallows_the_underlines_inside(self):
+        self.toggle("A **big** dog.\n", "big", "underline")
+        self.assertEqual(self.source(), "A **[big]{.underline}** dog.\n")
+        self.toggle("A [big]{.underline} black dog.\n", "A big black", "underline")
+        self.assertEqual(self.source(), "[A big black]{.underline} dog.\n")
+
+    def test_underline_keeps_links_code_and_citations(self):
+        chip = chr(0xE000)
+        for text, words, marked in (
+                ("See [the site](https://x.org) now.\n", "the site", "See [[the site]{.underline}](https://x.org) now.\n"),
+                ("See [the site](https://x.org) now.\n", "See", "[See]{.underline} [the site](https://x.org) now.\n"),
+                ("Run `a]b` now.\n", f"Run {chip} now", "[Run `a]b` now]{.underline}.\n"),
+                ("See [@smith2020] now.\n", f"See {chip} now", "[See [@smith2020] now]{.underline}.\n")):
+            answer = self.toggle(text, words, "underline")
+            self.assertTrue(answer.get("saved"), answer)
+            self.assertEqual(self.source(), marked)
+
+    def test_a_selection_across_the_edge_of_an_underline_joins_it(self):
+        answer = self.toggle("A [big]{.underline} dog.\n", "A bi", "underline")
+        self.assertTrue(answer["on"], answer)
+        self.assertEqual(self.source(), "[A big]{.underline} dog.\n")
 
 
 if __name__ == "__main__":

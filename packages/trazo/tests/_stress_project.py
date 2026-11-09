@@ -103,7 +103,7 @@ def review_comments(root: Path, rng, paragraphs: list[dict], count: int, repeate
         if status == "deleted":
             comment["deleted_from"] = "open"
         if index % 20 == 0:
-            comment["kind"] = "underline"
+            comment["kind"] = "highlight"
         quotes.append({"id": comment["id"], "doc": para["doc"], "file": para["file"], "quote": quote,
                        "status": comment["status"]})
         comments.append(comment)

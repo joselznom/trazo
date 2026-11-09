@@ -40,16 +40,16 @@ class PreviewComments(CommentStore):
             fields["quote"] = ""
         if "anchor" in request:
             fields["anchor"] = anchor_field(request["anchor"])
-        if request.get("kind") == "underline":
-            fields["kind"] = "underline"
+        if request.get("kind") == "highlight":
+            fields["kind"] = "highlight"
         return fields
 
     def label(self, changes, label):
         item = changes[0][0]
-        if all(i.get("kind") == "underline" for i, _ in changes):  # reading marks, not comments
-            label = {"add comment": "underline", "delete comment": "remove underline"}.get(label, label)
+        if all(i.get("kind") == "highlight" for i, _ in changes):  # reading marks, not comments
+            label = {"add comment": "highlight", "delete comment": "remove highlight"}.get(label, label)
             if len(changes) > 1:
-                return label.replace("underline", f"{len(changes)} underlines")
+                return label.replace("highlight", f"{len(changes)} highlights")
         elif len(changes) > 1:
             return super().label(changes, label)
         return f"{label} ({self.where(item) or item['id']})"
@@ -94,7 +94,7 @@ def comments_stamp():
 
 def print_comments(show_all):
     for c in map(upgraded, load_comments()):
-        if c.get("kind") == "underline":  # the author's reading marks
+        if c.get("kind") == "highlight":  # the author's reading marks
             continue
         if not show_all and c.get("status") != "open":
             continue

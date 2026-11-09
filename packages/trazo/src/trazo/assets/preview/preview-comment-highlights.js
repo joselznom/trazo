@@ -3,7 +3,7 @@
 // trazo.preview.VIEWER_SCRIPTS; their top-level names are shared globals.
   if (!window.PreviewModel) throw new Error("preview-model.js did not load");  // see preview-page.js
   // Highlights of this page: open and to-check comments in two colours,
-  // stronger for the current or hovered card, and the underlines.
+  // stronger for the current or hovered card, and the highlights (reading marks).
   // `flashed` is the text of a resolved comment shown for a moment.
   function paintHighlights() {
     if (!(window.CSS && CSS.highlights)) return;
@@ -15,7 +15,7 @@
       hl.priority = sel ? 1 : 0;
       CSS.highlights.set(name, hl);
     }
-    CSS.highlights.set("pv-underline", new Highlight(...ranged.filter((x) => isMark(x.c)).map((x) => x.hit.range)));
+    CSS.highlights.set("pv-mark", new Highlight(...ranged.filter((x) => isMark(x.c)).map((x) => x.hit.range)));
     CSS.highlights.set("pv-done-flash", new Highlight(...(flashed && view === "doc" ? [flashed] : [])));
   }
 
@@ -194,7 +194,7 @@
   }
   const rangeHas = (range, at) => range.startContainer.ownerDocument === document
     && range.comparePoint(at.node, at.offset) === 0;
-  // The underlines of this page under a point; where there is none, those of
+  // The highlights of this page under a point; where there is none, those of
   // the paragraph whose text changed (they have no range, only a margin bar).
   const marksAt = (at) => {
     const marks = inText.filter((x) => isMark(x.c));
