@@ -68,6 +68,8 @@ Internal changes (tests, CI, refactoring) stay out.
 
 ### Fixed
 
+- Broken table data or specs now show an error in the preview and keep the last
+  good page. Fixing them refreshes the page, including manuscript edits made meanwhile.
 - A build, check or paper update run by the agent that hangs now stops after
   20 minutes with an error, instead of waiting forever.
 - A failed table or diagram save keeps the last saved text and its undo history,
