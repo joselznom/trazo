@@ -184,6 +184,21 @@ class SpecWriters(Restore):
                 self.assertEqual(self.call(read)[0], 200)  # the editor's next read keeps it
                 self.assertTrue(any(MARKER in k for k in self.kept()), path)
 
+    def test_a_late_write_to_the_shared_spec_is_kept_by_the_next_table_read(self) -> None:
+        if not portable.can_exchange(self.diagram.parent):
+            self.skipTest("no atomic exchange on this filesystem")
+        shared = table.SHARED_PATH
+        _, state = self.call("/__table?label=results")
+        fd = os.open(shared, os.O_RDWR)  # another program opened _shared.json before the save
+        self.addCleanup(os.close, fd)
+        before = shared.read_text(encoding="utf-8")
+        status, body = self.call("/__table/shared", {"label": "results", "base_sha256": state["shared"]["sha256"],
+                                                     "ops": [{"op": "set", "path": "maps.method.forest", "value": "Forest"}]})
+        self.assertEqual(status, 200, body)
+        os.pwrite(fd, before.replace("{", '{"' + MARKER + '": 1, ', 1).encode(), 0)
+        self.assertEqual(self.call("/__table?label=results")[0], 200)
+        self.assertTrue(any(MARKER in k for k in self.kept()))
+
     def test_trouble_after_publishing_is_reported_by_both_editors(self) -> None:
         if not portable.can_exchange(self.diagram.parent):
             self.skipTest("no atomic exchange on this filesystem")
@@ -201,6 +216,14 @@ class SpecWriters(Restore):
         status, undone = self.call("/__table/undo", {"label": "results"})
         self.assertEqual(status, 200, undone)
         self.assertIn("could not set the replaced version aside", undone["undone"])
+        self.assertTrue(undone["warning"], undone)
+        # A spec table's caption saves and undoes through the table editor: its reply says so too.
+        state = preview.get_table_caption("supplementary", "tbl:cohorts")
+        saved = preview.change_table_caption({"doc": "supplementary", "id": "tbl:cohorts", "base_sha256": state["sha256"],
+                                              "changes": {"title": "A caption typed in the preview."}})
+        self.assertTrue(saved.get("warning"), saved)
+        undone = preview.change_table_caption({"op": "undo", "doc": "supplementary", "id": "tbl:cohorts"})
+        self.assertTrue(undone.get("warning"), undone)
 
     def test_copies_of_a_file_outside_the_project_stay_in_the_review_folder(self) -> None:
         with TemporaryDirectory() as folder:

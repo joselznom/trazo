@@ -237,5 +237,6 @@ class History:
             self.save(history)
             rest = [e for e in history if match is None or match(e)]
             following = rest[-1]["label"] if rest else "nothing"
+            self._thread.warning = warning
             # Before "; next undo", which the table editor cuts from what it shows.
             return f"undone: {entry['label']}" + (f". {warning}" if warning else "") + f"; next undo: {following}"

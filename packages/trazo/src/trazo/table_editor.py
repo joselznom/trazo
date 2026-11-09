@@ -180,8 +180,9 @@ def table_state(label: Any, hidden: bool = False) -> dict[str, Any]:
 
 def get_table(query: dict[str, list[str]]) -> dict[str, Any]:
     label = spec_file(query.get("label", [None])[0])
-    with tb.review_lock():
+    with tb.review_lock():  # both files the state shows
         tb.HISTORY.sweep(tb.spec_path(label))
+        tb.HISTORY.sweep(tb.SHARED_PATH)
     return errors_to_http(lambda: table_state(label, query.get("hidden", ["0"])[0] == "1"))
 
 
@@ -233,10 +234,11 @@ def warned() -> dict[str, str]:
 def undo_table(request: Any) -> dict[str, Any]:
     request = body(request)
     label = spec_file(request.get("label"))
+    tb.HISTORY.take_warning()  # undo() sets it only when it reverts a file
     message = errors_to_http(lambda: tb.undo(label))
     if message == "nothing to undo":
         raise RequestError("nothing to undo")
-    return {**table_state(label, bool(request.get("hidden"))), "undone": message}
+    return {**table_state(label, bool(request.get("hidden"))), "undone": message, **warned()}
 
 
 def sections() -> dict[str, Any]:

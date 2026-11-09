@@ -129,9 +129,9 @@ def change_table_caption(request):
     saved = {}
     if state["kind"] == "spec":
         if undo:
-            table_editor.undo_table({"label": label})
+            saved = table_editor.undo_table({"label": label})
         else:
-            table_editor.save_table({"label": label, "base_sha256": request.get("base_sha256"),
+            saved = table_editor.save_table({"label": label, "base_sha256": request.get("base_sha256"),
                 "ops": [{"op": "set", "path": key, "value": None if key == "note" and not str(value).strip() else value}
                         for key, value in changes.items()]})
     elif undo:
