@@ -55,6 +55,18 @@ Claude app does not update third-party marketplaces by itself. The next
 chat loads the new plugin; there the hook asks for setup, which reinstalls
 trazo, and `setup_status` says `"next": "paper"` until `paper_update` runs.
 
+MCP subprocess tools (build, check, doctor, paper creation/update and preview input
+preparation) have a 1200-second deadline. Set `TRAZO_MCP_TIMEOUT` to a positive,
+finite number of seconds in the MCP server's environment for a different limit.
+On expiry the server kills the call's process group, returns a tool error and
+remains available for the next request. Pipe cleanup waits at most five seconds
+before killing/reaping the direct child with a further five-second bound; Windows
+process-tree termination has its own 30-second bound. The error includes available
+command output. Windows leaves pipes held by escaped descendants to its daemon
+reader threads, avoiding a blocking close. Deliberately detached processes are
+outside the call's group and retain their own lifetime. This does not set a deadline
+for standalone CLI commands or a preview watcher that is already running.
+
 ## Checks by hand
 
 These checks are covered fully or partly by the

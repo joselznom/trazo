@@ -8,8 +8,11 @@ file) and the sha256 of what was written ("after_sha"); undo restores
 kinds (the diagram comments) are reverted by the caller's `revert`. The
 newest HISTORY_LIMIT entries are kept, within HISTORY_BYTES.
 
-Read-modify-write happens under review_storage.review_lock(); `record` and
-`revert_file` expect the caller to hold it, `write_file` and `undo` take it.
+Read-modify-write happens under review_storage.review_lock(); `record`,
+`revert_file` and `publish` expect the caller to hold it; `write_file` and
+`undo` take it. A pending publication keeps the prior file's sha256 and the
+previous undo entry, so a failed replacement can be reconciled on the next read. Journaling an attempted
+save can evict the oldest entries at the history limits even if publication fails.
 """
 
 from __future__ import annotations
@@ -55,8 +58,28 @@ class History:
         self.error = error  # raised (with a user-facing message) when undo is refused
 
     def load(self) -> list[Entry]:
-        return [e for e in read_list(self.path)
-                if isinstance(e, dict) and e.get("kind") in self.kinds]
+        history: list[Entry] = []
+        for entry in read_list(self.path):
+            if not isinstance(entry, dict) or entry.get("kind") not in self.kinds:
+                continue
+            pending = entry.get("pending")
+            if isinstance(pending, dict):
+                path = ROOT / entry["file"]
+                try:
+                    current = sha256_bytes(path.read_bytes())
+                except FileNotFoundError:
+                    current = None
+                except OSError:
+                    history.append(entry)  # Preserve unresolved evidence without blocking other files.
+                    continue
+                if current == pending["before_sha"]:
+                    if pending["previous"] is not None:
+                        history.append(pending["previous"])
+                    continue
+                if current == entry["after_sha"]:
+                    del entry["pending"]
+            history.append(entry)
+        return history
 
     def save(self, history: list[Entry]) -> None:
         history = history[-HISTORY_LIMIT:]
@@ -82,8 +105,24 @@ class History:
         """Write a file atomically and record its previous text for undo."""
         with review_lock():
             before = path.read_bytes() if path.exists() else None
-            write_atomic(path, data)
-            self.record(self.file_entry(path, before, data, label))
+            self.publish(path, data, self.file_entry(path, before, data, label))
+
+    def publish(self, path: Path, data: bytes, entry: Entry, *, replace_last: bool = False) -> None:
+        """Journal the prior text and undo entry before replacing a file, under the lock.
+
+        The pending record resolves from the file contents on the next read. This
+        avoids a second commit whose failure could break an existing autosave group.
+        """
+        history = self.load()
+        pending = {"before_sha": sha256_bytes(path.read_bytes()) if path.exists() else None,
+                   "previous": history[-1] if replace_last else None}
+        prepared = {**entry, "pending": pending}
+        if replace_last:
+            history[-1] = prepared
+        else:
+            history.append(prepared)
+        self.save(history)
+        write_atomic(path, data)
 
     def revert_file(self, entry: Entry) -> None:
         path = Path(entry["file"]) if Path(entry["file"]).is_absolute() else ROOT / entry["file"]

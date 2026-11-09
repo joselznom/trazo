@@ -71,6 +71,12 @@ Internal changes (tests, CI, refactoring) stay out.
 - A corrupt manuscript undo history is preserved in a separate file and shown as
   an error. Retrying resumes saving and undoing new changes without repairing
   the old history by hand.
+- Broken table data or specs now show an error in the preview and keep the last
+  good page. Fixing them refreshes the page, including manuscript edits made meanwhile.
+- A build, check or paper update run by the agent that hangs now stops after
+  20 minutes with an error, instead of waiting forever.
+- A failed table or diagram save keeps the last saved text and its undo history,
+  including when a diagram autosave is interrupted.
 - The table editor no longer shows "null" under a table without a note (#15).
 
 ### Removed
