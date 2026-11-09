@@ -178,9 +178,8 @@
       if (op === "show") { showResolved(c, hit); return; }
       if (op === "reopen") { openDone = null; send({ op: "update", id: c.id, status: "open" }, "Comment reopened for Claude"); return; }
       if (e.target.closest("textarea, button")) return;
-      if (c.status === "done") {  // a second click folds it back to one line, unless it ends a text selection
-        const sel = getSelection();
-        if (!sel.isCollapsed && el.contains(sel.anchorNode)) return;
+      if (c.status === "done") {  // a second click folds it back to one line
+        if (!App.plainClick(e)) return;
         openDone = null;
         if (navId === c.id) navId = null;
         renderComments();

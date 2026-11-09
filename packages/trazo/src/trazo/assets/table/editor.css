@@ -190,7 +190,6 @@ textarea.te-in { height: auto; min-height: 58px; padding: 6px 8px; resize: verti
 
 /* Comments */
 .te-cbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 4px 8px; padding: 10px 12px 0; }
-.te-cbar + .pk-confirm { margin: 8px 12px 0; width: auto; }
 .te-card.done:not(.compact) { cursor: pointer; }
 .te-cn { margin-left: 5px; color: var(--pv-muted); font-variant-numeric: tabular-nums; }
 .te-csum { margin: 8px 14px 0; font-size: 12px; color: var(--pv-muted); }

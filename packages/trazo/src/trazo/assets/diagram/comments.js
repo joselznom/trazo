@@ -172,7 +172,7 @@
     const review = live.filter((c) => c.status === "review").length;
     const done = comments.filter((c) => c.status === "done").sort((a, b) => resolvedAt(b).localeCompare(resolvedAt(a)));
     const ids = (list) => list.map((c) => c.id);
-    deletion.sync(ids(done), ids(filter === "active" ? live : done));
+    deletion.sync(ids(done), ids(filter === "active" ? live : done), filter === "resolved");
     ed.setTabBadge("comments", live.length, review ? "accent" : "");
     const scroll = root.scrollTop;
     if (!S.name) {
@@ -198,12 +198,12 @@
     const filters = deletion.head("cfilter", el("div", { class: "seg", role: "group", "aria-label": "Show comments" },
       tab("active", "Active", live.length), tab("resolved", "Resolved", done.length)),
     undoLabel ? el("button", { type: "button", class: "btn small ghost", title: `Undo the last comment change: ${undoLabel}`,
-      onclick: () => undoComment(undoId) }, ic("undo"), "Undo") : null, filter === "resolved" ? ids(done) : null);
+      onclick: () => undoComment(undoId) }, ic("undo"), "Undo") : null);
     const open = live.length - review;
     const summary = filter === "active" && live.length ? el("div", { class: "csum", "aria-live": "polite" },
       review ? el("b", {}, `${review} to check`) : null, review && open ? " · " : null,
       open ? `${open} waiting for the agent` : null) : null;
-    root.replaceChildren(...[composer, ...filters, summary].filter(Boolean));
+    root.replaceChildren(...[composer, filters, summary].filter(Boolean));
     const empty = (icon, title, text) => root.append(el("div", { class: "empty" }, ic(icon, 26), el("b", {}, title), text || ""));
     if (filter === "active") {
       if (!live.length && !done.length) empty("comment", "No comments", "Press C and click the canvas to pin one.");

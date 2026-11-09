@@ -72,15 +72,14 @@
       const when = (c) => c.resolved || c.created || "";
       const done = all.filter((c) => c.status === "done").sort((a, b) => when(b).localeCompare(when(a)));
       const ids = (list) => list.map((c) => c.id);
-      deletion.sync(ids(done), ids(cfilter === "active" ? live : done));
+      deletion.sync(ids(done), ids(cfilter === "active" ? live : done), cfilter === "resolved");
       const seg = (key, text, n) => h("button", { type: "button", class: cfilter === key ? "on" : null, dataset: { filter: key },
         "aria-pressed": String(cfilter === key), onclick: () => { cfilter = key; openDone = null; E.renderPanel(); } },
       text, h("span", { class: "te-cn", text: String(n) }));
-      const out = deletion.head("te-cbar", h("div", { class: "te-seg", role: "group", "aria-label": "Show comments" },
+      const out = [deletion.head("te-cbar", h("div", { class: "te-seg", role: "group", "aria-label": "Show comments" },
         seg("active", "Active", live.length), seg("resolved", "Resolved", done.length)),
       E.comments.undo ? h("button", { type: "button", class: "pv-btn sm ghost te-cundo", text: "↶ Undo",
-        title: `Undo the last comment change: ${E.comments.undo}`, onclick: () => undoComment(E.comments.undo_id) }) : null,
-      cfilter === "resolved" ? ids(done) : null);
+        title: `Undo the last comment change: ${E.comments.undo}`, onclick: () => undoComment(E.comments.undo_id) }) : null)];
       const empty = (title, text) => out.push(h("div", { class: "te-cempty" }, h("b", { text: title }), text || null));
       if (cfilter === "active") {
         if (live.length) {
@@ -162,13 +161,8 @@
         del();
       }
       const done = c.status === "done";
-      // A second click on a resolved card folds it back to one line, unless it ends a text selection.
-      const fold = (e) => {
-        const sel = getSelection();
-        if (e.target.closest("a, button, input, textarea") || (!sel.isCollapsed && e.currentTarget.contains(sel.anchorNode))) return;
-        openDone = null;
-        E.renderPanel();
-      };
+      // A second click on a resolved card folds it back to one line.
+      const fold = (e) => { if (App.plainClick(e)) { openDone = null; E.renderPanel(); } };
       return h("div", { class: `te-card pk-row ${c.status}${done && deletion.ticked(c.id) ? " selected" : ""}`, onclick: done && !mode ? fold : null },
         h("div", { class: "te-meta" }, done ? deletion.tick(c.id) : null, h("span", { class: `te-state ${c.status}`, text: STATE_NAME[c.status] || c.status,
           title: c.status === "done" && c.resolved ? `Resolved ${c.resolved}` : null }),

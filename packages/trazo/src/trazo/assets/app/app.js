@@ -200,6 +200,7 @@
   function commentDeletion(redraw, purge) {
     const ticked = new Set();
     let picking = false;  // the Resolved list is in selection mode
+    let resolved = null;  // the ids of the Resolved list while it is shown and not empty, else null
     let asking = null;  // {ids, at}: `at` is the card's id or "bar"
     const ask = (ids, at) => { asking = { ids, at }; redraw(); };
     const quiet = (node) => { node.addEventListener("click", (e) => e.stopPropagation()); return node; };
@@ -230,12 +231,14 @@
       });
       return quiet(node);
     }
-    const button = (text, onclick, cls) => el("button", { type: "button", class: `pv-btn sm ${cls}`, text, onclick });
-    // The Resolved list's bar (`done`: its ids): a Select button beside the
-    // filter, or in selection mode the whole bar, in place of the filter.
-    function bar(done) {
-      if (!picking) return button("Select", () => { picking = true; redraw(); }, "ghost pk-select");
-      const n = ticked.size;
+    const button = (text, onclick, cls, disabled) => el("button", { type: "button", class: `pv-btn sm ${cls}`, text, onclick, disabled });
+    // The Resolved list's bar while that list is shown and not empty, else
+    // null: a Select button beside the filter, or in selection mode the
+    // whole bar, in place of the filter.
+    function bar() {
+      if (!resolved) return null;
+      if (!picking) return button("Select", () => { picking = true; redraw(); }, "ghost");
+      const n = ticked.size, done = resolved;
       const all = quiet(el("input", { type: "checkbox", class: "pk-check", checked: n > 0 && n === done.length,
         onchange: (e) => {
           ticked.clear();
@@ -245,18 +248,18 @@
       all.indeterminate = n > 0 && n < done.length;
       return el("div", { class: "pk-bar", role: "toolbar", "aria-label": "Delete resolved comments" },
         el("label", { class: "pk-all" }, all, "All"), el("span", { class: "pk-count", text: `${n} selected` }),
-        button("Cancel", () => { unpick(); asking = null; redraw(); }, "ghost"),
-        el("button", { type: "button", class: "pv-btn sm pk-danger", text: n ? `Delete ${n}` : "Delete", disabled: n === 0,
-          onclick: () => ask([...ticked], "bar") }));
+        button("Cancel", () => { unpick(); cancel(); }, "ghost"),
+        button(n ? `Delete ${n}` : "Delete", () => ask([...ticked], "bar"), "pk-danger", n === 0));
     }
     return {
       box,
       picking: () => picking,
-      // Keep only ticks on `done` and a warning about `shown` (comment ids).
-      // Selection mode ends once the panel shows a list other than the
-      // resolved one (or the resolved list is empty).
-      sync(done, shown) {
-        if (!shown.length || !shown.every((id) => done.includes(id))) unpick();
+      // Keep only ticks on `done` and a warning about `shown` (comment ids);
+      // `onResolved` says the panel shows the Resolved list. Selection mode
+      // ends when it shows another list or the resolved one is empty.
+      sync(done, shown, onResolved) {
+        resolved = onResolved && done.length ? done : null;
+        if (!resolved) unpick();
         for (const id of ticked) if (!done.includes(id)) ticked.delete(id);
         if (asking && !asking.ids.every((id) => shown.includes(id))) asking = null;
       },
@@ -277,19 +280,23 @@
       },
       bar,
       // An editor's filter bar (class `cls`): its `filter`, `extra` (an Undo
-      // button) and, under Resolved (`done`: its ids, null under Active), the
-      // bar above; then the warning about the ticked comments.
-      head(cls, filter, extra, done) {
-        const pick = done && done.length ? bar(done) : null;
-        const node = picking ? el("div", { class: cls }, pick)
-          : el("div", { class: cls }, filter, extra || pick ? el("span", { class: "pk-bar-end" }, extra, pick) : null);
-        return [node, box("bar")].filter(Boolean);
+      // button) and the bar above, then the warning about the ticked comments.
+      head(cls, filter, extra) {
+        const pick = bar();
+        return el("div", { class: cls }, picking ? pick
+          : [filter, extra || pick ? el("span", { class: "pk-bar-end" }, extra, pick) : null], box("bar"));
       },
     };
+  }
+  // A click on a comment card itself, not on one of its controls and not the
+  // end of a text selection inside it: one that may fold the card.
+  function plainClick(e) {
+    const sel = getSelection();
+    return !e.target.closest("a, button, input, textarea") && (sel.isCollapsed || !e.currentTarget.contains(sel.anchorNode));
   }
   const review = {
     load: (scope, name) => api(`/__review?scope=${scope}${name == null ? "" : "&name=" + encodeURIComponent(name)}`),
     change: (scope, body) => api("/__review", { ...body, scope }),
   };
-  window.Trazo = { api, watch, el, commentDeletion, readPrefs, savePrefs, theme, mountTheme, editorLink, returnUrl, review, reveal, reload, path: pagePath, search: pageSearch, replaceHash, applyTheme };
+  window.Trazo = { api, watch, el, commentDeletion, plainClick, readPrefs, savePrefs, theme, mountTheme, editorLink, returnUrl, review, reveal, reload, path: pagePath, search: pageSearch, replaceHash, applyTheme };
 })();
