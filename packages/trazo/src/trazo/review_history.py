@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import sys
 import threading
 import time
 from collections.abc import Callable
@@ -175,6 +176,8 @@ class History:
         self.sweep(path, expected, history)
         result = source_publish.publish(path, data, expected, name)
         self._thread.warning = result.warning
+        if result.warning:  # the CLI's user and the server log see it too
+            print(f"trazo: {result.warning}", file=sys.stderr)
         return result
 
     def _collided(self, path: Path, result: source_publish.Publication, during: str) -> Exception:
