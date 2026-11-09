@@ -66,9 +66,26 @@
   }
 
   // Before an action changes the page: the blocks it changes and where the caret is.
-  // `onAnswer`: it changes the page only on its save's answer (a style, a join).
   function newStep(kind, ed, els, extra = {}) {
     return { kind, ...extra, run: historyRun, ed, els, target: ed.el, restore: ed.restore, at: here(), before: capture(els) };
+  }
+
+  // A style shows on its answer, so a picture of its paragraph taken before would lack it:
+  // Enter, Backspace at the start and a paste wait for a style saving there, at the same place.
+  let waiting = 0;  // actions waiting so: a Cmd+Z meanwhile waits after them
+  function afterStyle(run) {
+    const ed = writing;
+    if (!undoSteps.some((s) => s.kind === "format" && s.target === ed.el && s.saveId === undefined && !s.dropped)) return false;
+    const caret = getSelection().getRangeAt(0).cloneRange();  // live: it follows the style's change
+    waiting++;
+    saveQueue.then(() => {
+      waiting--;
+      if (writing !== ed || ed.joining) return;
+      getSelection().removeAllRanges();
+      getSelection().addRange(caret);
+      run();
+    });
+    return true;
   }
 
   // Once the action is on the page (a join's, once joined: its keys wait meanwhile).
@@ -87,12 +104,13 @@
   // sendBlock's hooks: the request as sent (the keys are now those of the file it goes to), and its answer.
   function stepSent(step, request) {
     step.request = request;
-    if (!step.onAnswer) { reread(step.before); return; }
-    // The page it changes is the one now, after every save queued before it showed.
+    if (step.kind !== "format") { reread(step.before); return; }
+    // A style changes the page on its answer: its picture is the page now, after the styles
+    // queued before it showed; its own live range follows those.
     step.before = capture(step.els);
+    step.left = step.before.children;
     step.restore = step.ed.restore;
-    step.at = step.range ? pointsOf(step.range) : null;  // a style's own live range follows those changes
-    if (step.kind === "format") step.left = step.before.children;
+    step.at = pointsOf(step.range);
   }
   function stepSaved(step, payload, sent) {
     if (payload.save_id == null) { dropStep(step); return; }  // a save that wrote nothing
@@ -126,16 +144,8 @@
   function putBack(step) {
     step.after = capture(step.afterBlocks);
     if (writing) stopWriting();
-    if (step.kind === "draft") {
-      // Only the empty paragraph goes: its neighbour keeps what saves gave it since.
-      dropParagraph(step.draft);
-      resume(step.target, step.saved(), step.restore, null);
-      caretAtEdge(step.target, !step.above);
-    } else {
-      putBackState(step.before);
-      resume(step.target, step.saved, step.restore, step.at);
-      if (!step.at) caretAtEdge(step.target, false);  // a join: back to where Backspace was pressed
-    }
+    putBackState(step.before);
+    resume(step.target, typeof step.saved === "function" ? step.saved() : step.saved, step.restore, step.at);
     step.undone = textOf(step.target);
     redoSteps.push(step);
   }
@@ -213,5 +223,10 @@
   page.addEventListener("input", (e) => { if (writing && !(e.inputType || "").startsWith("history")) redoSteps = []; });
   document.addEventListener("keydown", (e) => {
     if (!writing || writing.joining || e.altKey || !(e.metaKey || e.ctrlKey) || e.key.toLowerCase() !== "z") return;
-    if (e.shiftKey ? redoStep() : undoStep()) { e.preventDefault(); e.stopPropagation(); }
+    const take = () => (e.shiftKey ? redoStep() : undoStep());
+    if (waiting) {  // after the actions still waiting, as it was pressed after them
+      e.preventDefault();
+      e.stopPropagation();
+      saveQueue.then(() => { if (writing && !writing.joining && !take()) document.execCommand(e.shiftKey ? "redo" : "undo"); });
+    } else if (take()) { e.preventDefault(); e.stopPropagation(); }
   }, true);

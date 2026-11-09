@@ -106,8 +106,10 @@
       saveBlock(first);
       second.draftOf = first;
       second.above = above;
-      // The file has no empty paragraphs: taking this one back is the page's alone.
-      addStep(step, { ...afterwards, kind: "draft", draft: second, above, results: [[el, ""]], saved: () => first.queued ?? first.before });
+      // The file has no empty paragraphs: taking this one back is the page's alone. It changed
+      // no keys or chips, so it keeps those the saves before it give them (data: none).
+      addStep(step, { ...afterwards, kind: "draft", draft: second, above, results: [[el, ""]], saved: () => first.queued ?? first.before,
+        before: { ...step.before, data: [] } });
       return spaceAfter;
     }
     addStep(step, { ...afterwards, results: [[first.el, left], [el, right]] });
@@ -152,7 +154,7 @@
       return;
     }
     if (ed.draftOf) saveBlock(ed);
-    const step = newStep("join", ed, [previous, ed.el], { onAnswer: true });
+    const step = newStep("join", ed, [previous, ed.el]);
     addStep(step, { afterBlocks: [previous], afterTarget: previous });  // undoable once joined
     holdKeys(ed, true);
     sendBlock(ed, () => ({ before: ed.before, after: textOf(ed.el), previous: textOf(previous), into: mark.dataset.h, ...mentionsIn(ed.el) }), {
@@ -183,11 +185,14 @@
     const text = e.clipboardData.getData("text/plain");
     const pieces = (isHeading(writing.el) ? [text] : text.split(/\r?\n[ \t]*\r?\n\s*/))
       .map((piece) => piece.replace(/\s+/g, " ")).filter((piece) => piece.trim());
-    let gap = "";  // the space before the text that follows, kept after the last piece
-    pieces.forEach((piece, i) => {
-      if (i) gap = breakParagraph() || gap;
-      document.execCommand("insertText", false, i === pieces.length - 1 ? piece + gap : piece);
-    });
+    const paste = () => {
+      let gap = "";  // the space before the text that follows, kept after the last piece
+      pieces.forEach((piece, i) => {
+        if (i) gap = breakParagraph() || gap;
+        document.execCommand("insertText", false, i === pieces.length - 1 ? piece + gap : piece);
+      });
+    };
+    if (pieces.length < 2 || !afterStyle(paste)) paste();
   });
   document.addEventListener("keydown", (e) => {
     if (!writing) {
@@ -203,10 +208,10 @@
     if (e.key === "Enter") {
       e.preventDefault();
       if (e.metaKey || e.ctrlKey) writing.el.blur();
-      else breakParagraph();
+      else if (!afterStyle(breakParagraph)) breakParagraph();
     } else if (e.key === "Backspace" && plain && getSelection().isCollapsed && atEdge(writing, false)) {
       e.preventDefault();
-      joinBack();
+      if (!afterStyle(joinBack)) joinBack();
     } else if (plain && e.key.startsWith("Arrow") && getSelection().isCollapsed) {
       const forward = e.key === "ArrowDown" || e.key === "ArrowRight";
       const sideways = e.key === "ArrowLeft" || e.key === "ArrowRight";

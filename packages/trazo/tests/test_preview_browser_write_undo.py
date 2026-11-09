@@ -310,6 +310,52 @@ class WriteUndoTests(WritingCase):
         self.assertEqual(self.source(), "One sentence. Two sentences here.\n\nNext **paragraph**.\n")
         self.assertEqual(self.evaluate(bold), ["paragraph"])
 
+    def test_enter_while_a_style_saves_waits_for_it_and_cmd_z_then_redo_keep_the_style(self):
+        self.build("One *sentence* here.\n")
+        bold = "[...document.querySelectorAll('.pv-page p strong')].map(e => e.textContent)"
+        self.select_word("One")
+        with self.held("change_format"):
+            self.chord("b", 66)
+            self.caret_after("here.")
+            self.enter()
+            self.undo()  # pressed after Enter: it takes Enter back, once Enter is done
+        self.wait_for(f"{bold}.length === 1 && document.querySelectorAll('.pv-page p.pv-can-write').length === 2")
+        self.settled()
+        self.assertEqual(self.source(), "**One** *sentence* here.\n")
+        self.redo()
+        self.wait_for("document.querySelector('.pv-writing')?.textContent === ''")
+        self.assertEqual(self.evaluate(bold), ["One"])
+        self.key("Escape", 27)
+        self.wait_for("!document.querySelector('.pv-writing')")
+        self.assertEqual(self.evaluate(bold), ["One"])
+        self.assertEqual(self.source(), "**One** *sentence* here.\n")
+
+    def test_enter_over_a_selection_goes_back_with_the_words_it_took(self):
+        self.build("One sentence here\n")
+        self.select_word("here")
+        self.enter()  # the selection goes, and what is left of the paragraph is empty
+        self.wait_for("document.querySelector('.pv-writing')?.textContent === ''")
+        self.undo()
+        self.wait_for("document.querySelectorAll('.pv-page p.pv-can-write').length === 2")
+        self.leave()
+        self.settled()
+        self.assertIn("One sentence here", self.paragraphs())
+        self.assertEqual(self.source(), "One sentence here\n")
+
+    def test_a_new_paragraph_in_a_loose_list_goes_back_into_its_item(self):
+        text = "- First words.\n\n  Continuation.\n\n- Second item.\n"
+        self.build(text)
+        self.write_in("First")
+        self.caret_after("First words.")
+        self.enter()
+        self.wait_for("document.querySelector('.pv-writing')?.textContent === ''")
+        self.undo()
+        self.wait_for("document.querySelectorAll('.pv-page li').length === 2")
+        self.assertEqual(self.evaluate("[...document.querySelectorAll('.pv-page li')].map(li => li.querySelectorAll('p').length)"), [2, 1])
+        self.leave()
+        self.settled()
+        self.assertEqual(self.source(), text)
+
     def test_two_breaks_go_back_and_come_again(self):
         self.build(TEXT)
         self.write_in("sentence")
