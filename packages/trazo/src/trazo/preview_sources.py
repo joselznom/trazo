@@ -99,8 +99,9 @@ def source_state(file, path, data, text):
     losing a write made at the instant it publishes."""
     sha = sha256_of(data)
     entries = [e for e in read_file_history() if e.get("file") == file]
-    source_publish.sweep(path, file, lambda: {sha} | {e["after_sha"] for e in entries}
-                         | {e.get("before_sha") or sha256_of(e["before_text"].encode("utf-8")) for e in entries})
+    # Only bytes the history stores count: an after_sha names text kept nowhere else.
+    source_publish.sweep(path, file, lambda: {sha} | {
+        e.get("before_sha") or sha256_of(e["before_text"].encode("utf-8")) for e in entries})
     return {"file": file, "text": text, "sha256": sha,
             "can_undo": bool(entries) and entries[-1].get("after_sha") == sha,
             "conflicts": source_publish.conflicts(file), "exact": can_exchange(path.parent)}
@@ -179,6 +180,8 @@ def change_source(request):
                 preview_edit_review.absorb(file, old, entry["before_text"])
             del entries[mine[-1]]
             save_file_history(entries)
+            data, text = read_source(path)
+            return {**source_state(file, path, data, text), "warning": result.warning}
         else:
             text = request.get("text")
             if not isinstance(text, str):

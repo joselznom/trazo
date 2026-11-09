@@ -188,7 +188,7 @@ def change_edits(request: Any) -> dict[str, Any]:
     op, by_file = _items(request)
     paths = {name: source_path(name) for name in by_file}  # validates every name first
     ensure()
-    done, missed = 0, []
+    done, missed, warnings = 0, [], []
     with review_lock():
         store = load()
         if store is None:
@@ -207,16 +207,19 @@ def change_edits(request: Any) -> dict[str, Any]:
                 store["files"][name] = edit_diff.accept(store["files"].get(name, ""), chosen)
                 continue
             new = edit_diff.reject(text, chosen).encode("utf-8")
-            # Read before publishing: a damaged history must stop the rejection first.
+            # Recorded before publishing, as a save is: a damaged history stops the
+            # rejection first, and the text it replaces is in history if trazo dies.
             history = read_file_history() if history is None else history
             history.append({"time": time.strftime("%Y-%m-%d %H:%M:%S"), "at": time.time_ns(), "file": name, "kind": "reject",
                             "before_text": text, "before_sha": sha256_of(data), "after_sha": sha256_of(new)})
-            if not publish(path, new, data, name).published:
+            save_file_history(history)
+            result = publish(path, new, data, name)
+            warnings += [result.warning] if result.warning else []
+            if not result.published:
                 history.pop()
+                save_file_history(history)
                 done -= len(chosen)
                 missed += [{"file": asked, "id": e.id} for e in chosen]
-        if history is not None:
-            save_file_history(history)
         if op == "accept" and done:
             save(store)
     if op == "accept" and done:
@@ -224,7 +227,8 @@ def change_edits(request: Any) -> dict[str, Any]:
         rebuild = {doc for doc in preview.DOCS if names & set(page_files(doc))}
         with preview.LOCK:
             cast(set[str], preview.WATCHER["rebuild"]).update(rebuild)
-    return {"done": done, "missing": len(missed), "missed": missed}
+    return {"done": done, "missing": len(missed), "missed": missed,
+            **({"warning": " ".join(warnings)} if warnings else {})}
 
 
 def absorb(name: str, before: str, after: str) -> None:

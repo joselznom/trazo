@@ -314,7 +314,7 @@
       if (!ok) { b.canUndo = false; fileMsg(file, payload.error || "Could not undo"); }
       else {
         acceptSource(file, payload);
-        fileMsg(file, "Last save undone.");
+        fileMsg(file, payload.warning || "Last save undone.");
       }
     });
   }

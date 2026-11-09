@@ -5,6 +5,7 @@ before its publication, by wrapping a step the save takes there (writing its
 undo entry); nothing in trazo knows about the test.
 """
 
+import hashlib
 import http.client
 import json
 import os
@@ -19,7 +20,7 @@ from unittest.mock import patch
 
 import _support
 
-from trazo import edit_diff, portable, preview, preview_blocks, preview_edit_review, preview_sources
+from trazo import edit_diff, portable, preview, preview_blocks, preview_edit_review, preview_sources, source_publish
 from trazo.local_server import LocalServer
 
 FILE = "manuscript/main/01_introduction.md"
@@ -51,6 +52,7 @@ class IndependentWriters(unittest.TestCase):
             self.addCleanup(patcher.stop)
         for kept in ("conflicts", "displaced"):
             self.addCleanup(shutil.rmtree, preview.REVIEW_DIR / kept, True)
+        self.addCleanup(lambda: [p.unlink() for p in self.path.parent.glob(self.path.name + ".*.swap")])
 
     def call(self, route: str, body: dict | None = None) -> tuple[int, dict]:
         port = self.server.server_port
@@ -161,26 +163,53 @@ class IndependentWriters(unittest.TestCase):
         unique.write_text("Only copy of a version a killed save displaced.\n", encoding="utf-8")
         duplicate = self.path.with_name(self.path.name + ".dup.swap")
         duplicate.write_bytes(self.path.read_bytes())
+        # A save killed after recording its undo entry: the history names the
+        # new text by its hash only, so its .swap is the one copy of that text.
+        pending = "Text of a save killed before it was published.\n"
+        unsent = self.path.with_name(self.path.name + ".pending.swap")
+        unsent.write_text(pending, encoding="utf-8")
+        preview.FILE_HISTORY_PATH.write_text(json.dumps([{
+            "file": FILE, "before_text": self.path.read_text(encoding="utf-8"),
+            "after_sha": hashlib.sha256(pending.encode()).hexdigest()}]), encoding="utf-8")
         state = self.load()
-        self.assertFalse(unique.exists() or duplicate.exists())
-        kept = [(_support.ROOT / p).read_text(encoding="utf-8") for p in state["conflicts"]]
-        self.assertEqual(kept, ["Only copy of a version a killed save displaced.\n"])
+        self.assertFalse(unique.exists() or unsent.exists())
+        kept = sorted((_support.ROOT / p).read_text(encoding="utf-8") for p in state["conflicts"])
+        self.assertEqual(kept, sorted(["Only copy of a version a killed save displaced.\n", pending]))
+        # A known copy may still be open in another program: it stays for the grace window.
+        self.assertTrue(duplicate.exists())
+        with patch.object(source_publish, "DISPLACED_GRACE", -1):  # the window has passed
+            self.load()
+        self.assertFalse(duplicate.exists())
 
-    def test_a_save_that_cannot_set_the_replaced_file_aside_says_so(self) -> None:
+    def test_trouble_after_publishing_is_reported_by_every_writer(self) -> None:
         if not portable.can_exchange(self.path.parent):
             self.skipTest("no atomic exchange on this filesystem")
-        state = self.load()
         blocker = preview.REVIEW_DIR / "displaced"
         blocker.write_text("a file where the folder should be")
         self.addCleanup(blocker.unlink, missing_ok=True)
+        swaps = lambda: list(self.path.parent.glob(self.path.name + ".*.swap"))  # noqa: E731
+        state = self.load()
         browser = state["text"] + "\nThe browser's paragraph.\n"
         status, body = self.save(state, browser)
-        self.assertEqual(status, 200, body)
-        self.assertTrue(body.get("warning"), body)
-        self.assertEqual(self.path.read_text(encoding="utf-8"), browser)
-        self.assertTrue(body["can_undo"])
+        self.assertEqual((status, self.path.read_text(encoding="utf-8")), (200, browser), body)
+        self.assertTrue(body["warning"] and body["can_undo"], body)
+        # The replaced file stays beside the source, where a program holding it open still writes.
+        self.assertEqual(len(swaps()), 1)
+        self.load()
+        self.assertEqual([p.read_text(encoding="utf-8") for p in swaps()], [state["text"]])
         status, undone = self.call("/__source", {"op": "undo", "file": FILE})
         self.assertEqual((status, undone["text"]), (200, state["text"]), undone)
+        self.assertTrue(undone["warning"], undone)
+        key = preview_blocks.editable(state["text"])[0].key
+        status, block = self.call("/__block", {"file": FILE, "h": key, "markdown": "Typed on the page."})
+        self.assertEqual(status, 200, block)
+        self.assertTrue(block["warning"], block)
+        self.call("/__edits?doc=manuscript")  # takes the baseline
+        self.path.write_text(self.path.read_text(encoding="utf-8").replace("Typed on the page.", "We followed"), encoding="utf-8")
+        status, listed = self.call("/__edits?doc=manuscript")
+        status, rejected = self.call("/__edits", {"op": "reject", "edits": listed["edits"]})
+        self.assertEqual((status, rejected["done"]), (200, len(listed["edits"])), rejected)
+        self.assertTrue(rejected["warning"], rejected)
 
     def test_a_disk_without_exchange_says_its_check_is_not_exact(self) -> None:
         with self.as_filesystem(NO_EXCHANGE):

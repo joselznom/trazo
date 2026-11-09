@@ -139,7 +139,7 @@ def _park(tmp: Path, expected: bytes, name: str) -> Publication:
             return Publication(True, True)
         return Publication(True, True, warning=(
             f"Saved, but trazo could not set the replaced version aside ({exc.strerror or exc}). "
-            f"It stays at {shown(tmp)} until the file is opened again; Undo save restores it."))
+            f"It stays at {shown(tmp)} for {DISPLACED_GRACE // 60} minutes; Undo save restores it."))
     return Publication(True, True)
 
 
@@ -174,17 +174,21 @@ def sweep(path: Path, name: str, known: Callable[[], set[str]]) -> None:
 
     A parked file whose bytes changed was written through a descriptor opened
     before its save: it becomes a conflict copy; an unchanged one is deleted
-    after DISPLACED_GRACE. A `.swap` file left by a killed save is deleted when
-    its sha256 is in known() (the current file and the undo history), else kept.
+    after DISPLACED_GRACE. A `.swap` file beside the source (a killed save, or
+    a displaced file that could not be parked) becomes a conflict copy unless
+    its sha256 is in known(), the bytes the file and its undo history hold;
+    then it is deleted once DISPLACED_GRACE has passed since it was last
+    renamed or written (its ctime), so a writer holding it open still writes
+    into a kept file.
     """
     _sweep_parked(name)
     orphans = list(path.parent.glob(glob.escape(path.name) + ".*.swap"))
     hashes = known() if orphans else set()
     for orphan in orphans:
-        if _sha(orphan.read_bytes()) in hashes:
-            orphan.unlink()
-        else:
+        if _sha(orphan.read_bytes()) not in hashes:
             _keep(orphan, name, "recovered")
+        elif time.time_ns() - orphan.stat().st_ctime_ns > DISPLACED_GRACE * 10**9:
+            orphan.unlink()
 
 
 def _sweep_parked(name: str) -> None:

@@ -140,6 +140,7 @@
         result = { ok: false, status: 0, payload: { error: "the preview server did not answer" } };
       }
       saves--;
+      if (result.ok && result.payload.warning) toast(result.payload.warning);
       if (!result.ok || !result.payload.saved) {
         showSaveState("", false);
         refused(ed, result.status, result.payload);
