@@ -70,12 +70,14 @@
     return { kind, ...extra, run: historyRun, ed, els, target: ed.el, restore: ed.restore, at: here(), before: capture(els) };
   }
 
-  // A style shows on its answer, so a picture of its paragraph taken before would lack it:
-  // Enter, Backspace at the start and a paste wait for a style saving there, at the same place.
+  // A style shows on its answer, so a picture of a paragraph taken before would lack it:
+  // Enter, Backspace at the start and a paste wait for any style still saving (a join takes
+  // the paragraph before too), then run at the same place.
+  const stylesSaving = new Set();  // their steps, kept when the history ends
   let waiting = 0;  // actions waiting so: a Cmd+Z meanwhile waits after them
   function afterStyle(run) {
     const ed = writing;
-    if (!undoSteps.some((s) => s.kind === "format" && s.target === ed.el && s.saveId === undefined && !s.dropped)) return false;
+    if (!stylesSaving.size) return false;
     const caret = getSelection().getRangeAt(0).cloneRange();  // live: it follows the style's change
     waiting++;
     saveQueue.then(() => {
@@ -96,9 +98,11 @@
     undoSteps.push(step);
     if (undoSteps.length > MAX_STEPS) undoSteps.shift();
     redoSteps = [];
+    if (step.kind === "format") stylesSaving.add(step);
   }
   function dropStep(step) {
     step.dropped = true;
+    stylesSaving.delete(step);
     undoSteps = undoSteps.filter((s) => s !== step);
   }
   // sendBlock's hooks: the request as sent (the keys are now those of the file it goes to), and its answer.
@@ -113,6 +117,7 @@
     step.at = pointsOf(step.range);
   }
   function stepSaved(step, payload, sent) {
+    stylesSaving.delete(step);  // shown: its answer painted it
     if (payload.save_id == null) { dropStep(step); return; }  // a save that wrote nothing
     step.saveId = payload.save_id;
     step.file = payload.file;
