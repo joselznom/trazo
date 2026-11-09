@@ -13,8 +13,10 @@ bold or italic save at once, so to go back from those, leave the text and press
 - **The arrows** at a paragraph's edges go to the next one.
 - **A paste** loses its formatting. Blank lines make paragraphs, except in a
   heading, and single line breaks become spaces.
-- **Bold and italic:** select text within one paragraph, then press ⌘B or ⌘I, or
-  B or I in the selection bar.
+- **Bold, italic and underline:** select text within one paragraph, then press
+  ⌘B, ⌘I or ⌘U, or B, I or U in the selection bar. They reach Word; a button
+  shows pressed when all the selected text has the style, and a press takes it
+  off. Underline is written `[text]{.underline}`.
 - **`@`** lists the paper's references, figures, tables and values, and inserts
   one as a chip.
 

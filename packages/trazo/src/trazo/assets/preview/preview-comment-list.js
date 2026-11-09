@@ -21,16 +21,16 @@
   let cfilter = prefs.cfilter === "resolved" ? "resolved" : "active";
   const WHO = { agent: "Claude", author: "You" };
   const STATE_NAME = { open: "Open", review: "To check", done: "Resolved" };
-  // Underlines are the author's reading marks: drawn in the text, never
+  // Highlights are the author's reading marks: drawn in the text, never
   // listed or counted as comments, and left out of the agent's list.
-  const isMark = (c) => c.kind === "underline";
-  // Resolved comments and removed underlines are an archive. A resolved one
+  const isMark = (c) => c.kind === "highlight";
+  // Resolved comments and removed highlights are an archive. A resolved one
   // is still located (its card names the current place, and Show in text
   // goes there) but never painted, marked, picked by a click or visited by j / k.
   const archived = (c) => c.status === "deleted" || (c.status === "done" && !isMark(c));
   const locate = (a, c) => (c.status === "deleted" ? null : locateCached(a, c));
   // What the text of this page shows, set by draw(): located comments that
-  // are not archived, and the underlines.
+  // are not archived, and the highlights.
   let inText = [];
 
   function card(c, hit, entry) {
@@ -283,16 +283,16 @@
   }
 
   // A comment whose text is gone has no range to paint: its paragraph gets a
-  // bar in the margin, one strip per state it has (open, to check, underline).
+  // bar in the margin, one strip per state it has (open, to check, highlight).
   // Only redone when the set changes, so paintHighlights stays cheap.
-  const LOST = [["open", "var(--pv-hl-open-edge)"], ["review", "var(--pv-hl-review-sel)"], ["underline", "var(--pv-warn-dot)"]];
+  const LOST = [["open", "var(--pv-hl-open-edge)"], ["review", "var(--pv-hl-review-sel)"], ["highlight", "var(--pv-hl-mark-edge)"]];
   let marked = new Map();  // element -> its states
   function markLost(items) {
     const states = new Map();
     for (const x of items) {
       if (x.hit.range) continue;
       const set = states.get(x.hit.el) || new Set();
-      states.set(x.hit.el, set.add(isMark(x.c) ? "underline" : x.c.status));
+      states.set(x.hit.el, set.add(isMark(x.c) ? "highlight" : x.c.status));
     }
     const next = new Map([...states].map(([el, set]) => [el, LOST.filter(([name]) => set.has(name))]));
     const names = (list) => list.map(([name]) => name).join(" ");

@@ -6,8 +6,9 @@ status, replies, created}, where <scope> is "diagram" or "table". States
 follow the preview: open (the author wrote it), review (the agent replied
 with `resolve`), done (only the author marks it; `resolved` holds the time).
 purge deletes comments for good: they leave the store and every history
-entry that holds them, so it has no undo. delete removes an underline (the
-preview's reading marks) by setting its status to "deleted" (the old status
+entry that holds them, so it has no undo. delete removes a highlight (the
+preview's reading marks, kind "highlight"; older versions wrote "underline")
+by setting its status to "deleted" (the old status
 in deleted_from), so undo brings it back. Comments left in that state by
 older versions, which deleted comments the same way, read as done.
 
@@ -21,7 +22,7 @@ and belongs to each of them. Payloads name the next undo (`undo`, its
 Ops of `change` (the editors' POST bodies): add {<scope>, comment,
 ...target fields}, update {id, status?, comment?}, reply {id, text, by?,
 status?}, purge {id} (any state) or {ids} (only resolved comments; a
-request with any other is refused whole), delete {id} or {ids} (underlines
+request with any other is refused whole), delete {id} or {ids} (highlights
 only, several in one undo step) and undo {<scope>?, expect?} (the last
 comment change of that scope; 409 when the comment changed since, or when
 `expect` is not that entry's undo_id).
@@ -61,19 +62,22 @@ def copy(value: Any) -> Any:
 
 
 def upgraded(comment: Comment) -> Comment:
-    """The comment with its legacy single `reply` folded into `replies`, and
-    done when an older version left it in the trash."""
+    """The comment with its legacy single `reply` folded into `replies`, a
+    highlight when an older version called it an underline, and done when an
+    older version left it in the trash."""
     item = {k: v for k, v in comment.items() if k != "reply"}
     item["replies"] = thread_of(comment)
-    if item.get("status") == "deleted" and item.get("kind") != "underline":
+    if item.get("kind") == "underline":
+        item["kind"] = "highlight"
+    if item.get("status") == "deleted" and item.get("kind") != "highlight":
         item["status"] = "done"
         item.pop("deleted_from", None)
     return item
 
 
 def resolved(comment: Comment) -> bool:
-    """A resolved comment (not an underline), which purge {ids} takes."""
-    return comment.get("status") == "done" and comment.get("kind") != "underline"
+    """A resolved comment (not a highlight), which purge {ids} takes."""
+    return comment.get("status") == "done" and comment.get("kind") != "highlight"
 
 
 def text_field(request: dict[str, Any], key: str, required: bool = False) -> str:
@@ -268,10 +272,10 @@ class CommentStore:
     def apply(item: Comment, op: str, request: dict[str, Any]) -> str:
         """Change one comment in place; returns the history label."""
         if item.get("status") == "deleted":
-            raise RequestError("underline is removed")
+            raise RequestError("highlight is removed")
         if op == "delete":
-            if item.get("kind") != "underline":
-                raise RequestError("delete removes underlines; use purge to delete a comment")
+            if item.get("kind") != "highlight":
+                raise RequestError("delete removes highlights; use purge to delete a comment")
             item["deleted_from"] = item.get("status", "open")
             item["status"] = "deleted"
             return "delete comment"
