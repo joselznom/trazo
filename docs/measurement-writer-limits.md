@@ -93,21 +93,22 @@ write; the undo keeps its natural window, so it loses less before the fix:
 | Path, protocol | In-place | Atomic | Late, through an open file |
 | --- | ---: | ---: | ---: |
 | Table save, before | 324 | 284 | 500 |
-| Table save, exchange | 0 (329 got 409) | 0 (312 got 409) | 0 (500 kept) |
-| Table save, no exchange | 6 | 17 | 500 |
+| Table save, exchange | 0 (308 got 409) | 0 (298 got 409) | 0 (500 kept) |
+| Table save, no exchange | 2 | 11 | 500 |
 | Diagram save, before | 303 | 275 | 500 |
-| Diagram save, exchange | 0 (341 got 409) | 0 (340 got 409) | 0 (500 kept) |
-| Diagram save, no exchange | 9 | 33 | 500 |
+| Diagram save, exchange | 0 (317 got 409) | 0 (288 got 409) | 0 (500 kept) |
+| Diagram save, no exchange | 2 | 11 | 500 |
 | Table undo, before | 15 | 0 | 500 |
-| Table undo, exchange | 0 (47 got 409) | 0 (23 got 409) | 0 (500 kept) |
-| Table undo, no exchange | 4 | 9 | 500 |
+| Table undo, exchange | 0 (30 got 409) | 0 (16 got 409) | 0 (500 kept) |
+| Table undo, no exchange | 2 | 11 | 500 |
 
 A spec collision answers the editors' existing 409 (the table editor's
 "changed on disk" banner, the diagram editor's Keep mine and Load theirs); the
 reply names the copy, which the editors do not show. A diagram save now answers
 the sha256 of the bytes it wrote, as a source save does. A new spec (a table
 typed by hand, `base_sha256` null for a diagram) is still created with a plain
-rename: there is no existing file to exchange with.
+rename: there is no existing file to exchange with. Undoing such a creation
+deletes the file after its hash check, so a write in that instant is lost.
 
 ## Reproduction
 
@@ -115,7 +116,7 @@ Run from this checkout, using a generated example paper as `SEED`:
 
 ```sh
 uv run --quiet --project packages/trazo python scripts/measure/scenarios.py "$SEED" .build/measure/writer-limits --scenario concurrent_writers --scenario concurrent_atomic_writers
-uv run --quiet --project packages/trazo python scripts/measure/faults.py "$SEED" .build/measure/source-faults --operation source
+uv run --quiet --project packages/trazo python scripts/measure/faults.py "$SEED" .build/measure/save-faults --operation source --operation table --operation diagram
 ```
 
 Both scenarios pause a real HTTP save at its publication, write the file from a
@@ -124,6 +125,6 @@ the request. They pass when the reply is 409, the other writer's text is on disk
 and the browser's text is in a kept copy. They were run on APFS. On a disk
 without exchange the pause lands after the final check, the instant this
 contract leaves open, so the atomic case is expected to fail there. The tests in
-`packages/trazo/tests/test_preview_source_writers.py` and
-`test_preview_browser_source_writers.py` cover the same cases at the HTTP and
-browser boundaries.
+`packages/trazo/tests/test_preview_source_writers.py`,
+`test_preview_browser_source_writers.py` and `test_spec_writers.py` cover the
+same cases at the HTTP and browser boundaries, for sources and for specs.
