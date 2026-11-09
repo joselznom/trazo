@@ -55,10 +55,13 @@ save makes the next save a 409 instead of overwriting it.
 - If the review folder is on another filesystem than the manuscript, a matching
   displaced file is not parked, so late writes through an open file are lost.
 - Post-publication housekeeping: when parking fails (a full disk, a read-only
-  folder) the save is published and answers 200 with a `warning`; the replaced
-  text stays in undo history and beside the file until it is next opened. The
-  fault harness accepts exactly this case, checking that the new text is
-  published and the old text is in undo history.
+  folder) the save is published and answers 200 with a `warning`, shown by
+  every editor that saves a source. The replaced text stays in undo history,
+  and the replaced file stays beside the source as a `.swap` for the same 600
+  seconds (measured from its ctime, which the exchange updates: checked on
+  APFS, not on Linux), so a writer holding it open still writes into a kept
+  file. The fault harness accepts exactly this case, checking that the new text
+  is published and the old text is in undo history.
 - Linux and Windows were not run locally; network filesystems were not tested.
 
 ## Evidence
