@@ -29,26 +29,17 @@
     getSelection().addRange(range);
   }
 
-  // Styles painted in each block (preview-format.js paints one on its answer): a picture of a
-  // block taken before a style painted there would take that style off the page, not the file.
-  const paints = new WeakMap();
-  const painted = (el) => paints.set(el, (paints.get(el) || 0) + 1);
-  const stale = (step) => step.before.paints.some(([el, n]) =>
-    (paints.get(el) || 0) !== n + (step.kind === "format" && el === step.target ? 1 : 0));
-
   // The blocks `els` (with one parent): their places among its children, their
   // nodes and text, and the data of block marks and chips.
   function capture(els) {
     const outers = els.map(blockOf), parent = outers[0].parentElement;
     const within = (selector) => outers.flatMap((outer) => [...(outer.matches(selector) ? [outer] : []), ...$$(selector, outer)]);
-    const blocks = within(`p, li, ${HEADINGS}`).filter((el) => blockMark.has(el));
     return {
       parent,
       children: [...parent.childNodes],
       subtrees: outers.map(snapshotOf),
       data: within(".pv-src, .pv-head, .pv-atom").map((node) => [node, { ...node.dataset }]),
-      blocks: blocks.map((el) => [el, blockMark.get(el)]),
-      paints: blocks.map((el) => [el, paints.get(el) || 0]),
+      blocks: within(`p, li, ${HEADINGS}`).filter((el) => blockMark.has(el)).map((el) => [el, blockMark.get(el)]),
     };
   }
   const reread = (state) => { state.data = state.data.map(([node]) => [node, { ...node.dataset }]); };
@@ -71,13 +62,13 @@
       Object.assign(node.dataset, data);
     }
     for (const [el, mark] of state.blocks) blockMark.set(el, mark);
-    for (const [el, n] of state.paints) paints.set(el, n);
     forgetPageText();
   }
 
   // Before an action changes the page: the blocks it changes and where the caret is.
+  // `onAnswer`: it changes the page only on its save's answer (a style, a join).
   function newStep(kind, ed, els, extra = {}) {
-    return { kind, ...extra, run: historyRun, target: ed.el, restore: ed.restore, at: here(), before: capture(els) };
+    return { kind, ...extra, run: historyRun, ed, els, target: ed.el, restore: ed.restore, at: here(), before: capture(els) };
   }
 
   // Once the action is on the page (a join's, once joined: its keys wait meanwhile).
@@ -96,11 +87,12 @@
   // sendBlock's hooks: the request as sent (the keys are now those of the file it goes to), and its answer.
   function stepSent(step, request) {
     step.request = request;
-    if (step.kind !== "format") { reread(step.before); return; }
-    step.before = capture([step.target]);
-    step.left = step.before.children;
+    if (!step.onAnswer) { reread(step.before); return; }
+    // The page it changes is the one now, after every save queued before it showed.
+    step.before = capture(step.els);
     step.restore = step.ed.restore;
-    step.at = pointsOf(step.range);
+    step.at = step.range ? pointsOf(step.range) : null;  // a style's own live range follows those changes
+    if (step.kind === "format") step.left = step.before.children;
   }
   function stepSaved(step, payload, sent) {
     if (payload.save_id == null) { dropStep(step); return; }  // a save that wrote nothing
@@ -142,6 +134,7 @@
     } else {
       putBackState(step.before);
       resume(step.target, step.saved, step.restore, step.at);
+      if (!step.at) caretAtEdge(step.target, false);  // a join: back to where Backspace was pressed
     }
     step.undone = textOf(step.target);
     redoSteps.push(step);
@@ -170,14 +163,8 @@
     step.afterAt = here();
     if (step.kind === "draft") { putBack(step); return true; }
     // A step still saving is undone once its answer came: a failed one has nothing to undo.
-    const ask = () => !step.dropped && !stale(step) && { op: "undo", file: step.file, expect: step.saveId };
-    queueStep("/__source", ask, "Undoing…", (answer) => {
-      if (!answer) {
-        showSaveState("", false);
-        if (!step.dropped) toast("Not undone here: a style was saved in this text since. Leave the text and press ⌘Z.");
-        endHistory();
-        return;
-      }
+    queueStep("/__source", () => !step.dropped && { op: "undo", file: step.file, expect: step.saveId }, "Undoing…", (answer) => {
+      if (!answer) { showSaveState("", false); return; }
       if (!answer.ok) {
         showSaveState("", false);
         toast(`Not undone: ${refusal(answer.payload)}.`);

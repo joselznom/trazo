@@ -278,6 +278,38 @@ class WriteUndoTests(WritingCase):
         self.assertEqual(self.source(), "One sentence. *Two* sentences here.\n")
         self.assertEqual(self.evaluate("[...document.querySelectorAll('.pv-writing em')].map(e => e.textContent)"), ["Two"])
 
+    def test_a_new_paragraph_taken_back_leaves_a_style_saved_meanwhile_on_its_neighbour(self):
+        self.build("One *sentence* here.\n")
+        bold = "[...document.querySelectorAll('.pv-page p strong')].map(e => e.textContent)"
+        self.select_word("One")
+        with self.held("change_format"):
+            self.chord("b", 66)
+            self.caret_after("here.")
+            self.enter()
+        self.wait_for(f"{bold}.length === 1")
+        self.undo()
+        self.wait_for("document.querySelectorAll('.pv-page p.pv-can-write').length === 2")  # the introduction's and this
+        self.assertEqual(self.evaluate(bold), ["One"])
+        self.assertEqual(self.source(), "**One** *sentence* here.\n")
+
+    def test_a_join_made_while_a_style_saves_goes_back_with_the_style_kept(self):
+        self.build(TEXT)
+        bold = "[...document.querySelectorAll('.pv-page p strong')].map(e => e.textContent)"
+        self.select_word("paragraph")
+        with self.held("change_format"):
+            self.chord("b", 66)
+            self.evaluate("""(() => { const w = document.createTreeWalker(document.querySelector('.pv-writing'), NodeFilter.SHOW_TEXT);
+              let n; while ((n = w.nextNode())) if (n.data.includes('Next')) { getSelection().collapse(n, n.data.indexOf('Next')); return; } })()""")
+            self.key("Backspace", 8)
+        self.wait_for(f"{PARAGRAPHS}.includes('One sentence. Two sentences here. Next paragraph.')")
+        self.settled()
+        self.assertEqual(self.source(), "One sentence. Two sentences here. Next **paragraph**.\n")
+        self.undo()
+        self.wait_for(f"{PARAGRAPHS}.includes('Next paragraph.')")
+        self.settled()
+        self.assertEqual(self.source(), "One sentence. Two sentences here.\n\nNext **paragraph**.\n")
+        self.assertEqual(self.evaluate(bold), ["paragraph"])
+
     def test_two_breaks_go_back_and_come_again(self):
         self.build(TEXT)
         self.write_in("sentence")

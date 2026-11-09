@@ -152,7 +152,7 @@
       return;
     }
     if (ed.draftOf) saveBlock(ed);
-    const step = newStep("join", ed, [previous, ed.el]);
+    const step = newStep("join", ed, [previous, ed.el], { onAnswer: true });
     addStep(step, { afterBlocks: [previous], afterTarget: previous });  // undoable once joined
     holdKeys(ed, true);
     sendBlock(ed, () => ({ before: ed.before, after: textOf(ed.el), previous: textOf(previous), into: mark.dataset.h, ...mentionsIn(ed.el) }), {

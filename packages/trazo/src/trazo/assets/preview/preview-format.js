@@ -54,9 +54,7 @@
     // In characters, as the server counts them: an emoji is two units of a JavaScript string.
     const from = [...textOf(head.cloneContents())].length, to = [...textOf(upTo.cloneContents())].length;
     saveBlock(ed);
-    // The style shows on the page when it is saved, so what it changes is taken when it is
-    // sent (stepSent), after the styles before it; the live `range` follows those.
-    const step = newStep("format", ed, [ed.el], { style, ed, range });
+    const step = newStep("format", ed, [ed.el], { style, range, onAnswer: true });
     // A style leaves the text as it is: what is typed while it saves goes back first.
     addStep(step, { results: [[ed.el, textOf(ed.el)]], left: step.before.children, afterBlocks: [ed.el], afterTarget: ed.el });
     sendBlock(ed, () => ({ before: ed.before, style, from, to }), {
@@ -67,7 +65,6 @@
         ed.mark.dataset.h = payload.parts[0];
         if (range.collapsed) return;
         paintStyle(range, FORMAT_TAG[style], payload.on);
-        painted(ed.el);
         ed.restore = snapshotOf(ed.el);
         if (writing === ed) { selection.removeAllRanges(); selection.addRange(range); pressFormatButtons(); }
       },
