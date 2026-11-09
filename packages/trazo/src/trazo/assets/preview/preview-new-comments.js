@@ -90,7 +90,8 @@
       pendingMarks = inText.filter((x) => isMark(x.c) && x.hit.range && overlaps(x.hit.range, range));
       showFab(range.getBoundingClientRect(), [fabButton("comment", "comment", "Comment", "Comment for Claude"),
         pendingMarks.length ? unmarkButton()
-          : fabButton("underline", "underline", "Underline", "A reading mark for you: not a comment, and Claude does not see it")]);
+          : fabButton("underline", "underline", "Underline", "A reading mark for you: not a comment, and Claude does not see it"),
+        ...formatButtons()]);
     }, 0);
   });
   fab.addEventListener("mousedown", (e) => e.preventDefault());
@@ -98,6 +99,7 @@
     const button = event.target.closest("[data-select]");
     const action = button && button.dataset.select;
     if (!action) return;
+    if (action === "strong" || action === "em") { toggleStyle(action); return; }
     fab.hidden = true;
     if (action === "unmark") {
       const ids = pendingMarks.map((x) => x.c.id);
