@@ -77,15 +77,17 @@ class WatcherFailureTests(unittest.TestCase):
     def test_a_page_unreadable_at_start_does_not_stop_the_watcher(self) -> None:
         root = self.project()
         section = root / "manuscript/main/01_introduction.md"
+        section.write_text(section.read_text() + "\nReadableAgain.\n")
         section.chmod(0)
         port = self.start(root)
         self.assertTrue(wait_until(lambda: "PermissionError" in status(port)["manuscript"]["error"]),
                         "the first build's failure is not in the status")
-        section.chmod(0o644)
-        section.write_text(section.read_text() + "\nReadableAgain.\n")
+        section.chmod(0o644)  # fixed without touching the text: the retry notices (backoff at most 30 s)
         self.assertTrue(wait_until(lambda: status(port)["manuscript"]["ok"]
-                                   and b"ReadableAgain" in get(port, "/manuscript.html")),
+                                   and b"ReadableAgain" in get(port, "/manuscript.html"), timeout=45),
                         "the watcher did not rebuild after the file became readable")
+        log = (root / ".build/preview.log").read_text(encoding="utf-8")
+        self.assertEqual(log.count("manuscript: error PermissionError"), 1, log)
 
 
 class WatcherBackoffTests(unittest.TestCase):
