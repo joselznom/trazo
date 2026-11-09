@@ -241,6 +241,43 @@ class WriteUndoTests(WritingCase):
         self.wait_for("document.querySelector('.pv-save-state').textContent === 'Saved' && !saves")
         self.assertEqual(self.source(), "One more sentence. Two sentences here. Extra.\n\nNext paragraph.\n")
 
+    def test_a_new_paragraph_taken_back_keeps_the_key_its_neighbour_got_meanwhile(self):
+        self.build(TEXT)
+        self.write_in("sentence")
+        self.caret_after("One sentence.")
+        with self.held("change_block"):
+            self.enter()
+            self.caret_after("Two sentences here.")
+            self.enter()  # a new empty paragraph after the half whose save is still on its way
+        self.undo()
+        self.wait_for(f"{PARAGRAPHS}.length === 4")
+        self.type(" More.")
+        self.leave()
+        self.wait_for("document.querySelector('.pv-save-state').textContent === 'Saved' && !saves")
+        self.assertFalse(self.evaluate("!!document.querySelector('.pv-write-failed')"))
+        self.assertEqual(self.source(), "One sentence.\n\nTwo sentences here. More.\n\nNext paragraph.\n")
+
+    def test_styles_made_while_the_one_before_saves_go_back_one_by_one(self):
+        self.build("One sentence. *Two* sentences here.\n")
+        bold = "[...document.querySelectorAll('.pv-writing strong')].map(e => e.textContent)"
+        self.select_word("One")
+        with self.held("change_format"):
+            self.chord("b", 66)
+            self.select_word("here")
+            self.chord("b", 66)  # while the first one saves
+        self.wait_for(f"{bold}.length === 2")
+        self.assertEqual(self.source(), "**One** sentence. *Two* sentences **here**.\n")
+        self.undo()
+        self.wait_for(f"{bold}.length === 1")
+        self.settled()
+        self.assertEqual(self.evaluate(bold), ["One"])
+        self.assertEqual(self.source(), "**One** sentence. *Two* sentences here.\n")
+        self.undo()
+        self.wait_for(f"{bold}.length === 0")
+        self.settled()
+        self.assertEqual(self.source(), "One sentence. *Two* sentences here.\n")
+        self.assertEqual(self.evaluate("[...document.querySelectorAll('.pv-writing em')].map(e => e.textContent)"), ["Two"])
+
     def test_two_breaks_go_back_and_come_again(self):
         self.build(TEXT)
         self.write_in("sentence")

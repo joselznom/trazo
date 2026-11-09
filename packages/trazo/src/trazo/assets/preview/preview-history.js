@@ -14,17 +14,12 @@
   // ---------------------------------------------------------------- history
   let undoSteps = [], redoSteps = [];
   let historyRun = 0;     // a step answered after the author left the text belongs to no history
-  let replaying = false;  // a step made again keeps the steps still to redo
   const MAX_STEPS = 100;  // each keeps the nodes of the blocks it changed
 
   const blockOf = (el) => { const item = itemOf(el); return item && item !== el ? item : el; };
   // A selection as positions, not a live Range: a step's own changes would move one.
-  const here = () => {
-    const selection = getSelection();
-    if (!selection.rangeCount) return null;
-    const range = selection.getRangeAt(0);
-    return { start: [range.startContainer, range.startOffset], end: [range.endContainer, range.endOffset] };
-  };
+  const pointsOf = (range) => ({ start: [range.startContainer, range.startOffset], end: [range.endContainer, range.endOffset] });
+  const here = () => (getSelection().rangeCount ? pointsOf(getSelection().getRangeAt(0)) : null);
   function select(points) {
     if (!points) return;
     const range = document.createRange();
@@ -72,7 +67,7 @@
 
   // Before an action changes the page: the blocks it changes and where the caret is.
   function newStep(kind, ed, els, extra = {}) {
-    return { kind, ...extra, run: historyRun, keepRedo: replaying, target: ed.el, restore: ed.restore, at: here(), before: capture(els) };
+    return { kind, ...extra, run: historyRun, target: ed.el, restore: ed.restore, at: here(), before: capture(els) };
   }
 
   // Once the action is on the page (a join's, once joined: its keys wait meanwhile).
@@ -82,7 +77,7 @@
     Object.assign(step, fields);
     undoSteps.push(step);
     if (undoSteps.length > MAX_STEPS) undoSteps.shift();
-    if (!step.keepRedo) redoSteps = [];
+    redoSteps = [];
   }
   function dropStep(step) {
     step.dropped = true;
@@ -91,7 +86,11 @@
   // sendBlock's hooks: the request as sent (the keys are now those of the file it goes to), and its answer.
   function stepSent(step, request) {
     step.request = request;
-    reread(step.before);
+    if (step.kind !== "format") { reread(step.before); return; }
+    step.before = capture([step.target]);
+    step.left = step.before.children;
+    step.restore = step.ed.restore;
+    step.at = pointsOf(step.range);
   }
   function stepSaved(step, payload, sent) {
     if (payload.save_id == null) { dropStep(step); return; }  // a save that wrote nothing

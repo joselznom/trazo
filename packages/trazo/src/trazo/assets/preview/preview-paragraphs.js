@@ -106,8 +106,10 @@
       saveBlock(first);
       second.draftOf = first;
       second.above = above;
-      // The file has no empty paragraphs: taking this one back is the page's alone.
-      addStep(step, { ...afterwards, kind: "draft", draft: second, above, results: [[el, ""]], saved: () => first.queued ?? first.before });
+      // The file has no empty paragraphs: taking this one back is the page's alone. It changed
+      // no keys or chips, so it keeps those the saves before it give them (data: none).
+      addStep(step, { ...afterwards, kind: "draft", draft: second, above, results: [[el, ""]], saved: () => first.queued ?? first.before,
+        before: { ...step.before, data: [] } });
       return spaceAfter;
     }
     addStep(step, { ...afterwards, results: [[first.el, left], [el, right]] });

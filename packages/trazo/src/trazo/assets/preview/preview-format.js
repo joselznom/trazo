@@ -39,7 +39,7 @@
 
   function toggleStyle(style) {
     const ed = writing, selection = getSelection();
-    if (!ed || selection.isCollapsed || !ed.el.contains(selection.anchorNode) || !ed.el.contains(selection.focusNode)) return;
+    if (!ed || ed.joining || selection.isCollapsed || !ed.el.contains(selection.anchorNode) || !ed.el.contains(selection.focusNode)) return;
     // A double click takes the space after the word on some systems: a style stops at the word.
     const range = selection.getRangeAt(0).cloneRange();
     while (range.endContainer.nodeType === 3 && range.endOffset && /\s/.test(range.endContainer.data[range.endOffset - 1]))
@@ -54,7 +54,9 @@
     // In characters, as the server counts them: an emoji is two units of a JavaScript string.
     const from = [...textOf(head.cloneContents())].length, to = [...textOf(upTo.cloneContents())].length;
     saveBlock(ed);
-    const step = newStep("format", ed, [ed.el], { style });
+    // The style shows on the page when it is saved, so what it changes is taken when it is
+    // sent (stepSent), after the styles before it; the live `range` follows those.
+    const step = newStep("format", ed, [ed.el], { style, ed, range });
     // A style leaves the text as it is: what is typed while it saves goes back first.
     addStep(step, { results: [[ed.el, textOf(ed.el)]], left: step.before.children, afterBlocks: [ed.el], afterTarget: ed.el });
     sendBlock(ed, () => ({ before: ed.before, style, from, to }), {
