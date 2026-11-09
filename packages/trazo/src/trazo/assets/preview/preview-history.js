@@ -29,17 +29,26 @@
     getSelection().addRange(range);
   }
 
+  // Styles painted in each block (preview-format.js paints one on its answer): a picture of a
+  // block taken before a style painted there would take that style off the page, not the file.
+  const paints = new WeakMap();
+  const painted = (el) => paints.set(el, (paints.get(el) || 0) + 1);
+  const stale = (step) => step.before.paints.some(([el, n]) =>
+    (paints.get(el) || 0) !== n + (step.kind === "format" && el === step.target ? 1 : 0));
+
   // The blocks `els` (with one parent): their places among its children, their
   // nodes and text, and the data of block marks and chips.
   function capture(els) {
     const outers = els.map(blockOf), parent = outers[0].parentElement;
     const within = (selector) => outers.flatMap((outer) => [...(outer.matches(selector) ? [outer] : []), ...$$(selector, outer)]);
+    const blocks = within(`p, li, ${HEADINGS}`).filter((el) => blockMark.has(el));
     return {
       parent,
       children: [...parent.childNodes],
       subtrees: outers.map(snapshotOf),
       data: within(".pv-src, .pv-head, .pv-atom").map((node) => [node, { ...node.dataset }]),
-      blocks: within(`p, li, ${HEADINGS}`).filter((el) => blockMark.has(el)).map((el) => [el, blockMark.get(el)]),
+      blocks: blocks.map((el) => [el, blockMark.get(el)]),
+      paints: blocks.map((el) => [el, paints.get(el) || 0]),
     };
   }
   const reread = (state) => { state.data = state.data.map(([node]) => [node, { ...node.dataset }]); };
@@ -62,6 +71,7 @@
       Object.assign(node.dataset, data);
     }
     for (const [el, mark] of state.blocks) blockMark.set(el, mark);
+    for (const [el, n] of state.paints) paints.set(el, n);
     forgetPageText();
   }
 
@@ -124,8 +134,15 @@
   function putBack(step) {
     step.after = capture(step.afterBlocks);
     if (writing) stopWriting();
-    putBackState(step.before);
-    resume(step.target, typeof step.saved === "function" ? step.saved() : step.saved, step.restore, step.at);
+    if (step.kind === "draft") {
+      // Only the empty paragraph goes: its neighbour keeps what saves gave it since.
+      dropParagraph(step.draft);
+      resume(step.target, step.saved(), step.restore, null);
+      caretAtEdge(step.target, !step.above);
+    } else {
+      putBackState(step.before);
+      resume(step.target, step.saved, step.restore, step.at);
+    }
     step.undone = textOf(step.target);
     redoSteps.push(step);
   }
@@ -153,8 +170,14 @@
     step.afterAt = here();
     if (step.kind === "draft") { putBack(step); return true; }
     // A step still saving is undone once its answer came: a failed one has nothing to undo.
-    queueStep("/__source", () => !step.dropped && { op: "undo", file: step.file, expect: step.saveId }, "Undoing…", (answer) => {
-      if (!answer) { showSaveState("", false); return; }
+    const ask = () => !step.dropped && !stale(step) && { op: "undo", file: step.file, expect: step.saveId };
+    queueStep("/__source", ask, "Undoing…", (answer) => {
+      if (!answer) {
+        showSaveState("", false);
+        if (!step.dropped) toast("Not undone here: a style was saved in this text since. Leave the text and press ⌘Z.");
+        endHistory();
+        return;
+      }
       if (!answer.ok) {
         showSaveState("", false);
         toast(`Not undone: ${refusal(answer.payload)}.`);

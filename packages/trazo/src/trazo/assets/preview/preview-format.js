@@ -67,6 +67,7 @@
         ed.mark.dataset.h = payload.parts[0];
         if (range.collapsed) return;
         paintStyle(range, FORMAT_TAG[style], payload.on);
+        painted(ed.el);
         ed.restore = snapshotOf(ed.el);
         if (writing === ed) { selection.removeAllRanges(); selection.addRange(range); pressFormatButtons(); }
       },
