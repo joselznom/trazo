@@ -12,6 +12,7 @@ from . import pandoc_run, preview_edit_review, table
 from .expand import FENCE, ValuesError, expand_files
 from .numbering import metadata_file
 from .pandoc_options import mathml_flag
+from .review_storage import write_atomic
 
 
 def strip_html_comments(line, inside):
@@ -89,7 +90,8 @@ def title_prefixes(project):
 def render(name, out_dir, *, for_counts=False):
     """Build a document's preview page as <out_dir>/<name>.html; returns
     (error, pandoc warnings), error "" on success. The served pages are
-    built in the preview folder; `trazo counts` uses one of its own."""
+    built in the preview folder; `trazo counts` uses one of its own.
+    Intermediate inputs keep their last complete version if a write fails."""
     from . import preview
     sections = preview.PROJECT.document_files(name)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -103,9 +105,9 @@ def render(name, out_dir, *, for_counts=False):
         error = str(exc)
     else:
         source = out_dir / f"{name}.md"
-        source.write_text(text, encoding="utf-8")
+        write_atomic(source, text.encode("utf-8"))
         after_body = out_dir / "after_body.html"
-        after_body.write_text(
+        write_atomic(after_body, (
             f'<script>window.PREVIEW_DOC = "{name}";\n'
             f'window.PREVIEW_FILES = {json.dumps(files).replace("</", "<" + chr(92) + "/")};\n'
             f'window.PREVIEW_TITLES = {json.dumps(preview.PROJECT.titles).replace("</", "<" + chr(92) + "/")};\n'
@@ -116,9 +118,8 @@ def render(name, out_dir, *, for_counts=False):
             f'window.PREVIEW_TABLE_HAND = {json.dumps(hand_table_labels())};</script>\n'
             '<script src="/__assets/app/app.js"></script>\n'
             f'<script src="/{preview.ASSET_URL}preview-model.js"></script>\n'
-            + "".join(f'<script src="/{preview.ASSET_URL}{script}"></script>\n' for script in preview.VIEWER_SCRIPTS),
-            encoding="utf-8",
-        )
+            + "".join(f'<script src="/{preview.ASSET_URL}{script}"></script>\n' for script in preview.VIEWER_SCRIPTS)
+        ).encode("utf-8"))
         # Write next to the page and rename, so a request never gets half a page.
         page, partial = out_dir / f"{name}.html", out_dir / f"{name}.html.tmp"
         try:

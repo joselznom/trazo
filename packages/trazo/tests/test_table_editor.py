@@ -223,12 +223,13 @@ class EditorTests(Restore):
         def render_then_generate():
             nonlocal renders
             renders += 1
-            render()
+            ok = render()
             if renders == 1:
                 path = DATA / "results.json"
                 data = json.loads(path.read_text())
                 data["records"][0]["value"]["est"] = 0.123
                 path.write_text(json.dumps(data))
+            return ok
 
         with patch.dict(preview.PROJECT.config["commands"], {"tables": []}), \
              patch.object(preview, "render_spec_tables", side_effect=render_then_generate), \

@@ -191,14 +191,13 @@ def save_diagram(name: str, request: Any) -> dict[str, Any]:
                            text=current.decode("utf-8", "replace") if current is not None else None)
         recorded = None
         if data != current:
-            dg.write_atomic(path, data)
             recorded = record_save(path, current, data, autosave, client, label[:200])
     return {**file_state(path), "changed": recorded is not None, "history": recorded}
 
 
 def record_save(path: Path, before: bytes | None, data: bytes, autosave: bool,
                 client: str, label: str) -> str:
-    """Add or extend (coalesce) the history entry of an editor save; returns which."""
+    """Publish an editor save with undo; return its grouping."""
     history = dg.load_history()
     now = time.time()
     file = dg.rel(path)
@@ -222,7 +221,7 @@ def record_save(path: Path, before: bytes | None, data: bytes, autosave: bool,
             "after_sha": dg.sha256_bytes(data), "source": "editor", "autosave": autosave,
             "client": client, "started": now, "epoch": now, "saves": 1})
         outcome = "new"
-    dg.save_history(history)
+    dg.HISTORY.publish(path, data, history[-1], replace_last=outcome == "merged")
     return outcome
 
 
