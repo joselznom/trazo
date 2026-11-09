@@ -72,14 +72,6 @@ class BuildError(Exception):
     """A stage or step failed, or the steps cannot be ordered."""
 
 
-class InputsChanged(BuildError):
-    """Inputs (`names`) changed while a stage read them: it records nothing."""
-
-    def __init__(self, what: str, names: list[str]) -> None:
-        super().__init__(f"{what}: {', '.join(names)} changed while it ran; build again once the edits are saved")
-        self.names = names
-
-
 def env_overrides() -> dict[str, str]:
     """The --env overrides a parent build passed in $TRAZO_BUILD_ENV (JSON)."""
     try:
@@ -177,11 +169,12 @@ class Builder:
         return hashlib.sha256(json.dumps(data, sort_keys=True).encode()).hexdigest()
 
     def held_still(self, before: Snapshot, what: str, paths=(), written=()) -> Snapshot:
-        """InputsChanged when a file of `before` changed, except `written` (the
-        run's outputs); otherwise a new snapshot of `paths`."""
+        """BuildError when a file of `before` changed, except `written` (the
+        run's outputs), so its stage records nothing; else a new snapshot of `paths`."""
         after, moved = changes(before, paths, written)
         if moved:
-            raise InputsChanged(what, [self.rel(path) for path in moved])
+            raise BuildError(f"{what}: {', '.join(self.rel(p) for p in moved)} changed while it ran; "
+                             "build again once the edits are saved")
         return {path: after[path] for path in paths}
 
     def fresh(self, key: str, digest: str, outputs=()) -> bool:
@@ -447,8 +440,8 @@ class Builder:
             self.forget("diagrams")
             if diagram.cmd_export(stale, False):
                 raise BuildError("diagram export failed")
-            exports, now = self.project.path("diagram_output"), inputs()  # the exports are inputs too
-            after = self.held_still(started, "diagrams: export", now, (p for p in started if p.is_relative_to(exports)))
+            now = inputs()  # with the new exports, which are inputs too
+            after = self.held_still(started, "diagrams: export", now, (p for n in stale for p in diagram.export_paths(n)))
             digest = self.digest(["diagram", "export"], after, env=False)
         self.record("diagrams", digest)
 
@@ -537,17 +530,19 @@ class Builder:
         when its inputs held still; else built again, and after ATTEMPTS it
         fails, keeping the earlier file."""
         for attempt in range(1, ATTEMPTS + 1):
+            started = snapshot(watched(self.project, name))  # what it reads before Pandoc
             try:
-                return self.pandoc_docx_once(name, indexes)
-            except InputsChanged as exc:
-                changed = f"docx: {name}: {', '.join(exc.names)} changed during the build"
-                if attempt == ATTEMPTS:
-                    raise BuildError(f"{changed} {ATTEMPTS} times; the earlier Word file is kept. "
-                                     "Build again once the edits are saved") from None
-                self.log(f"[build] {changed}; building again")
+                return self.pandoc_docx_once(name, indexes, started)
+            except Exception:  # also when an edit made it fail (an image renamed with its link)
+                if not (moved := changes(started)[1]):
+                    raise
+            changed = f"docx: {name}: {', '.join(self.rel(p) for p in moved)} changed during the build"
+            if attempt == ATTEMPTS:
+                raise BuildError(f"{changed} {ATTEMPTS} times; the earlier Word file is kept. "
+                                 "Build again once the edits are saved") from None
+            self.log(f"[build] {changed}; building again")
 
-    def pandoc_docx_once(self, name: str, indexes) -> None:
-        started = snapshot(watched(self.project, name))  # what it reads before Pandoc
+    def pandoc_docx_once(self, name: str, indexes, started: Snapshot) -> None:
         output = self.project.document_docx(name)
         source = self.expand(name)
         numbering = self.project.path("build") / f"{name}-numbering.json"
@@ -567,6 +562,7 @@ class Builder:
                   *([self.root / "uv.lock"] if after else [])]
         commands = [self.pandoc(source, numbering, output), *(s["run"] for s in after)]
         seen = snapshot(inputs)
+        started.update((path, value) for path, value in seen.items() if path not in started)
         # [build.env] only matters to the after-docx steps that receive it.
         digest = self.digest(commands, seen, [sorted(indexes), self.versions()], env=bool(after))
         if self.fresh(f"docx:{name}", digest, [output]):
@@ -584,8 +580,7 @@ class Builder:
                     self.run_python(run, f"step {step['name']}")
             from .docx_indexes import apply
             finished = apply(target.read_bytes(), list(indexes))
-            # Against each file's first snapshot, taken before reading it.
-            self.held_still({**seen, **started}, f"docx: {name}")
+            self.held_still(started, f"docx: {name}")  # each file's first snapshot
             write_atomic(output, finished)
         self.record(f"docx:{name}", digest, [output])
 

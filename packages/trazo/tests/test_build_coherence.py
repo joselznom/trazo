@@ -29,9 +29,9 @@ if text == "1":
 
 # Pandoc, except that a writer replaces a file with edit.bin as the Word
 # file's first stage starts: after trazo hashed it, before Pandoc reads it
-# (other Pandoc runs, such as reading the metadata, pass through). "once"
-# edits during the first Word file only, "always" on every attempt (each
-# time with different bytes).
+# (other Pandoc runs, such as reading the metadata, pass through), and
+# renames the file `move` names, if any. "once" edits during the first Word
+# file only, "always" on every attempt (each time with different bytes).
 SHIM = """import os, subprocess, sys
 from pathlib import Path
 real, mode, target, *args = sys.argv[1:]
@@ -41,6 +41,8 @@ if word and (mode == "always" or not Path("edited").exists()):
     data = Path("edit.bin").read_bytes()
     Path(target + ".tmp").write_bytes(data if count == 1 else data + b"\\n%% edit %d\\n" % count)
     os.replace(target + ".tmp", target)
+    if Path("move").exists():
+        os.replace(*Path("move").read_text().split())
     Path("edited").write_text(str(count))
 sys.exit(subprocess.call([real, *args]))
 """
@@ -124,6 +126,18 @@ class WordInputs(unittest.TestCase):
                 self.assertFalse(shows(*self.word(root)))
                 self.assertIn("changed during the build; building again", first)
 
+    def test_an_edit_that_makes_the_build_fail_is_built_again(self):
+        target = "manuscript/main/01_introduction.md"
+        with tempfile.TemporaryDirectory() as folder:
+            root = self.project(folder, "once", target, b"")
+            # The figure is renamed and its link with it: Pandoc misses the old name.
+            renamed = (root / target).read_text().replace(FIGURE, "figures/renamed.png")
+            (root / "edit.bin").write_text(renamed)
+            (root / "move").write_text(f"{FIGURE} figures/renamed.png")
+            log = self.build(root)
+            self.assertIn(png(10), self.word(root)[1])
+            self.assertIn("changed during the build; building again", log)
+
     def test_inputs_that_keep_changing_fail_and_keep_the_earlier_word_file(self):
         target, edited, _ = self.edits()[0]
         with tempfile.TemporaryDirectory() as folder:
@@ -141,30 +155,36 @@ class WordInputs(unittest.TestCase):
 
 @unittest.skipUnless(diagram.CHROME and Path(diagram.CHROME).exists(), "needs Chrome")
 class DiagramInputs(unittest.TestCase):
-    def test_a_diagram_edited_while_the_export_runs_is_exported_again(self):
-        with tempfile.TemporaryDirectory() as folder:
-            root = Path(folder)
-            shutil.copytree(_support.FIXTURE, root, dirs_exist_ok=True)
-            diagrams = root / "figures/diagrams"
-            for name in ("a1", "a2"):  # exported in this order
-                shutil.copy(diagrams / "example.json", diagrams / f"{name}.json")
-            (diagrams / "example.json").unlink()
-            first = diagrams / "a1.json"
-            output = []
-            with subprocess.Popen([sys.executable, "-m", "trazo", "run", "diagrams"], cwd=root,
-                                  env={**env(root), "PYTHONUNBUFFERED": "1"},
-                                  stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True) as proc:
-                for line in proc.stdout:
-                    output.append(line)
-                    if line.startswith("exported figures/external/a1.svg"):
-                        # A save from the editor once a1 is exported, while a2 renders.
-                        first.write_text(first.read_text().replace('"Input"', '"Inputs"'))
-                proc.wait(timeout=180)
-            self.assertIn("exported figures/external/a2.svg", "".join(output))
-            again = run(root, "run", "diagrams")
-            self.assertEqual(again.returncode, 0, again.stdout + again.stderr)
-            check = run(root, "diagram", "check", "a1", "--exports")
-            self.assertEqual(check.returncode, 0, "".join(output) + again.stdout + check.stdout + check.stderr)
+    def test_an_input_edited_while_the_export_runs_is_exported_again(self):
+        photo = "figures/external/photo.png"  # an image a1 shows, beside the exports
+        edits = {"figures/diagrams/a1.json": lambda path: path.write_text(
+                     path.read_text().replace('"Input"', '"Inputs"')),
+                 photo: lambda path: path.write_bytes(png(200))}
+        for target, edit in edits.items():
+            with self.subTest(target), tempfile.TemporaryDirectory() as folder:
+                root = Path(folder)
+                shutil.copytree(_support.FIXTURE, root, dirs_exist_ok=True)
+                (root / photo).parent.mkdir(parents=True)
+                (root / photo).write_bytes(png(10))
+                diagrams = root / "figures/diagrams"
+                shutil.move(diagrams / "example.json", diagrams / "a2.json")  # exported after a1
+                source = json.loads((diagrams / "a2.json").read_text())
+                source["nodes"].append({"id": "p", "kind": "image", "x": 38, "y": 2, "w": 12, "h": 5, "src": photo})
+                (diagrams / "a1.json").write_text(json.dumps(source))
+                output = []
+                with subprocess.Popen([sys.executable, "-m", "trazo", "run", "diagrams"], cwd=root,
+                                      env={**env(root), "PYTHONUNBUFFERED": "1"},
+                                      stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True) as proc:
+                    for line in proc.stdout:
+                        output.append(line)
+                        if line.startswith("exported figures/external/a1.svg"):
+                            edit(root / target)  # a save once a1 is exported, while a2 renders
+                    proc.wait(timeout=180)
+                self.assertIn("exported figures/external/a2.svg", "".join(output))
+                again = run(root, "run", "diagrams")
+                self.assertEqual(again.returncode, 0, again.stdout + again.stderr)
+                check = run(root, "diagram", "check", "a1", "--exports")
+                self.assertEqual(check.returncode, 0, "".join(output) + again.stdout + check.stdout + check.stderr)
 
 
 if __name__ == "__main__":
