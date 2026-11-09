@@ -116,6 +116,24 @@ def violations(root: Path, operation: str, before: dict[str, bytes], after: dict
     return problems
 
 
+def housekeeping(root: Path, operation: str, response: dict, before: dict[str, bytes], after: dict[str, bytes]) -> str:
+    """The one accepted success after an injected failure: a source save that
+    published, then could not set the replaced file aside, and says so. Accepted
+    only when the file holds the complete new text and the old text is in undo
+    history; otherwise "" and the failure counts."""
+    user_file = USER_FILES[operation] if operation == "source" else ""
+    if not user_file or not (response.get("body") or {}).get("warning"):
+        return ""
+    if files(root).get(user_file) != after.get(user_file):
+        return ""
+    old_text = before[user_file].decode("utf-8")
+    store = root / "notes/review/file_history.json"
+    history = json.loads(store.read_text()) if store.is_file() else []
+    if not any(e.get("before_text") == old_text for e in history):
+        return ""
+    return "post-publication housekeeping failed; save reported with a recovery warning, old text in undo history"
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("paper", type=Path)
@@ -158,8 +176,11 @@ def main() -> int:
                     problems.append("injection did not reach its target")
                 if result["supervisor_timeout"]:
                     problems.append("operation exceeded supervisor deadline")
+                exception = ""
                 if fault != "kill" and response.get("status") in (0, 200) and operation != "preview":
-                    problems.append("injected write failure was reported as success")
+                    exception = housekeeping(root, operation, response, before, after)
+                    if not exception:
+                        problems.append("injected write failure was reported as success")
                 if operation == "preview" and fault != "kill" and response.get("state", {}).get("ok"):
                     problems.append("injected render failure left the preview status successful")
                 recovery = launch(root, operation, out / (name + "-recovery.json"))
@@ -168,7 +189,7 @@ def main() -> int:
                     problems.append("next operation failed after the injected fault was removed")
                 cases.append({"name": name, "operation": operation, "fault": fault, **site,
                               "triggered": triggered, "outcome": result, "recovered": recovered,
-                              "violations": problems})
+                              "accepted_exception": exception, "violations": problems})
                 dump(out / "report.json", {"cases": cases, "failures": sum(bool(c["violations"]) for c in cases)})
                 print(f"{name}: {'FAIL ' + '; '.join(problems) if problems else 'PASS'}", flush=True)
                 # Keep failing snapshots; successful disposable copies have no evidence beyond the logs.
@@ -179,6 +200,7 @@ def main() -> int:
              "Only dynamically reached Python write/publication boundaries are covered. External executables and unvisited sites are not covered.", "",
              "| Case | Site | Triggered | Recovered | Violations |", "| --- | --- | --- | --- | --- |"]
     lines += [f"| {c['name']} | {c['site'].replace('|', '/')} | {c['triggered']} | {c['recovered']} | {'; '.join(c['violations']) or 'none'} |" for c in cases]
+    lines += ["", "Accepted exceptions:", ""] + [f"- {c['name']}: {c['accepted_exception']}" for c in cases if c["accepted_exception"]]
     (out / "report.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
     print(f"Report: {out / 'report.md'}", flush=True)
     return int(any(c["violations"] for c in cases))

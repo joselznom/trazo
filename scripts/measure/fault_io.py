@@ -143,3 +143,15 @@ class Injector:
                 injector.fail()
             return result
         os.replace = replaced
+        from trazo import source_publish
+        original_exchange = source_publish.exchange
+
+        def exchanged(source: Any, destination: Any) -> None:
+            # A source save publishes by swapping names where it can: the same stages as a rename.
+            path = injector.path(destination)
+            if path and injector.point("before_replace", path):
+                injector.fail()
+            original_exchange(source, destination)
+            if path and injector.point("after_replace", path):
+                injector.fail()
+        source_publish.exchange = exchanged

@@ -10,7 +10,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from equivalence import normalized  # noqa: E402
-from faults import clone, launch  # noqa: E402
+from faults import clone, housekeeping, launch  # noqa: E402
 from fixture import create  # noqa: E402
 
 
@@ -38,6 +38,26 @@ class CrashBoundaryTests(unittest.TestCase):
                     self.assertEqual(killed["returncode"], -signal.SIGKILL)
                     self.assertTrue(killed["injection_hit"])
                     self.assertEqual((paper / file).read_bytes(), new if stage == "after_replace" else old)
+
+
+class AcceptedExceptionTests(unittest.TestCase):
+    def test_a_warned_success_needs_the_new_text_published_and_the_old_text_in_history(self) -> None:
+        file = "manuscript/main/01_introduction.md"
+        warned = {"status": 200, "body": {"warning": "could not set the replaced version aside"}}
+        cases = (("accepted", "source", warned, b"new", "old", True),
+                 ("no warning", "source", {"status": 200, "body": {}}, b"new", "old", False),
+                 ("old text not in history", "source", warned, b"new", "other", False),
+                 ("new text not published", "source", warned, b"old", "old", False),
+                 ("another operation", "table", warned, b"new", "old", False))
+        for case, operation, response, on_disk, recorded, accepted in cases:
+            with self.subTest(case), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                (root / file).parent.mkdir(parents=True)
+                (root / file).write_bytes(on_disk)
+                (root / "notes/review").mkdir(parents=True)
+                (root / "notes/review/file_history.json").write_text(json.dumps([{"before_text": recorded}]))
+                found = housekeeping(root, operation, response, {file: b"old"}, {file: b"new"})
+                self.assertEqual(bool(found), accepted, found)
 
 
 class NormalizationTests(unittest.TestCase):
