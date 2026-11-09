@@ -3,6 +3,7 @@
 import contextlib
 import http.client
 import io
+import itertools
 import json
 import os
 import shutil
@@ -146,6 +147,28 @@ class WatcherBackoffTests(unittest.TestCase):
                     contextlib.redirect_stdout(io.StringIO()):  # the clock stands still: no backoff ends
                 preview.watch(stop_event=Mock(**{"wait.side_effect": tick}))
             self.assertEqual(len(runs), 1, "the outputs of the failed run were taken as a new change")
+
+    def test_a_retry_rebuilds_only_the_page_whose_build_raised(self) -> None:
+        built, polls = [], 0
+
+        def build(name):
+            built.append(name)
+            if name == "manuscript":  # say, a section the server cannot read
+                raise PermissionError(13, "Permission denied")
+            return True
+
+        def tick(_):
+            nonlocal polls
+            polls += 1
+            return polls > 4
+
+        with patch.object(preview, "build", side_effect=build), \
+                patch.dict(preview.STATE, {name: {} for name in preview.DOCS}), \
+                patch.dict(preview.WATCHER, {"synced": 0.0, "rebuild": {"manuscript"}, "outputs": []}), \
+                patch.object(preview_watch.time, "monotonic", side_effect=itertools.count(1000, 100)), \
+                contextlib.redirect_stdout(io.StringIO()):  # the clock jumps: every retry is due
+            preview.watch(stop_event=Mock(**{"wait.side_effect": tick}))
+        self.assertEqual(built, ["manuscript"] * 4, "a retry rebuilt (and reloaded) a page that had built")
 
 
 if __name__ == "__main__":

@@ -97,15 +97,19 @@ def numbered():
 
 
 class PageFailed(Exception):
-    """A page's build raised (an unreadable section, say): that page already
-    shows its error, and the watcher retries it as any other failure."""
+    """Pages whose build raised (an unreadable section, say): each already
+    shows its error, and the watcher retries them as any other failure."""
+
+    def __init__(self, failed: dict[str, str]) -> None:
+        super().__init__("; ".join(failed.values()))
+        self.pages = list(failed)
 
 
 def build_all(names):
     """Build each page; one whose build raises keeps its last good version
-    and shows the error. The log lines of those that raised."""
+    and shows the error. {page: log line} of those that raised."""
     from . import preview
-    failed = []
+    failed: dict[str, str] = {}
     for name in names:
         try:
             preview.build(name)
@@ -113,7 +117,7 @@ def build_all(names):
             with preview.LOCK:  # the page keeps its last good version
                 preview.STATE[name].update(ok=False, error=f"{type(exc).__name__}: {exc}",
                                            built=time.strftime("%H:%M:%S"))
-            failed.append(f"{name}: error {exc!r}")
+            failed[name] = f"{name}: error {exc!r}"
     return failed
 
 
@@ -122,13 +126,15 @@ def report_failure(exc: Exception, last: str = "") -> str:
     last good version (a PageFailed is already on its pages); print it
     unless it is `last`. The message."""
     from . import preview
-    message = str(exc) if isinstance(exc, PageFailed) else f"preview watcher: {type(exc).__name__}: {exc}"
-    if not isinstance(exc, PageFailed):
+    if isinstance(exc, PageFailed):
+        message = line = str(exc)
+    else:
+        message, line = f"preview watcher: {type(exc).__name__}: {exc}", f"watcher error: {exc!r}"
         with preview.LOCK:
             for state in preview.STATE.values():
                 state.update(ok=False, error=message, built=time.strftime("%H:%M:%S"))
     if message != last:  # a lasting failure is printed once, not on every retry
-        print(f"[preview] {exc}" if isinstance(exc, PageFailed) else f"[preview] watcher error: {exc!r}", flush=True)
+        print(f"[preview] {line}", flush=True)
     return message
 
 
@@ -138,17 +144,18 @@ def build_and_watch(stop_event):
     is what notices the fix."""
     from . import preview
     before = preview.snapshot()  # a change during the first builds still rebuilds
-    numbers, failure, failed = None, "", []
+    numbers, failure = None, ""
+    failed: dict[str, str] = {}
     try:
         with labels.once():  # one label index for every first page and their numbers
             for name in preview.DOCS:
                 if stop_event.is_set():
                     return
-                failed += build_all([name])
+                failed |= build_all([name])
             numbers = numbered()
         preview_edit_review.check_outputs()
         if failed:
-            raise PageFailed("; ".join(failed))
+            raise PageFailed(failed)
     except Exception as exc:  # watch() retries it
         failure = report_failure(exc)
     preview.watch(stop_event=stop_event, previous=before, numbers=numbers, failure=failure)
@@ -165,8 +172,9 @@ def watch(interval=0.5, stop_event=None, previous=None, numbers=None, failure=""
     (a page whose build raises shows its own);
     it is retried at once when the sources change again (not the table
     outputs or data a generator writes), otherwise after 1, 2, 4 ... 30 s,
-    and once it completes every page is rebuilt, so no
-    change made before or during the failure is skipped."""
+    and once it completes every page it could not show is rebuilt (only
+    those that raised, after a PageFailed), so no change made before or
+    during the failure is skipped."""
     from . import preview
     previous = snapshot() if previous is None else previous
     # The numbers the pages used; unknown when sources changed during the
@@ -178,6 +186,7 @@ def watch(interval=0.5, stop_event=None, previous=None, numbers=None, failure=""
     if snapshot() != previous:
         shown = None
     failures, retry_at, failed_on = 0, 0.0, None
+    again = list(preview.DOCS) if failure else []  # pages a retry rebuilds
     outputs = [preview.ROOT / preview.PROJECT.relative(key) for key in ("table_output", "table_data")]
 
     def generated(path):
@@ -216,7 +225,7 @@ def watch(interval=0.5, stop_event=None, previous=None, numbers=None, failure=""
             if render_pending and not tables_pending:
                 if not preview.render_spec_tables():
                     # The table error replaces the watcher's, and its recovery rebuilds every page.
-                    failure, failures = "", 0
+                    failure, failures, again = "", 0, []
                     continue  # unrelated prose edits must not hide the table error
                 render_pending, rendered = False, True
                 output_dir = table.OUTPUT_DIR
@@ -225,7 +234,7 @@ def watch(interval=0.5, stop_event=None, previous=None, numbers=None, failure=""
                                  if p.is_relative_to(output_dir)})
             if tables_pending:
                 if not preview.regenerate_tables():
-                    failure, failures = "", 0  # as for a failed render above
+                    failure, failures, again = "", 0, []  # as for a failed render above
                     continue  # keep the error visible until the text is fixed
                 tables_pending = render_pending = False
                 # Absorb generated outputs only. Source edits made while the
@@ -235,9 +244,8 @@ def watch(interval=0.5, stop_event=None, previous=None, numbers=None, failure=""
                 targets = list(preview.DOCS)
             else:
                 targets = list(preview.DOCS) if rendered else changed_documents(changed) if changed else []
-            if failure:  # every page shows the failure until it builds again
-                targets = list(preview.DOCS)
-            targets += [name for name in preview.DOCS if name in requested and name not in targets]
+            # Pages asked for, and those showing a failure until they build again.
+            targets += [name for name in preview.DOCS if (name in requested or name in again) and name not in targets]
             # One label index for the pages built now: an edit meanwhile
             # changes the snapshot, and the next pass rebuilds with a new one.
             with labels.once():
@@ -246,23 +254,25 @@ def watch(interval=0.5, stop_event=None, previous=None, numbers=None, failure=""
                 # change, the other pages are rebuilt too. `shown` is what the
                 # pages last used.
                 if (now := numbered()) != shown:
-                    failed += build_all([name for name in preview.DOCS if name not in targets])
+                    failed |= build_all([name for name in preview.DOCS if name not in targets])
             shown = now
-            # A render above replaced the outputs it could (a note on one edited by hand no longer
-            # holds); otherwise only an output changed by itself may differ.
-            if failure or rendered or any(p.is_relative_to(table.OUTPUT_DIR) for p in changed):
-                preview_edit_review.check_outputs()
+            if rendered:  # every output is now what its spec makes: no note on one edited by hand holds
+                with preview.LOCK:
+                    preview.WATCHER["outputs"] = []
+            elif failure or any(p.is_relative_to(table.OUTPUT_DIR) for p in changed):
+                preview_edit_review.check_outputs()  # only an output changed by itself may differ
             if failed:  # retried like any failure: a fix without an edit (a permission) still shows
-                raise PageFailed("; ".join(failed))
+                raise PageFailed(failed)
             if failure:
                 print("[preview] watcher recovered", flush=True)
-            failure, failures = "", 0
+            failure, failures, again = "", 0, []
         except Exception as exc:  # keep watching; every page says why it is old
             # Nothing of this pass is lost: table work that failed stays pending, and
-            # the retry rebuilds every page and checks the outputs again.
+            # the retry rebuilds the pages that failed (every page after a watcher failure).
             with preview.LOCK:
                 cast(set[str], preview.WATCHER["rebuild"]).update(requested)
             failure = report_failure(exc, failure)
             preview.WATCHER["synced"] = checked  # the status describes these sources: its error says the page is old
             failed_on, failures = None if current is None else sources(current), failures + 1
+            again = exc.pages if isinstance(exc, PageFailed) else list(preview.DOCS)
             retry_at = time.monotonic() + min(30.0, 2.0 ** min(failures - 1, 5))  # a bounded exponent
