@@ -80,6 +80,12 @@ Internal changes (tests, CI, refactoring) stay out.
 - A failed table or diagram save keeps the last saved text and its undo history,
   including when a diagram autosave is interrupted.
 - The table editor no longer shows "null" under a table without a note (#15).
+- A save from the preview no longer overwrites a change that an agent, an
+  editor or a sync app makes to the same file while it is saved, on a Mac's
+  APFS disk or Linux's ext4, XFS, Btrfs or tmpfs: that version stays in the
+  file, your text is copied to `notes/review/conflicts/`, and the Source tab
+  shows the conflict and where the copy is. On other disks the Source tab says
+  once that a write at the instant of saving can still be lost.
 
 ### Removed
 
