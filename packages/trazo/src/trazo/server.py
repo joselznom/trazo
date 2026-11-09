@@ -83,6 +83,42 @@ def page_stamp(page: str) -> str:
     return digest.hexdigest()[:32]
 
 
+# A page load opens about 45 connections to this server, and on Windows one of
+# them now and then fails inside the browser without reaching it: that script
+# never runs and the page stays half-started. A trazo script that fails while
+# the page is still parsing shows the viewer's reload note and reloads the page,
+# once per tab (sessionStorage; no storage, no reload), so it cannot loop; a page
+# that then loads clears the count. Nothing the user typed can be lost: until
+# parsing ends the page shows nothing (rel=expect below) and the viewer and
+# editors are not built yet. Later failures change nothing. It must come before
+# every script of the page.
+SCRIPT_GUARD = """<script>(() => {
+  const key = "trazo-script-reload";
+  let failed = false;
+  addEventListener("error", (event) => {
+    const script = event.target;
+    if (failed || document.readyState !== "loading" || !(script instanceof HTMLScriptElement)
+        || !script.src.startsWith(location.origin + "/__assets/")) return;
+    failed = true;
+    let reload = false;
+    try { if (!sessionStorage.getItem(key)) { sessionStorage.setItem(key, "1"); reload = true; } } catch (e) { /* no storage */ }
+    const note = () => {  // the same note as preview-page.js shows
+      if (document.getElementById("pk-script-note")) return;
+      const p = document.createElement("p");
+      p.id = "pk-script-note";
+      p.style.cssText = "margin:2em;font:16px system-ui,sans-serif";
+      p.textContent = "Viewer scripts did not load; reload the page.";
+      document.body.prepend(p);
+    };
+    if (document.body) note(); else addEventListener("DOMContentLoaded", note);
+    if (reload) { stop(); location.reload(); }  // never in an MCP view: its page inlines every script
+  }, true);
+  addEventListener("load", () => {
+    if (!failed) try { sessionStorage.removeItem(key); } catch (e) { /* no storage */ }
+  });
+})();</script>"""
+
+
 def decorate_page(page, counts=None, stamp=False):
     """A page with the workspace's shared head; `counts` (a document page's,
     from counts.page_counts) becomes window.PREVIEW_COUNTS. `stamp` adds
@@ -102,7 +138,7 @@ def decorate_page(page, counts=None, stamp=False):
     # The first paint, and the snapshot a page change fades into, waits until
     # the page scripts at the end of body have built the shell, and fetches
     # the fonts early so text does not reflow when they arrive.
-    shared = (f'<script>window.TRAZO_CONFIG = {config};'
+    shared = (SCRIPT_GUARD + f'<script>window.TRAZO_CONFIG = {config};'
               'window.PREVIEW_TITLES = window.TRAZO_CONFIG.titles;'
               'window.PREVIEW_NUMBER_PREFIXES = window.TRAZO_CONFIG.number_prefixes;'
               + (f'window.PREVIEW_COUNTS = {json.dumps(counts).replace("</", "<" + chr(92) + "/")};'

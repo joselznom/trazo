@@ -80,6 +80,9 @@ Internal changes (tests, CI, refactoring) stay out.
 - A failed table or diagram save keeps the last saved text and its undo history,
   including when a diagram autosave is interrupted.
 - The table editor no longer shows "null" under a table without a note (#15).
+- A preview, table editor or diagram editor page whose script failed to load
+  (seen now and then on Windows) reloads itself once instead of staying half
+  started; if the script fails again, the page says to reload it.
 
 ### Removed
 

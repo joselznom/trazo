@@ -58,6 +58,20 @@ Windows avoids closing pipes owned by still-running reader threads. A detached
 process can keep such a daemon thread alive. The changed Windows path and Linux
 process-group behavior were not run locally; all measured evidence is macOS.
 
+## Viewer page loads
+
+A served page (document, table editor, diagram editor) loads about 45 files
+over separate HTTP/1.0 connections. On Windows CI about one test in 600 lost
+one script: the request failed inside Chrome (status 0) without reaching the
+server, and the page stayed half-started. That network layer is not
+identified. A trazo script that fails while the page is still parsing now
+shows "Viewer scripts did not load; reload the page." and reloads the page
+once per tab; if it fails again the note stays and nothing reloads. A failure
+after the page has started never reloads it, so typed text is not lost.
+Checked on macOS by resetting one script's connection in Chrome; the Windows
+rate after the fix is not measured. A failed wait in the browser tests now
+prints the failed resources with their status and the server's request log.
+
 ## Storage and recovery limits
 
 Table and diagram history is now persisted before source publication. Pending
