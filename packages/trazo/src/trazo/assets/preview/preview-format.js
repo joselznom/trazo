@@ -55,6 +55,8 @@
     const from = [...textOf(head.cloneContents())].length, to = [...textOf(upTo.cloneContents())].length;
     saveBlock(ed);
     const step = newStep("format", ed, [ed.el], { style });
+    // A style leaves the text as it is: what is typed while it saves goes back first.
+    addStep(step, { results: [[ed.el, textOf(ed.el)]], left: step.before.children, afterBlocks: [ed.el], afterTarget: ed.el });
     sendBlock(ed, () => ({ before: ed.before, style, from, to }), {
       path: "/__block-format",
       when: () => !failed.has(ed.el),  // the offsets are into text that did not save
@@ -67,7 +69,6 @@
         if (writing === ed) { selection.removeAllRanges(); selection.addRange(range); pressFormatButtons(); }
       },
       step,
-      results: () => [[ed.el, textOf(ed.el)]],
     });
   }
 

@@ -101,14 +101,16 @@
     const second = startWriting(el);
     el.focus({ preventScroll: true });
     selection.collapse(el, 1);
+    const afterwards = { left: [...step.before.parent.childNodes], afterBlocks: [first.el, el], afterTarget: el };
     if (!right) {
       saveBlock(first);
       second.draftOf = first;
       second.above = above;
       // The file has no empty paragraphs: taking this one back is the page's alone.
-      addStep(step, { kind: "draft", draft: second, results: [[el, ""]], saved: () => first.queued ?? first.before });
+      addStep(step, { ...afterwards, kind: "draft", draft: second, above, results: [[el, ""]], saved: () => first.queued ?? first.before });
       return spaceAfter;
     }
+    addStep(step, { ...afterwards, results: [[first.el, left], [el, right]] });
     first.brokenInto = second;
     second.gap = gap;
     sendBlock(first, () => ({ before: first.before, after: left + BREAK + right, ...mentions }), {
@@ -121,7 +123,6 @@
         showFailure(...failure);
       },
       step,
-      results: () => [[first.el, left], [second.el, right]],
     });
     return spaceAfter;
   }
@@ -152,11 +153,14 @@
     }
     if (ed.draftOf) saveBlock(ed);
     const step = newStep("join", ed, [previous, ed.el]);
+    addStep(step, { afterBlocks: [previous], afterTarget: previous });  // undoable once joined
     holdKeys(ed, true);
     sendBlock(ed, () => ({ before: ed.before, after: textOf(ed.el), previous: textOf(previous), into: mark.dataset.h, ...mentionsIn(ed.el) }), {
-      done: (payload) => joinTo(ed, previous, payload),
+      done: (payload) => {
+        joinTo(ed, previous, payload);
+        Object.assign(step, { results: [[previous, textOf(previous)]], left: [...step.before.parent.childNodes] });
+      },
       step,
-      results: () => [[previous, textOf(previous)]],
       refused: (_, status, payload) => {
         holdKeys(ed, false);
         toast(`Not joined: ${refusal(payload)}.`);

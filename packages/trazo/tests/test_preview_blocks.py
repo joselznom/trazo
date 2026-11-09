@@ -245,6 +245,14 @@ class SaveTests(SaveCase):
         preview.change_source({"op": "undo", "file": CHAPTER, "expect": first["save_id"]})
         self.assertEqual(self.chapter.read_text(encoding="utf-8"), text)
 
+    def test_a_save_id_survives_a_javascript_number(self):
+        key, rendered = self.block("The quick fox.\n", "quick")
+        with patch("trazo.preview_sources.time.time_ns", return_value=1794243621653007123):
+            answer = self.save(key, rendered, "The slow fox.")
+        self.assertEqual(answer["save_id"], "1794243621653007123")  # as a number it would arrive as ...7000
+        preview.change_source({"op": "undo", "file": CHAPTER, "expect": answer["save_id"]})
+        self.assertEqual(self.chapter.read_text(encoding="utf-8"), "The quick fox.\n")
+
     def test_a_save_keeps_a_windows_files_line_endings(self):
         text = "First line\r\nof the block.\r\n\r\nNext.\r\n"
         key, rendered = self.block(text, "First")

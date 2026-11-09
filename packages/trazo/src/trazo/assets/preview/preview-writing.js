@@ -135,31 +135,34 @@
 
   // One at a time and in order: a save may need the key the one before it got.
   // `group` are the paragraphs the block becomes, the first being the one sent.
-  // A save that was done becomes `step` of the history (preview-history.js), with what `results()` gives.
+  // `step`: the action's step of the history (preview-history.js), undoable once this save is done.
   let saveQueue = Promise.resolve();
-  function sendBlock(ed, body, { path = "/__block", group = [ed], block = group[0], refused = showFailure, done = null, when = null, step = null, results = null } = {}) {
+  function sendBlock(ed, body, { path = "/__block", group = [ed], block = group[0], refused = showFailure, done = null, when = null, step = null } = {}) {
     saves++;
     showSaveState("Saving…");
     saveQueue = saveQueue.then(async () => {
       // A paragraph a refused break folded back has nothing left to save.
-      if (!ed.el.isConnected || (when && !when())) { saves--; return; }
+      if (!ed.el.isConnected || (when && !when())) { saves--; if (step) dropStep(step); return; }
       if (!block.el.isConnected) {  // a new paragraph after one that was folded back: its text stays, flagged
         saves--;
+        if (step) dropStep(step);
         refused(ed, 0, { error: "the paragraph before it was not saved" });
         return;
       }
       const { file, h: key } = block.mark.dataset;
       const sent = typeof body === "function" ? body() : body;
+      if (step) stepSent(step, { path, body: { file, h: key, ...sent } });
       const result = await postQueued(path, { file, h: key, ...sent });
       saves--;
       if (!result.ok || !result.payload.saved) {
         showSaveState("", false);
+        if (step) dropStep(step);
         refused(ed, result.status, result.payload);
         return;
       }
       if (done) { showSaveState("Saved", true); done(result.payload); }
       else blockSaved(ed, result.payload, group, sent);
-      if (step) addStep(step, { payload: result.payload, results: results(), saved: sent.before });
+      if (step) stepSaved(step, result.payload, sent);
     });
   }
 

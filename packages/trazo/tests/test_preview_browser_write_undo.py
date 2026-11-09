@@ -5,8 +5,11 @@ own undo has nothing of theirs to take back; the viewer's history does.
 """
 
 import json
+import threading
 import time
 import unittest
+from contextlib import contextmanager
+from unittest.mock import patch
 
 from _preview_writing import WritingCase
 
@@ -50,6 +53,24 @@ class WriteUndoTests(WritingCase):
 
     def settled(self):
         self.wait_for("!saves && document.querySelector('.pv-save-state').textContent !== 'Saving…'")
+
+    @contextmanager
+    def held(self, route):
+        """The answers of `route` (a function of trazo.preview) wait until the block ends."""
+        gate, real = threading.Event(), getattr(preview, route)
+        def later(request):
+            gate.wait(10)
+            return real(request)
+        with patch.object(preview, route, later):
+            try:
+                yield
+            finally:
+                gate.set()
+                self.settled()
+
+    def select_word(self, word):
+        self.mouse_double_click(*self.word_at(word))
+        self.wait_for("document.querySelector('.pv-writing') && !getSelection().isCollapsed")
 
     def paragraphs(self):
         return self.evaluate(PARAGRAPHS)
@@ -166,6 +187,82 @@ class WriteUndoTests(WritingCase):
             self.settled()
         self.wait_for(f"{PARAGRAPHS}.includes('One sentence. Two sentences here.')")
         self.assertEqual(self.source(), TEXT)
+
+    def test_steps_go_back_in_the_order_they_were_made_whatever_order_they_saved_in(self):
+        self.build(TEXT)
+        self.write_in("sentence")
+        self.caret_after("One sentence.")
+        with self.held("change_block"):
+            self.enter()  # its save answers after the next Enter
+            self.caret_after("Two sentences here.")
+            self.enter()
+            self.type("Unsaved words.")
+        self.undo()  # the typing, by the browser
+        self.wait_for(f"!{PARAGRAPHS}.includes('Unsaved words.')")
+        self.assertEqual(len(self.paragraphs()), 5)  # the introduction's, two halves, the new one, the next
+        self.undo()  # the new paragraph
+        self.wait_for(f"{PARAGRAPHS}.length === 4")
+        self.undo()  # the break
+        self.wait_for(f"{PARAGRAPHS}.includes('One sentence. Two sentences here.')")
+        self.settled()
+        self.assertEqual(self.source(), TEXT)
+
+    def test_cmd_z_does_not_take_text_typed_while_a_style_saved_with_the_style(self):
+        self.build(TEXT)
+        self.select_word("Two")
+        with self.held("change_format"):
+            self.chord("b", 66)
+            self.caret_after("here.")
+            self.type(" Late words.")
+        self.wait_for("document.querySelector('.pv-writing strong')")
+        self.undo()
+        self.settled()
+        # The style came after the words on the page, so the browser cannot take them back
+        # and the style is not the latest step there: nothing goes, and nothing is lost.
+        self.assertTrue(self.evaluate("!!document.querySelector('.pv-writing strong')"))
+        self.assertIn("One sentence. Two sentences here. Late words.", self.paragraphs())
+        self.assertEqual(self.source(), "One sentence. **Two** sentences here.\n\nNext paragraph.\n")
+
+    def test_text_saved_before_a_style_stays_saved_after_undoing_the_style(self):
+        self.build(TEXT)
+        self.write_in("sentence")
+        self.caret_after("here.")
+        self.type(" Extra.")
+        self.select_word("Two")
+        self.chord("b", 66)  # saves " Extra." first, then the style
+        self.wait_for("document.querySelector('.pv-writing strong') && !saves")
+        self.undo()
+        self.wait_for("!document.querySelector('.pv-writing strong')")
+        self.settled()
+        self.assertEqual(self.source(), "One sentence. Two sentences here. Extra.\n\nNext paragraph.\n")
+        self.caret_after("One")
+        self.type(" more")
+        self.leave()
+        self.wait_for("document.querySelector('.pv-save-state').textContent === 'Saved' && !saves")
+        self.assertEqual(self.source(), "One more sentence. Two sentences here. Extra.\n\nNext paragraph.\n")
+
+    def test_two_breaks_go_back_and_come_again(self):
+        self.build(TEXT)
+        self.write_in("sentence")
+        self.caret_after("One sentence.")
+        self.enter()
+        self.settled()
+        self.caret_after("Two")
+        self.enter()
+        self.settled()
+        twice = "One sentence.\n\nTwo\n\nsentences here.\n\nNext paragraph.\n"
+        self.assertEqual(self.source(), twice)
+        for _ in range(2):
+            self.undo()
+            self.settled()
+        self.wait_for(f"{PARAGRAPHS}.includes('One sentence. Two sentences here.')")
+        self.assertEqual(self.source(), TEXT)
+        for _ in range(2):
+            self.redo()
+            self.settled()
+        self.wait_for(f"{PARAGRAPHS}.includes('sentences here.')")
+        self.assertEqual(self.source(), twice)
+        self.assertEqual(self.paragraphs()[1:4], ["One sentence.", "Two", "sentences here."])
 
     def test_cmd_z_does_not_undo_over_a_change_on_disk(self):
         self.broken()

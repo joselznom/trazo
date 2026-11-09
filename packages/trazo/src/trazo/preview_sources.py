@@ -113,7 +113,7 @@ def change_source(request):
             if not mine:
                 raise CommentError("nothing to undo")
             entry = entries[mine[-1]]
-            if "expect" in request and entry.get("at") != request["expect"]:
+            if "expect" in request and str(entry.get("at")) != str(request["expect"]):
                 raise Conflict("the file has a newer save", sha256=current)
             if entry.get("after_sha") != current:
                 del entries[mine[-1]]
@@ -145,7 +145,7 @@ def change_source(request):
                 write_atomic(path, new)
                 preview_edit_review.absorb(file, old, text)
                 mark_written()
-                wrote = {"save_id": at}
+                wrote = {"save_id": str(at)}  # a JavaScript number would round a time in nanoseconds
         data, text = read_source(path)
         return {**source_state(file, path, data, text), **wrote}
 

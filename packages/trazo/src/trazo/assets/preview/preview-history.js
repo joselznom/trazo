@@ -1,25 +1,32 @@
 // Preview viewer: Cmd+Z and Cmd+Shift+Z while writing on the page's text.
 // Enter, Backspace at the start, bold and italic change the page by script and
 // save at once (preview-paragraphs.js, preview-format.js), so the browser's own
-// undo has nothing of theirs: each is a step here. Cmd+Z takes the latest step
-// back while the page reads what the step left; typing after it goes first, by
-// the browser. The file goes back with that save's own undo (POST /__source
-// {op: undo, expect}, refused if a newer save came), then the page.
-// Cmd+Shift+Z does the step again from where Cmd+Z left it. Leaving the text
-// ends the history: outside it, Cmd+Z undoes the latest save (undoLatest).
+// undo has nothing of theirs: each is a step here, in the order they were done.
+// Cmd+Z takes the latest step back while the page reads what it left; typing
+// after it goes first, by the browser. The file goes back with that save's own
+// undo (POST /__source {op: undo, expect}, refused if a newer save came), then
+// the page. Cmd+Shift+Z sends the same save again and puts back the page as
+// Cmd+Z found it. Leaving the text ends the history: outside it, Cmd+Z undoes
+// the latest save (undoLatest).
 // The parts of the viewer are classic scripts loaded in the order of
 // trazo.preview.VIEWER_SCRIPTS; their top-level names are shared globals.
   if (!window.PreviewModel) throw new Error("preview-model.js did not load");  // see preview-page.js
   // ---------------------------------------------------------------- history
   let undoSteps = [], redoSteps = [];
   let historyRun = 0;     // a step answered after the author left the text belongs to no history
-  let replaying = false;  // a step Cmd+Shift+Z makes again keeps the steps still to redo
+  let replaying = false;  // a step made again keeps the steps still to redo
   const MAX_STEPS = 100;  // each keeps the nodes of the blocks it changed
 
   const blockOf = (el) => { const item = itemOf(el); return item && item !== el ? item : el; };
   // A selection as positions, not a live Range: a step's own changes would move one.
-  const pointsOf = (range) => ({ start: [range.startContainer, range.startOffset], end: [range.endContainer, range.endOffset] });
+  const here = () => {
+    const selection = getSelection();
+    if (!selection.rangeCount) return null;
+    const range = selection.getRangeAt(0);
+    return { start: [range.startContainer, range.startOffset], end: [range.endContainer, range.endOffset] };
+  };
   function select(points) {
+    if (!points) return;
     const range = document.createRange();
     range.setStart(...points.start);
     range.setEnd(...points.end);
@@ -27,10 +34,10 @@
     getSelection().addRange(range);
   }
 
-  // What a step can change in `outers` (blocks with one parent): their places
-  // among its children, their nodes and text, and the data of block marks and chips.
-  function capture(outers) {
-    const parent = outers[0].parentElement;
+  // The blocks `els` (with one parent): their places among its children, their
+  // nodes and text, and the data of block marks and chips.
+  function capture(els) {
+    const outers = els.map(blockOf), parent = outers[0].parentElement;
     const within = (selector) => outers.flatMap((outer) => [...(outer.matches(selector) ? [outer] : []), ...$$(selector, outer)]);
     return {
       parent,
@@ -40,6 +47,9 @@
       blocks: within(`p, li, ${HEADINGS}`).filter((el) => blockMark.has(el)).map((el) => [el, blockMark.get(el)]),
     };
   }
+  const reread = (state) => { state.data = state.data.map(([node]) => [node, { ...node.dataset }]); };
+  const sameChildren = (parent, children) => parent.childNodes.length === children.length
+    && children.every((node, i) => parent.childNodes[i] === node);
 
   function putBackState(state) {
     const { parent, children } = state, kept = new Set(children);
@@ -60,20 +70,34 @@
     forgetPageText();
   }
 
-  // Called by an action before it changes the page; `outers` are the blocks it changes.
-  function newStep(kind, ed, outers, extra = {}) {
-    const selection = getSelection();
-    return { kind, ...extra, run: historyRun, keepRedo: replaying, target: ed.el, restore: ed.restore,
-      at: selection.rangeCount ? pointsOf(selection.getRangeAt(0)) : null, before: capture(outers.map(blockOf)) };
+  // Before an action changes the page: the blocks it changes and where the caret is.
+  function newStep(kind, ed, els, extra = {}) {
+    return { kind, ...extra, run: historyRun, keepRedo: replaying, target: ed.el, restore: ed.restore, at: here(), before: capture(els) };
   }
 
-  // Called once the action is on the page and, but for a new empty paragraph, in the file.
-  // `results`: [paragraph, text] it left; `saved`: the file's text for the target once undone.
-  function addStep(step, { payload, ...rest }) {
-    if (step.run !== historyRun || (payload && payload.save_id == null)) return;  // a save that wrote nothing
-    undoSteps.push({ ...step, ...rest, file: payload?.file, saveId: payload?.save_id });
+  // Once the action is on the page (a join's, once joined: its keys wait meanwhile).
+  // results: [paragraph, text] it left; left: its parent's children then; after: the blocks
+  // it left, the caret going to `afterTarget`; saved: the file's text for `target` once undone.
+  function addStep(step, fields) {
+    Object.assign(step, fields);
+    undoSteps.push(step);
     if (undoSteps.length > MAX_STEPS) undoSteps.shift();
     if (!step.keepRedo) redoSteps = [];
+  }
+  function dropStep(step) {
+    step.dropped = true;
+    undoSteps = undoSteps.filter((s) => s !== step);
+  }
+  // sendBlock's hooks: the request as sent (the keys are now those of the file it goes to), and its answer.
+  function stepSent(step, request) {
+    step.request = request;
+    reread(step.before);
+  }
+  function stepSaved(step, payload, sent) {
+    if (payload.save_id == null) { dropStep(step); return; }  // a save that wrote nothing
+    step.saveId = payload.save_id;
+    step.file = payload.file;
+    step.saved = sent.before;
   }
 
   function endHistory() {
@@ -82,20 +106,44 @@
     historyRun++;
   }
 
-  const readsAsLeft = (step) => !failed.size && step.results.every(([el, text]) => el.isConnected && textOf(el) === text)
-    && (step.kind !== "draft" || (writing === step.draft && step.draft.draftOf));
+  const readsAsLeft = (step) => !failed.size && !!step.results && step.run === historyRun
+    && step.results.every(([el, text]) => el.isConnected && textOf(el) === text)
+    && sameChildren(step.before.parent, step.left)
+    && (step.kind !== "draft" || (writing === step.draft && !!step.draft.draftOf));
+
+  // Writing in `el` again, the caret at `points`; `before` is what the file has for it.
+  function resume(el, before, restore, points) {
+    const ed = startWriting(el);
+    if (!ed) return null;
+    ed.before = before;
+    if (restore) ed.restore = restore;
+    el.focus({ preventScroll: true });
+    select(points);
+    return ed;
+  }
 
   function putBack(step) {
+    step.after = capture(step.afterBlocks);
     if (writing) stopWriting();
     putBackState(step.before);
-    const ed = startWriting(step.target);
-    if (!ed) return;
-    ed.before = typeof step.saved === "function" ? step.saved() : step.saved;
-    ed.restore = step.restore;
-    step.target.focus({ preventScroll: true });
-    if (step.at) select(step.at);
+    resume(step.target, typeof step.saved === "function" ? step.saved() : step.saved, step.restore, step.at);
     step.undone = textOf(step.target);
     redoSteps.push(step);
+  }
+
+  // One request of the history, after the saves before it; keys wait for its answer.
+  function queueStep(path, body, label, answered) {
+    const ed = writing;
+    holdKeys(ed, true);
+    saves++;
+    showSaveState(label);
+    saveQueue = saveQueue.then(async () => {
+      const result = typeof body === "function" ? body() : body;
+      const answer = result && await postQueued(path, result);
+      saves--;
+      if (writing === ed) holdKeys(ed, false);
+      answered(answer);
+    });
   }
 
   // The latest step, if the page reads what it left; else the browser's undo (typing) goes first.
@@ -103,18 +151,14 @@
     const step = undoSteps.at(-1);
     if (!step || !readsAsLeft(step)) return false;
     undoSteps.pop();
-    if (!step.saveId) { putBack(step); return true; }
-    const ed = writing;
-    holdKeys(ed, true);
-    saves++;
-    showSaveState("Undoing…");
-    saveQueue = saveQueue.then(async () => {
-      const result = await postQueued("/__source", { op: "undo", file: step.file, expect: step.saveId });
-      saves--;
-      if (writing === ed) holdKeys(ed, false);
-      if (!result.ok) {
+    step.afterAt = here();
+    if (step.kind === "draft") { putBack(step); return true; }
+    // A step still saving is undone once its answer came: a failed one has nothing to undo.
+    queueStep("/__source", () => !step.dropped && { op: "undo", file: step.file, expect: step.saveId }, "Undoing…", (answer) => {
+      if (!answer) { showSaveState("", false); return; }
+      if (!answer.ok) {
         showSaveState("", false);
-        toast(`Not undone: ${refusal(result.payload)}.`);
+        toast(`Not undone: ${refusal(answer.payload)}.`);
         endHistory();
         return;
       }
@@ -124,18 +168,36 @@
     return true;
   }
 
-  // The step Cmd+Z took back, made again from the same place.
+  // The step Cmd+Z took back: the same save again, and the page Cmd+Z found.
   function redoStep() {
     const step = redoSteps.at(-1);
-    if (!step || writing?.el !== step.target || textOf(step.target) !== step.undone) return false;
+    if (!step || writing?.el !== step.target || textOf(step.target) !== step.undone
+        || !sameChildren(step.before.parent, step.before.children)) return false;
     redoSteps.pop();
-    if (step.at) select(step.at);
-    replaying = true;
-    try {
-      if (step.kind === "format") toggleStyle(step.style);
-      else if (step.kind === "join") joinBack();
-      else breakParagraph();
-    } finally { replaying = false; }
+    const again = (before) => {
+      stopWriting();
+      putBackState(step.after);
+      const ed = resume(step.afterTarget, before ?? textOf(step.afterTarget), null, step.afterAt);
+      undoSteps.push(step);
+      return ed;
+    };
+    if (step.kind === "draft") {
+      const anchor = writing;
+      const draft = again("");
+      if (draft) { draft.draftOf = anchor; draft.above = step.above; step.draft = draft; }
+      return true;
+    }
+    queueStep(step.request.path, step.request.body, "Saving…", (answer) => {
+      if (!answer.ok || !answer.payload.saved) {
+        showSaveState("", false);
+        toast(`Not redone: ${refusal(answer.payload)}.`);
+        endHistory();
+        return;
+      }
+      showSaveState("Saved", true);
+      step.saveId = answer.payload.save_id;
+      again();
+    });
     return true;
   }
 
