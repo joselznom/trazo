@@ -11,18 +11,22 @@ from . import dependencies, labels, preview_edit_review, table
 from .build_lock import build_lock, child_env
 
 
-def render_spec_tables():
-    """Re-render every spec table after a spec or data change (no project code runs)."""
+def render_spec_tables() -> bool:
+    """Render spec tables, keeping the last page and reporting any failure in its status."""
     from . import preview
     try:
         with build_lock(preview.PROJECT, lambda text: print(f"[preview] {text}", flush=True)):
             tables = table.render_all()
-    except Exception as exc:  # a broken spec must not stop the watcher
-        print(f"[preview] tables: {exc}", flush=True)
-        return
-    failed = [t.label for t in tables if t.markdown is None]
-    print(f"[preview] tables: rendered {len(tables) - len(failed)}"
-          + (f", not rendered (errors): {', '.join(failed)}" if failed else ""), flush=True)
+        failed = [t for t in tables if t.markdown is None]
+        error = "; ".join(f"{t.label}: " + "; ".join(i["message"] for i in t.errors) for t in failed)
+    except Exception as exc:  # a broken spec must not stop the watcher or look like success
+        error = f"{type(exc).__name__}: {exc}"
+    if error:
+        with preview.LOCK:
+            for state in preview.STATE.values():
+                state.update(ok=False, error=f"tables: {error}", built=time.strftime("%H:%M:%S"))
+    print(f"[preview] tables: {error or 'rendered'}", flush=True)
+    return not error
 
 
 def regenerate_tables():
@@ -121,13 +125,15 @@ def build_and_watch(stop_event):
 def watch(interval=0.5, stop_event=None, previous=None, numbers=None):
     """Rebuild the pages on every change since `previous` (default: now).
     `numbers`: what numbered() gave in the block that built them (default:
-    read now)."""
+    read now). A failed table render stays pending across prose edits; after
+    recovery every page rebuilds so none of those edits is skipped."""
     from . import preview
     previous = snapshot() if previous is None else previous
     # The numbers the pages used; unknown when sources changed during the
     # first builds or while reading them, so the first rebuild then covers
     # every page.
-    tables_pending, shown = False, numbered() if numbers is None else numbers
+    tables_pending, render_pending = False, False
+    shown = numbered() if numbers is None else numbers
     if snapshot() != previous:
         shown = None
     while True:
@@ -150,9 +156,13 @@ def watch(interval=0.5, stop_event=None, previous=None, numbers=None):
                     p.is_relative_to(preview.ROOT / preview.PROJECT.relative("table_specs")) for p in changed):
                 tables_pending = True  # the project's generator may read the specs
             specs = [preview.ROOT / preview.PROJECT.relative(key) for key in preview.TABLE_SPEC_SOURCES]
-            if not tables_pending and any(p.is_relative_to(folder)
-                                          for p in changed for folder in specs):
-                preview.render_spec_tables()
+            if any(p.is_relative_to(folder) for p in changed for folder in specs):
+                render_pending = True
+            rendered = False
+            if render_pending and not tables_pending:
+                if not preview.render_spec_tables():
+                    continue  # unrelated prose edits must not hide the table error
+                render_pending, rendered = False, True
                 output_dir = table.OUTPUT_DIR
                 # Absorb the rendered Markdown so it does not trigger a second build.
                 previous.update({p: stamp for p, stamp in snapshot().items()
@@ -160,7 +170,7 @@ def watch(interval=0.5, stop_event=None, previous=None, numbers=None):
             if tables_pending:
                 if not preview.regenerate_tables():
                     continue  # keep the error visible until the text is fixed
-                tables_pending = False
+                tables_pending = render_pending = False
                 # Absorb generated outputs only. Source edits made while the
                 # generator was running must still trigger the next rebuild.
                 outputs = [preview.ROOT / preview.PROJECT.relative(key) for key in ("table_output", "table_data")]
@@ -169,7 +179,7 @@ def watch(interval=0.5, stop_event=None, previous=None, numbers=None):
                 previous.update({p: stamp for p, stamp in snapshot().items() if generated(p)})
                 targets = list(preview.DOCS)
             else:
-                targets = changed_documents(changed) if changed else []
+                targets = list(preview.DOCS) if rendered else changed_documents(changed) if changed else []
             targets += [name for name in preview.DOCS if name in requested and name not in targets]
             # One label index for the pages built now: an edit meanwhile
             # changes the snapshot, and the next pass rebuilds with a new one.
