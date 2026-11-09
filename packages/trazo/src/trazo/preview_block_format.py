@@ -149,14 +149,20 @@ def _without_underline(source: str, at: int, end: int) -> str | None:
     edits = []
     for open_at, close, close_end in spans:
         if open_at < at:
+            # An emphasis that opens right before the selection stays with it.
             left = source[open_at + 1:at]
-            words = left.rstrip()
+            marker = re.search(r"(?<!\S)[*_]+$", left)
+            core = left[:marker.start()] if marker else left
+            words = core.rstrip()
             edits.append((open_at, at, _underlined(words) + left[len(words):] if words else left))
         else:
             edits.append((open_at, open_at + 1, ""))
         if end < close:
+            # And one that closes right after it.
             right = source[end:close]
-            words = right.lstrip()
+            marker = re.match(r"[*_]+(?!\S)", right)
+            core = right[marker.end():] if marker else right
+            words = core.lstrip()
             edits.append((end, close_end, right[:len(right) - len(words)] + _underlined(words) if words else right))
         else:
             edits.append((close, close_end, ""))

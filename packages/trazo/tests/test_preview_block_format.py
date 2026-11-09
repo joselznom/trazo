@@ -112,6 +112,12 @@ class FormatTests(unittest.TestCase):
     def test_underline_comes_off_bold_text_and_several_spans_at_once(self):
         self.toggle("A [**big black**]{.underline} dog.\n", "big black", "underline")
         self.assertEqual(self.source(), "A **big black** dog.\n")
+        self.toggle("A [very **big black**]{.underline} dog.\n", "big black", "underline")
+        self.assertEqual(self.source(), "A [very]{.underline} **big black** dog.\n")
+        self.toggle("A [**big black** cat]{.underline} dog.\n", "big black", "underline")
+        self.assertEqual(self.source(), "A **big black** [cat]{.underline} dog.\n")
+        self.toggle("A [very big **black**]{.underline} dog.\n", "very big", "underline")
+        self.assertEqual(self.source(), "A very big [**black**]{.underline} dog.\n")
         self.toggle("A [big]{.underline} [black]{.underline} dog.\n", "big black", "underline")
         self.assertEqual(self.source(), "A big black dog.\n")
         self.toggle("A [very big]{.underline} [black cat]{.underline} dog.\n", "big black", "underline")
