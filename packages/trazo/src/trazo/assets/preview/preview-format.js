@@ -54,7 +54,7 @@
     // In characters, as the server counts them: an emoji is two units of a JavaScript string.
     const from = [...textOf(head.cloneContents())].length, to = [...textOf(upTo.cloneContents())].length;
     saveBlock(ed);
-    const step = newStep("format", ed, [ed.el], { style, range, onAnswer: true });
+    const step = newStep("format", ed, [ed.el], { style, range });
     // A style leaves the text as it is: what is typed while it saves goes back first.
     addStep(step, { results: [[ed.el, textOf(ed.el)]], left: step.before.children, afterBlocks: [ed.el], afterTarget: ed.el });
     sendBlock(ed, () => ({ before: ed.before, style, from, to }), {
