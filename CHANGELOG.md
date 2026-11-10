@@ -88,6 +88,11 @@ Internal changes (tests, CI, refactoring) stay out.
   rebuilt by the next table render (`trazo table check` no longer crashes on
   it), and closing the headless Chrome no longer leaves it or its temporary
   folder behind.
+- The word counts no longer fail on a manuscript whose `::: abstract` block
+  holds a raw HTML `<header>`; clearing a table note whose closing `:::` line
+  ends in a stray carriage return or non-breaking space removes it instead of
+  answering "server error"; and a comment change sent without a comment id is
+  refused as an invalid request instead of "no comment with id None".
 
 ### Removed
 
