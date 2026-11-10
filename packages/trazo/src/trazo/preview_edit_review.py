@@ -183,7 +183,6 @@ def change_edits(request: Any) -> dict[str, Any]:
     are left as they are and listed as missed ({file, id}), as are those of
     a file another program wrote while their rejection was being published
     (source_publish keeps that version and the rejected text)."""
-    from . import preview
     from .preview_sources import read_file_history, read_source, save_file_history, sha256_of, source_path
     op, by_file = _items(request)
     paths = {name: source_path(name) for name in by_file}  # validates every name first
@@ -224,10 +223,7 @@ def change_edits(request: Any) -> dict[str, Any]:
         if op == "accept" and done:
             save(store)
     if op == "accept" and done:
-        names = {paths[asked][1] for asked in by_file}
-        rebuild = {doc for doc in preview.DOCS if names & set(page_files(doc))}
-        with preview.LOCK:
-            cast(set[str], preview.WATCHER["rebuild"]).update(rebuild)
+        _rebuild_pages({paths[asked][1] for asked in by_file})
     return {"done": done, "missing": len(missed), "missed": missed,
             **({"warning": " ".join(warnings)} if warnings else {})}
 
@@ -237,17 +233,23 @@ def absorb(name: str, before: str, after: str) -> None:
     leaving the pending edits it did not touch pending. The caller holds
     review_lock and has published `after`, so a page built since then may
     mark the change as pending: its documents are rebuilt."""
-    from . import preview
     store = load()
     if store is None:
         return  # the first baseline is taken from the files as they are
-    merged = edit_diff.merge(before, store["files"].get(name, ""), after)
-    if merged == store["files"].get(name):
+    baseline = store["files"].get(name, "")
+    merged = edit_diff.merge(before, baseline, after)
+    if merged == baseline:
         return  # the marks stay what any build of the file shows
     store["files"][name] = merged
     save(store)
-    # The source does not change again, so the watcher would not build the page again.
-    rebuild = {doc for doc in preview.DOCS if name in page_files(doc)}
+    _rebuild_pages({name})  # the file does not change again, so no pass would rebuild its pages
+
+
+def _rebuild_pages(names: set[str]) -> None:
+    """Have the watcher rebuild the pages built from the files `names`,
+    whose baseline changed although the files did not."""
+    from . import preview
+    rebuild = {doc for doc in preview.DOCS if names & set(page_files(doc))}
     with preview.LOCK:
         cast(set[str], preview.WATCHER["rebuild"]).update(rebuild)
 

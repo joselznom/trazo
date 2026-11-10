@@ -55,8 +55,7 @@ class WatcherWakeTests(unittest.TestCase):
         source = _support.ROOT / "manuscript/main/01_introduction.md"
         text = source.read_text(encoding="utf-8")
         self.addCleanup(source.write_text, text, encoding="utf-8")
-        folder = Path(tempfile.mkdtemp())
-        self.addCleanup(shutil.rmtree, folder)
+        folder = Path(self.enterContext(tempfile.TemporaryDirectory()))
         self.enterContext(patch.object(preview, "FILE_HISTORY_PATH", folder / "file_history.json"))
         self.enterContext(patch.object(preview, "EDITS_PATH", folder / "edits.json"))
         preview_edit_review.ensure()  # nothing pending before the save
