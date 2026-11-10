@@ -291,9 +291,13 @@ def serve(port=8765, on_bind=None):
             stop_event.set()
             preview.DOCX_JOB.stop("cancelled")
             diagram_editor.shutdown()
-            processes.stop_all()  # a page's Pandoc, the tables command: none outlives the preview
+            # A page's Pandoc, the tables command: none outlives the preview, and the
+            # watcher, which may still be in a pass, cannot start another.
+            processes.stop_all(close=True)
             for worker in workers:
                 worker.join(timeout=5)
+            if not any(worker.is_alive() for worker in workers):  # a serve() run in-process (tests)
+                processes.reopen()
 
 
 def serve_from_terminal(port: int, command: str) -> None:

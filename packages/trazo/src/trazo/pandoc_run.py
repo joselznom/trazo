@@ -27,6 +27,7 @@ import time
 from pathlib import Path, PurePath
 
 from . import crossref, processes
+from .process_pipes import decode  # noqa: F401  (callers that run Pandoc with bytes decode its messages with it)
 from .project import PROJECT
 
 # Seconds one Pandoc run may take: hundreds of times the slowest measured Word
@@ -197,7 +198,6 @@ def _run(args: list[str], input: bytes | str | None, text: bool, timeout: float,
     return subprocess.CompletedProcess([*command, *args], result.returncode, decode(result.stdout), decode(messages))
 
 
-decode = processes.decode  # callers that run Pandoc with bytes decode its messages with it
 
 
 def merge_logs(first: Path, final: Path) -> None:

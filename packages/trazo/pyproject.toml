@@ -52,6 +52,7 @@ module = [
     "trazo.page_bundle",
     "trazo.pandoc_options",
     "trazo.preview_inputs",
+    "trazo.process_pipes",
     "trazo.processes",
     "trazo.resources",
     "trazo.review_history",

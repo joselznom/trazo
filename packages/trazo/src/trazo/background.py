@@ -66,7 +66,8 @@ class CommandJob:
                 if self.reason is not None:  # cancellation during process startup
                     processes.stop(proc, self.grace)
         try:
-            result = processes.run(command, cwd=cwd, timeout=timeout, on_line=line, started=started)
+            result = processes.run(command, cwd=cwd, timeout=timeout, on_line=line, grace=self.grace,
+                                   started=started)
             code = result.returncode
             if isinstance(result, processes.Held):
                 lines.append(result.note)

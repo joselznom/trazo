@@ -20,11 +20,16 @@ class MetadataError(ValueError):
     """The project's manuscript metadata cannot be read or resolved."""
 
 
+class MetadataUnavailable(MetadataError):
+    """Pandoc could not run or ran out of time reading it: not the file's fault
+    (the preview builds the page again later, trazo.preview_render)."""
+
+
 @lru_cache(maxsize=8)
 def _read(path, mtime_ns, size, command):
     key = (path, mtime_ns, size, command)
     if time.monotonic() < _STOPPED.get(key, (0.0, ""))[0]:  # callers that fall back would wait again
-        raise MetadataError(_STOPPED[key][1])
+        raise MetadataUnavailable(_STOPPED[key][1])
     with tempfile.TemporaryDirectory(prefix="trazo-metadata-") as folder:
         template = Path(folder) / "metadata.template"
         template.write_text("$meta-json$", encoding="utf-8")
@@ -38,7 +43,7 @@ def _read(path, mtime_ns, size, command):
             message = f"cannot read metadata {path}: {exc}"
             if isinstance(exc, processes.Timeout):
                 _STOPPED[key] = (time.monotonic() + TIMEOUT, message)
-            raise MetadataError(message) from exc
+            raise MetadataUnavailable(message) from exc
         if result.returncode:
             raise MetadataError(f"cannot read metadata {path}: {result.stderr.strip()}")
         try:

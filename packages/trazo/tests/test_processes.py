@@ -67,6 +67,12 @@ class RunTests(unittest.TestCase):
             self.assertTrue(portable.pid_alive(holder))
             self.assertIn("left running", result.note)
 
+    def test_a_command_that_exits_before_its_deadline_is_not_a_timeout_while_a_child_holds_the_output(self) -> None:
+        with patch.object(processes, "LINGER", 2):  # longer than what is left of the deadline
+            result = processes.run([PY, "-c", HOLD.format("")], timeout=1, text=True)
+        self.assertIsInstance(result, processes.Held)
+        self.assertEqual(result.returncode, 0)
+
     def test_large_input_and_output_round_trip(self) -> None:
         text = "é\n" * 1_500_000
         result = processes.run([PY, "-c", "import sys; sys.stdout.buffer.write(sys.stdin.buffer.read())"],
@@ -115,6 +121,23 @@ class SignalTests(unittest.TestCase):
                 runner.send_signal(signum)
                 self.assertNotEqual(runner.wait(15), 0)
                 self.assertTrue(wait_until(lambda: gone(int(pid_file.read_text()))), "the command's child survived")
+
+    def test_a_nested_runner_stops_its_own_commands_before_its_group_is_killed(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            pid_file = Path(folder) / "grandchild.pid"
+            grandchild = ("import os, time; "
+                          f"open({str(pid_file)!r}, 'w').write(str(os.getpid())); time.sleep(60)")
+            # A trazo run by a wrapper: it needs a moment after SIGTERM before it stops its own command.
+            nested = Path(folder) / "nested.py"
+            nested.write_text("import signal, sys, time\nfrom trazo import processes\n"
+                              "def end(signum, frame):\n    time.sleep(1)\n    raise SystemExit(143)\n"
+                              "signal.signal(signal.SIGTERM, end)\n"
+                              f"processes.run([sys.executable, '-c', {grandchild!r}], timeout=600, capture=False)\n")
+            env = {**os.environ, "PYTHONPATH": os.pathsep.join(sys.path)}
+            with self.assertRaises(processes.Timeout):  # the wrapper (sh) exits at once on SIGTERM
+                processes.run(["/bin/sh", "-c", f"{PY!r} {str(nested)!r} & wait"], timeout=2, capture=False, env=env)
+            self.assertTrue(wait_until(lambda: gone(int(pid_file.read_text())), 10),
+                            "the nested runner was killed before it stopped its command")
 
 
 if __name__ == "__main__":

@@ -8,9 +8,11 @@ import json
 import os
 import shutil
 import sys
+import tempfile
 import threading
 import time
 import unittest
+from pathlib import Path
 from unittest.mock import patch
 
 import _hang
@@ -18,6 +20,7 @@ import _support  # noqa: F401  (sets TRAZO_ROOT before trazo loads)
 from test_mcp import Session, free_port, gone, wait_until
 from test_preview_watch_failures import PreviewCase, get, status
 
+from trazo import frontmatter, preview, preview_render
 from trazo.build_lock import build_lock
 from trazo.project import DEFAULTS, Project
 
@@ -116,6 +119,18 @@ class PreviewDeadlineTests(PreviewCase):
         self.assertFalse(stop["isError"], stop["content"])
         self.assertTrue(wait_until(self.gone, timeout=20), "the page's Pandoc outlived the preview")
 
+    @unittest.skipIf(os.name == "nt", "a command that ignores SIGTERM")
+    def test_the_watcher_starts_nothing_once_the_preview_is_stopping(self) -> None:
+        # The page build's `pandoc --help` probe ignores SIGTERM, so the shutdown has
+        # to wait for it; the page's own Pandoc must not start meanwhile.
+        self.pandoc("stubborn-help+page")
+        self.start_with({})
+        self.assertTrue(wait_until(lambda: _hang.recorded(self.pids)), "the probe did not start")
+        stop = self.session.tool("preview_stop", project=str(self.root))
+        self.assertFalse(stop["isError"], stop["content"])
+        self.assertTrue(wait_until(self.gone, timeout=20), "a command the watcher started outlived the preview")
+        self.assertEqual(len(_hang.recorded(self.pids)), 2, "the watcher started Pandoc while the preview stopped")
+
     def test_pandoc_that_ran_out_of_time_is_retried_without_an_edit(self) -> None:
         self.pandoc("once-page")  # the first page build hangs, the next ones work
         port = self.start_with({"TRAZO_PANDOC_TIMEOUT": "2"})
@@ -130,6 +145,18 @@ class PreviewDeadlineTests(PreviewCase):
         calls = len(_hang.recorded(self.pids))
         time.sleep(4)  # longer than the first retries of a failure Pandoc could not finish
         self.assertEqual(len(_hang.recorded(self.pids)), calls, "Pandoc ran again on text that did not change")
+
+
+@unittest.skipUnless(shutil.which("pandoc"), "needs Pandoc")
+class PageMetadataTests(unittest.TestCase):
+    def test_a_metadata_read_that_ran_out_of_time_is_retried_not_shown_as_a_text_error(self) -> None:
+        pids = Path(self.enterContext(tempfile.TemporaryDirectory())) / "hang.pids"
+        self.addCleanup(_hang.end, pids)
+        command = _hang.command(pids, shutil.which("pandoc"), "meta")
+        with patch.object(frontmatter, "TIMEOUT", 1), \
+                patch.dict(preview.PROJECT.config["commands"], {"pandoc": command}), \
+                self.assertRaisesRegex(preview_render.PandocUnavailable, "did not finish within 1 s"):
+            preview.build("manuscript")  # the watcher retries what this raises (PageFailed)
 
 
 if __name__ == "__main__":

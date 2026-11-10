@@ -10,6 +10,7 @@ import re
 
 from . import pandoc_run, preview_edit_review, processes, table
 from .expand import FENCE, ValuesError, expand_files
+from .frontmatter import MetadataUnavailable
 from .numbering import metadata_file
 from .pandoc_options import mathml_flag
 from .review_storage import write_atomic
@@ -107,6 +108,8 @@ def render(name, out_dir, *, for_counts=False):
     try:
         files = doc_files(name)
         text = expand_files(sections, mark=not for_counts, document=name, read=read)
+    except MetadataUnavailable as exc:
+        raise PandocUnavailable(str(exc)) from exc
     except (ValuesError, FileNotFoundError, RecursionError, ValueError) as exc:
         error = str(exc)
     else:

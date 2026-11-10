@@ -100,7 +100,7 @@ class Calls:
                     raise ToolError("cancelled")
         try:
             result = processes.run(trazo_argv(*argv), timeout=timeout, cwd=cwd, env={**base, **(env or {})},
-                                   text=True, started=started)
+                                   text=True, grace=processes.GRACE, started=started)
         except processes.Timeout as exc:
             output = [str(value or "") for value in (exc.stderr, exc.stdout)]  # text=True: str
             message = (f"trazo {' '.join(argv)} timed out after {timeout:g} s; "
