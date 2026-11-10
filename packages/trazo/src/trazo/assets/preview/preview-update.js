@@ -96,17 +96,23 @@
     return { fresh, groups };
   }
 
-  // The page's nodes a run replaces, between the blocks kept around it: the
-  // blocks it had and paragraphs written on the page since (not built yet).
-  // `unknown` when something else is there (a caption editor, a refused save's
-  // bar); null when the blocks are not where they were.
+  // The page's nodes a run replaces, between the blocks around it still on the
+  // page (writing may have joined one away): the blocks it had and paragraphs
+  // written on the page since (not built yet). A refused save's bar or box
+  // belongs to its paragraph, which stays (heldBlocks). `unknown` when
+  // something else is there (a caption editor); null when the blocks are not
+  // where they were.
   function nodesOf(group, run, tracked) {
-    const before = run[0] > 0 ? outerOf(group.old[run[0] - 1].el) : null;
-    const after = run[1] < group.old.length ? outerOf(group.old[run[1]].el) : null;
+    const near = (i, step) => {
+      for (; i >= 0 && i < group.old.length; i += step) if (group.old[i].el.isConnected) return outerOf(group.old[i].el);
+      return null;
+    };
+    const before = near(run[0] - 1, -1), after = near(run[1], 1);
     if ((before && before.parentNode !== group.container) || (after && after.parentNode !== group.container)) return null;
     const nodes = [];  // with the white space and comments between them
     let node = before ? before.nextSibling : group.container.firstChild, unknown = false;
     for (; node && node !== after && !(node.nodeType === 1 && node.tagName === "SECTION"); node = node.nextSibling) {
+      if (node.nodeType === 1 && node.matches(".pv-write-bar, .pv-write-box")) continue;
       if (node.nodeType === 1 && !tracked.has(node) && !node.matches(".pv-can-write, :has(.pv-src)")) unknown = true;
       nodes.push(node);
     }
@@ -117,15 +123,15 @@
   }
 
   // What waits while the author is at it: the paragraph with the caret and the
-  // one it drafts from, refused saves (with their bar or box), the blocks the
-  // writing history may put back, and a selection.
+  // one it drafts from, refused saves, the blocks the writing history may put
+  // back, and a selection.
   function heldBlocks() {
     const held = [writing?.el, writing?.draftOf?.el, ...failed.keys()];
     for (const step of [...undoSteps, ...redoSteps])
       held.push(step.target, step.draft?.el, ...(step.els || []), ...(step.afterBlocks || []), ...(step.results || []).map(([el]) => el));
     const selection = getSelection();
-    return (nodes) => nodes.some((node) => node.nodeType === 1 && (node.matches(".pv-write-bar, .pv-write-box")
-      || held.some((el) => el && node.contains(el)) || (!selection.isCollapsed && selection.containsNode(node, true))));
+    return (nodes) => nodes.some((node) => node.nodeType === 1
+      && (held.some((el) => el && node.contains(el)) || (!selection.isCollapsed && selection.containsNode(node, true))));
   }
 
   // "done", "partial" (blocks held, see heldBlocks), "later" (the author is

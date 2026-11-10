@@ -46,6 +46,32 @@ class WritingInPlaceTests(UndoCase):
         self.leave()  # nothing typed, nothing saved
         self.wait_for(f"{PAGE_TEXT}.includes('121 fields')")
 
+    def test_a_refused_save_holds_only_its_own_paragraph(self):
+        self.build()
+        self.write_in("quick")
+        self.type("very ")
+        self.chapter.write_text(TEXT.replace("lazy", "sleepy"), encoding="utf-8")  # changed on disk meanwhile
+        self.leave()
+        self.wait_for("document.querySelector('.pv-write-bar')")
+        version = self.built_again(TEXT.replace("lazy", "sleepy").replace("A second paragraph", "A rewritten second paragraph"))
+        self.wait_for(f"loaded.manuscript === {version}")
+        self.assertIn("A rewritten second paragraph", self.evaluate(PAGE_TEXT))
+        self.assertIn("very", self.evaluate("document.querySelector('.pv-write-failed').textContent"))
+
+    def test_a_join_holds_only_its_own_paragraphs(self):
+        text = "# Writing\n\nFirst paragraph.\n\nSecond paragraph.\n\nThird one in {{v:cohort.n}} fields.\n"
+        self.build(text)
+        self.write_in("Second")
+        self.evaluate("""(() => { const w = document.createTreeWalker(writing.el, NodeFilter.SHOW_TEXT);
+          let n; while ((n = w.nextNode())) if (n.data.includes('Second')) { getSelection().collapse(n, n.data.indexOf('Second')); return; } })()""")
+        self.key("Backspace", 8)
+        self.wait_for("!saves && !!writing")
+        self.assertIn("First paragraph. Second paragraph.", self.source())
+        self.new_value("121")
+        version = self.built_again(self.source())
+        self.wait_for(f"loaded.manuscript === {version}")
+        self.assertIn("121 fields", self.evaluate(PAGE_TEXT))
+
     def test_undo_takes_back_a_break_after_a_build_changed_its_section(self):
         self.build()
         self.write_in("plain")
