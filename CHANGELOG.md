@@ -50,6 +50,14 @@ Internal changes (tests, CI, refactoring) stay out.
 
 ### Changed
 
+- The preview shows what you saved sooner: leaving a paragraph brings its new
+  build in about 0.7 s instead of about 2 s.
+- The preview no longer reloads after a save: only the paragraphs that
+  changed are replaced, with the paragraph numbers, citations and counts after
+  them, so your place, caret and open panels stay. This goes on while you
+  write: only the paragraph you are in waits until you leave it. A new
+  section or a rebuilt image still reloads the page, and if you were writing
+  with nothing unsaved, the caret comes back where it was.
 - Saved changes appear sooner in a visible preview, especially in longer papers.
 - An open preview asks the server half as often while nothing changes, and
   still shows a saved change as soon as it is built.

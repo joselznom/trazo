@@ -124,6 +124,23 @@
     step.saved = sent.before;
   }
 
+  // An in-place update (preview-update.js) put `added` in place of `removed`
+  // among `parent`'s children, before `at`: the steps' pictures of that parent
+  // follow, or they could no longer put it back.
+  function historyReplaced(parent, removed, added, at) {
+    const lists = new Set();
+    for (const step of [...undoSteps, ...redoSteps]) {
+      for (const state of [step.before, step.after]) if (state?.parent === parent) lists.add(state.children);
+      if (step.before?.parent === parent && step.left) lists.add(step.left);
+    }
+    const gone = new Set(removed);
+    for (const list of lists) {
+      const kept = list.filter((node) => !gone.has(node)), where = at ? kept.indexOf(at) : kept.length;
+      if (where < 0) { endHistory(); return; }
+      list.splice(0, list.length, ...kept.slice(0, where), ...added, ...kept.slice(where));
+    }
+  }
+
   function endHistory() {
     undoSteps = [];
     redoSteps = [];

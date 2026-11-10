@@ -36,5 +36,11 @@ together. Enter and Backspace wait for a style still saving in their paragraph.
 says why. Leaving the text ends that history: outside the text, ⌘Z undoes your
 latest change in the document, a comment or a saved paragraph.
 
-After a save the page reloads once its build has the save, so what you wrote
-never disappears for a moment.
+After a save the page takes its build once the build has the save, so what you
+wrote never disappears for a moment. Only the blocks that changed are replaced,
+with the paragraph numbers, figures, citations and counts after them, so your
+place, caret and open panels stay. This goes on while you write: the paragraph
+you are in, and the ones ⌘Z may put back, wait until you leave the text. A
+change beyond that, such as a new section, reloads the page instead: with
+nothing unsaved in your paragraph it comes back with the caret where it was,
+and with unsaved words it waits until you leave the text.

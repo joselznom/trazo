@@ -12,6 +12,7 @@
   let mention = null;        // {node, start, end, items, at} while the menu is open
   let mentionsLeft = null;   // the @ the author closed with Esc: no menu until it changes
   let referencesAsked = null;
+  pageRefreshes.push(() => { referencesAsked = null; });  // a new build may cite new references
   let newChips = 0;
 
   async function mentionItems() {

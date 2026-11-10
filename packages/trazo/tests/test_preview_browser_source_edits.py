@@ -220,8 +220,10 @@ class SourceEditTests(PreviewBrowserTestCase):
                 with preview.LOCK:  # as the watcher does once it has built the save
                     preview.STATE["manuscript"]["version"] += 1
                     preview.WATCHER["synced"] = time.time()
-                self.wait_for(f"performance.timeOrigin !== {before['origin']} && document.readyState === 'complete' && "
-                              "document.querySelector('.pv-src-text')?.value.includes('Reading paragraph 44')")
+                    version = preview.STATE["manuscript"]["version"]
+                # The page takes the build in place.
+                self.wait_for(f"loaded?.manuscript === {version}")
+                self.assertEqual(self.evaluate("performance.timeOrigin"), before["origin"])
                 if shortening:
                     target = target.replace(json.dumps(long_text), json.dumps(short_text))
                     self.assertTrue(self.evaluate(f"""(() => {{

@@ -11,6 +11,7 @@ PREVIEW_DOCX_TIMEOUT for the Word job that runs the same generator).
 """
 
 import subprocess
+import threading
 import time
 from typing import cast
 
@@ -166,6 +167,37 @@ def report_failure(exc: Exception, last: str = "") -> str:
     return message
 
 
+class Signal:
+    """The watcher's stop event, which a write from the preview can also wake
+    (`wake`, through WATCHER["wake"]): the watcher then checks the sources at
+    once instead of at the end of its interval. wait() returns True once
+    stopped, as threading.Event.wait does."""
+
+    def __init__(self):
+        self._cond = threading.Condition()
+        self._stopped = self._woken = False
+
+    def set(self):
+        with self._cond:
+            self._stopped = True
+            self._cond.notify_all()
+
+    def is_set(self):
+        return self._stopped
+
+    def wake(self):
+        with self._cond:
+            self._woken = True
+            self._cond.notify_all()
+
+    def wait(self, timeout=None):
+        with self._cond:
+            if not (self._stopped or self._woken):
+                self._cond.wait(timeout)
+            self._woken = False
+            return self._stopped
+
+
 def build_and_watch(stop_event):
     """Build every page, then watch them: `trazo preview serve` runs it
     while it serves. A failure here must not end the thread: the watcher
@@ -239,13 +271,19 @@ def watch(interval=0.5, stop_event=None, previous=None, numbers=None, failure=""
     def sources(stamps):  # a failed table step may still have written its outputs
         return {path: stamp for path, stamp in stamps.items() if not generated(path)}
 
+    if isinstance(stop_event, Signal):
+        preview.WATCHER["wake"] = stop_event.wake
+    # After a build the next pass comes at once: a save made during it is
+    # built without waiting out the interval.
+    recheck = False
     while True:
         if at_once:
             at_once = False
         elif stop_event is None:
-            time.sleep(interval)
-        elif stop_event.wait(interval):
+            time.sleep(0 if recheck else interval)
+        elif stop_event.wait(0 if recheck else interval):
             return
+        recheck = False
         requested: set[str] = set()
         current, checked = None, time.time()
         try:
@@ -306,6 +344,7 @@ def watch(interval=0.5, stop_event=None, previous=None, numbers=None, failure=""
                 if (now := numbered()) != shown:
                     failed |= build_all([name for name in preview.DOCS if name not in targets])
             shown = now
+            recheck = True
             # A render above replaced the outputs it could, so a note on one edited by hand may no
             # longer hold (and a hand edit during it must still be noted); otherwise only an output
             # changed by itself may differ.

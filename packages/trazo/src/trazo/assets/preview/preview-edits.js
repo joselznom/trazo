@@ -15,11 +15,11 @@
   const editKey = (e) => `${e.file}\n${e.id}`;
   // A block mark's element is the block it starts; a block may start several
   // edits' marks, so data-edit-block lists their ids.
-  for (const mark of $$(".pv-blk", page)) {
+  setUpBlocks((root) => { for (const mark of within(root, ".pv-blk")) {
     const block = mark.closest("p, li, h1, h2, h3, h4, h5, h6, dt, dd, blockquote") || mark.parentElement;
     block.classList.add(mark.classList.contains("pv-new") ? "pv-edit-new" : "pv-edit-changed");
     block.dataset.editBlock = `${block.dataset.editBlock || ""} ${mark.dataset.edit}`.trim();
-  }
+  } });
   const blockIds = (el) => (el.dataset.editBlock || "").split(" ").filter(Boolean);
   const marksOf = (id) => [...$$(`.pv-edit-ins[data-edit="${CSS.escape(id)}"], .pv-edit-del[data-edit="${CSS.escape(id)}"]`, page),
     ...$$(`[data-edit-block~="${CSS.escape(id)}"]`, page)];

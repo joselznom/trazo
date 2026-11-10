@@ -237,11 +237,15 @@ def change_source(request):
 
 def mark_written():
     """A manuscript file was just written: pages hold their reload until the
-    watcher's `synced` is later (both in /__workspace)."""
+    watcher's `synced` is later (both in /__workspace). The watcher is woken
+    to build it at once."""
     from . import preview
     with preview.LOCK:
         preview.WATCHER["written"] = time.time()
+        wake = preview.WATCHER.get("wake")
     CHANGES.notify()  # a page holds its reload from now (trazo.preview_status)
+    if wake:
+        wake()
 
 
 def latest_change(doc):

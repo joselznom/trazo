@@ -187,6 +187,8 @@ class ShellTests(PreviewBrowserTestCase):
         self.evaluate("const area = document.querySelector('.pv-editor textarea'); "
                       "area.value = 'Keep this new draft'; "
                       "area.dispatchEvent(new Event('input', {bubbles: true}))")
+        # A new section: a build the page cannot take in place.
+        page.write_text(page.read_text().replace("</section>", '</section><section class="level1" id="more"><h1>More</h1></section>', 1))
         with preview.LOCK:
             preview.STATE["manuscript"]["version"] += 1
         self.wait_for("!document.querySelector('.pv-hold').hidden")

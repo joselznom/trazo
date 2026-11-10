@@ -245,8 +245,14 @@
   // (server.page_stamp: the served page and these scripts), with a digest of
   // the fields locateIn reads for each comment: a change to the page, the
   // viewer or a comment misses, and a reload with nothing changed skips the pass.
-  const storeCache = new WeakMap();  // analysis -> {key, stamp, places: Map(id -> [fields, packed hit])} or null
+  let storeCache = new WeakMap();  // analysis -> {key, stamp, places: Map(id -> [fields, packed hit])} or null
   const stampOf = (a) => a.root.ownerDocument.querySelector('meta[name="trazo-page"]')?.content || "";
+  // An in-place update changes this page and its stamp, which every store holds.
+  pageRefreshes.push(() => {
+    placeCache.delete(model);
+    storeCache = new WeakMap();
+    forgetPageText();
+  });
   function storedPlaces(a) {
     if (storeCache.has(a)) return storeCache.get(a);
     const here = stampOf(model), there = stampOf(a);
