@@ -235,12 +235,21 @@ def change_edits(request: Any) -> dict[str, Any]:
 def absorb(name: str, before: str, after: str) -> None:
     """Accept the author's own change of a file from `before` to `after`,
     leaving the pending edits it did not touch pending. The caller holds
-    review_lock."""
+    review_lock and has published `after`, so a page built since then may
+    mark the change as pending: its documents are rebuilt."""
+    from . import preview
     store = load()
     if store is None:
         return  # the first baseline is taken from the files as they are
-    store["files"][name] = edit_diff.merge(before, store["files"].get(name, ""), after)
+    merged = edit_diff.merge(before, store["files"].get(name, ""), after)
+    if merged == store["files"].get(name):
+        return  # the marks stay what any build of the file shows
+    store["files"][name] = merged
     save(store)
+    # The source does not change again, so the watcher would not build the page again.
+    rebuild = {doc for doc in preview.DOCS if name in page_files(doc)}
+    with preview.LOCK:
+        cast(set[str], preview.WATCHER["rebuild"]).update(rebuild)
 
 
 def check_outputs() -> None:
