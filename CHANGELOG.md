@@ -124,9 +124,10 @@ Internal changes (tests, CI, refactoring) stay out.
   rebuilt by the next table render (`trazo table check` no longer crashes on
   it), and closing the headless Chrome no longer leaves it or its temporary
   folder behind.
-- A preview, table editor or diagram editor page whose script failed to load
-  (seen now and then on Windows) reloads itself once instead of staying half
-  started; if the script fails again, the page says to reload it.
+- A preview, table editor or diagram editor page whose script or stylesheet
+  failed to load (seen now and then on Windows) reloads itself once instead of
+  staying half started or unstyled; if the file fails again, the page says to
+  reload it.
 - Nothing trazo runs can hang forever any more, and what it stops leaves
   nothing behind. A build whose Pandoc stalls stops after 10 minutes, a
   metadata read after 1 minute, `uv sync` after 30 minutes and your own build
