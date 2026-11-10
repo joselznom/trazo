@@ -85,11 +85,19 @@ class BuildDeadlines(unittest.TestCase):
         metadata = self.root / "manuscript" / "metadata.yaml"
         command = tuple(self.stand_in("pandoc", "meta"))
         started = time.monotonic()
-        with patch.object(frontmatter, "TIMEOUT", 2), \
-                self.assertRaisesRegex(frontmatter.MetadataError, "cannot read metadata .*did not finish within 2 s"):
-            frontmatter._read(str(metadata), metadata.stat().st_mtime_ns, metadata.stat().st_size, command)
-        self.assertLess(time.monotonic() - started, 15)
-        self.assert_stand_ins_gone()
+        key = (str(metadata), metadata.stat().st_mtime_ns, metadata.stat().st_size, command)
+        with patch.object(frontmatter, "TIMEOUT", 2):
+            with self.assertRaisesRegex(frontmatter.MetadataError, "cannot read metadata .*did not finish within 2 s"):
+                frontmatter._read(*key)
+            self.assertLess(time.monotonic() - started, 15)
+            self.assert_stand_ins_gone()
+            # A caller that falls back on the error (abbreviations) is followed by another reader:
+            # within the same bound it fails at once instead of waiting again.
+            again = time.monotonic()
+            with self.assertRaisesRegex(frontmatter.MetadataError, "did not finish within 2 s"):
+                frontmatter._read(*key)
+            self.assertLess(time.monotonic() - again, 1)
+            self.assertEqual(len(_hang.recorded(self.pids)), 2, "Pandoc was started again")
 
 
 if __name__ == "__main__":
