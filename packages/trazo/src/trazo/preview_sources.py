@@ -20,7 +20,7 @@ from .expand import Values, load_entries, resolve_include
 from .local_server import Conflict, NotFound
 from .local_server import RequestError as CommentError
 from .portable import can_exchange
-from .review_storage import StoreError, quarantine, read_list, review_lock, write_json
+from .review_storage import StoreError, keep_newest, quarantine, read_list, review_lock, write_json
 
 
 def sha256_of(data):
@@ -136,16 +136,9 @@ def collided(file, path, result):
 
 
 def save_file_history(entries):
-    """Keep the newest entries within the limits. A pending entry at the end
-    does not count: if its publication fails, reading drops it, and the
-    oldest entry must still be there."""
     from . import preview
-    spare = 1 if entries and entries[-1].get("pending") else 0
-    entries = entries[-(preview.FILE_HISTORY_LIMIT + spare):]
-    sizes = [len(e.get("before_text", "")) for e in entries[:len(entries) - spare]]
-    while len(sizes) > 1 and sum(sizes) > preview.FILE_HISTORY_BYTES:  # drop the oldest
-        entries.pop(0)
-        sizes.pop(0)
+    entries = keep_newest(entries, preview.FILE_HISTORY_LIMIT, preview.FILE_HISTORY_BYTES,
+                          lambda e: len(e.get("before_text", "")), bool(entries) and bool(entries[-1].get("pending")))
     write_json(preview.FILE_HISTORY_PATH, entries, durable=True)
 
 

@@ -34,7 +34,7 @@ from pathlib import Path
 from typing import Any
 
 from . import source_publish
-from .review_storage import ROOT, StoreError, quarantine, read_list, review_lock, write_atomic
+from .review_storage import ROOT, StoreError, keep_newest, quarantine, read_list, review_lock, write_atomic
 
 HISTORY_LIMIT = 200
 HISTORY_BYTES = 5_000_000
@@ -103,14 +103,8 @@ class History:
         return history
 
     def save(self, history: list[Entry]) -> None:
-        # A pending entry at the end is not counted: if its publication fails,
-        # the next load drops it, and the oldest entry must still be there.
-        spare = 1 if history and "pending" in history[-1] else 0
-        history = history[-(HISTORY_LIMIT + spare):]
-        sizes = [len(json.dumps(e, ensure_ascii=False)) for e in history[:len(history) - spare]]
-        while len(sizes) > 1 and sum(sizes) > HISTORY_BYTES:
-            history.pop(0)
-            sizes.pop(0)
+        history = keep_newest(history, HISTORY_LIMIT, HISTORY_BYTES, lambda e: len(json.dumps(e, ensure_ascii=False)),
+                              bool(history) and "pending" in history[-1])
         write_atomic(self.path, (json.dumps(history, ensure_ascii=False) + "\n").encode("utf-8"), durable=True)
 
     def record(self, entry: Entry) -> None:

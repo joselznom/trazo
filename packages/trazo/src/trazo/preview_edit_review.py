@@ -76,7 +76,7 @@ def load() -> dict[str, Any] | None:
 
 def save(store: dict[str, Any]) -> None:
     from . import preview
-    write_json(preview.EDITS_PATH, store)
+    write_json(preview.EDITS_PATH, store, durable=True)
 
 
 def ensure() -> dict[str, Any]:

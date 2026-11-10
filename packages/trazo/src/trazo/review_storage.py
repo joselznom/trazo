@@ -17,7 +17,7 @@ import stat
 import tempfile
 import threading
 import time
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, NoReturn
@@ -95,7 +95,7 @@ def remove_orphans(path: Path) -> None:
         return
     for name in names:
         candidate = path.parent / name
-        if pattern.fullmatch(name) and _abandoned(candidate, candidate):
+        if pattern.fullmatch(name) and _abandoned(candidate):
             try:
                 candidate.unlink()
             except OSError:
@@ -116,17 +116,18 @@ def scratch_folder(parent: Path, prefix: str) -> Iterator[Path]:
         yield Path(folder)
 
 
-def _abandoned(candidate: Path, lock_file: Path) -> bool:
+def _abandoned(candidate: Path, lock_file: Path | None = None) -> bool:
     """Whether `candidate` was left by a killed writer: older than
     ORPHAN_SECONDS (a live writer took its lock right after creating it) and
-    `lock_file` free. A folder without one comes from an earlier trazo."""
+    its lock free: on `lock_file` for a folder, on the file itself otherwise.
+    A folder without a lock file comes from an earlier trazo."""
     try:
         if time.time() - candidate.stat().st_mtime < ORPHAN_SECONDS:
             return False
-        with open(lock_file, "rb") as handle:
+        with open(lock_file or candidate, "rb") as handle:
             return try_lock(handle)
     except FileNotFoundError:
-        return lock_file != candidate
+        return lock_file is not None and candidate.is_dir()
     except OSError:  # unreadable: not trazo's to remove
         return False
 
@@ -149,6 +150,21 @@ def holds_text(path: Path, text: str) -> bool:
     reads them). Bytes that are not UTF-8, such as a file re-saved by hand in
     another encoding, never do: the file differs instead of raising."""
     return path.read_text(encoding="utf-8", errors="surrogateescape") == text
+
+
+def keep_newest[T](entries: list[T], count: int, size: int, measure: Callable[[T], int],
+                   pending: bool) -> list[T]:
+    """The newest `entries` within `count` entries and `size` (by `measure`),
+    always at least one. A `pending` last entry (a save not yet published) is
+    not counted: if its publication fails, the next read drops it, and the
+    oldest entry must still be there."""
+    spare = 1 if pending and entries else 0
+    entries = entries[-(count + spare):]
+    sizes = [measure(entry) for entry in entries[:len(entries) - spare]]
+    while len(sizes) > 1 and sum(sizes) > size:  # drop the oldest
+        entries.pop(0)
+        sizes.pop(0)
+    return entries
 
 
 def write_json(path: Path, data: Any, *, durable: bool = False, **dump: Any) -> None:

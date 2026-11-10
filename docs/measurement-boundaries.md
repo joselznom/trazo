@@ -107,7 +107,8 @@ is invisible. Temporaries of files never written again stay; new papers'
 `.setup-*` folder and `trazo new`'s staging folder after a kill (code reading).
 
 Durability: user data is synced (`portable.sync`): file and folder `fsync` for
-histories, comments, conflict copies and the files `trazo update` writes, and
+histories, comments, the edit review's baseline, conflict copies and the files
+`trazo update` writes, and
 `F_FULLFSYNC` on macOS for the files a save publishes (sources, table specs,
 diagrams), since macOS `fsync` leaves data in the drive's cache. Build outputs
 are not synced: a build makes them again. Measured with `perf_counter` on APFS

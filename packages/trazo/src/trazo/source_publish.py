@@ -82,12 +82,12 @@ def _keep(source: Path, name: str, kind: str) -> Path:
     target = _copy_path(name, kind)
     try:
         os.replace(source, target)
+        sync_folder(target.parent)
     except OSError as exc:
         if exc.errno != errno.EXDEV:  # the review folder is on another disk: copy it
             raise
         write_atomic(target, source.read_bytes(), durable=True)
         source.unlink()
-    sync_folder(target.parent)
     return target
 
 
