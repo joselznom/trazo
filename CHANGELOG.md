@@ -110,19 +110,35 @@ Internal changes (tests, CI, refactoring) stay out.
   steps and commands after 1 hour (`[build] timeout` in trazo.toml), each with
   an error that says what stopped and keeps the earlier Word file. The
   preview's tables command stops after 20 minutes and says so on the page; a
-  build running elsewhere no longer freezes the preview (it says so and
-  retries), and a table save during one fails after 20 seconds instead of
-  waiting. Pandoc that could not finish a page is retried by itself. A build
+  build running elsewhere no longer freezes the preview (it catches up as soon
+  as that build ends), and a table save during one fails after 20 seconds
+  instead of waiting. Pandoc that could not finish a page is retried by itself. A build
   whose script leaves a helper program running is no longer reported as
   timed out after 20 minutes, nor stuck "running" in the preview. Stopping
   the preview, Ctrl+C or a cancelled agent call also ends the programs they
   started. `TRAZO_PANDOC_TIMEOUT`, `TRAZO_UV_TIMEOUT` and
   `PREVIEW_TABLES_TIMEOUT` set other limits in seconds.
+- A save, build or paper update that is killed (a crash, a forced quit) no
+  longer leaves its temporary files behind for good: the next save of the same
+  file, or the next Word build, removes them once they are 10 minutes old, and
+  new papers' `.gitignore` hides them from git meanwhile. A failed save at the
+  undo limit (200 table or diagram changes, 50 manuscript saves) no longer
+  drops the oldest undo, and after a failed manuscript save Undo save works at
+  once instead of first reporting a changed file. A damaged table or diagram
+  undo history is set aside in a separate file, as the manuscript's already
+  is, instead of blocking every save. Saves now reach the disk before trazo
+  reports them (on a Mac, past the drive's cache for the files you write), and
+  a paper update killed midway leaves `scripts/trazo` executable.
 - The word counts no longer fail on a manuscript whose `::: abstract` block
   holds a raw HTML `<header>`; clearing a table note whose closing `:::` line
   ends in a stray carriage return or non-breaking space removes it instead of
   answering "server error"; and a comment change sent without a comment id is
   refused as an invalid request instead of "no comment with id None".
+
+### Upgrade notes
+
+- `trazo update` adds the lines that hide trazo's temporary files to
+  `.gitignore`; if you changed that file, merge `.gitignore.new` into it.
 
 ### Removed
 

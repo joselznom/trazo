@@ -35,12 +35,12 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from uuid import uuid4
 
-from .portable import ExchangeUnsupported, exchange, replace
-from .review_storage import REVIEW_DIR, ROOT, write_atomic
+from .portable import ExchangeUnsupported, exchange, replace, sync, sync_file, sync_folder
+from .review_storage import ORPHAN_SECONDS, REVIEW_DIR, ROOT, write_atomic
 
 CONFLICTS_DIR = REVIEW_DIR / "conflicts"
 DISPLACED_DIR = REVIEW_DIR / "displaced"
-DISPLACED_GRACE = 600  # seconds a program may keep writing to a file it opened before a save
+DISPLACED_GRACE = ORPHAN_SECONDS  # seconds a program may keep writing to a file it opened before a save
 
 
 @dataclass
@@ -82,24 +82,34 @@ def _keep(source: Path, name: str, kind: str) -> Path:
     target = _copy_path(name, kind)
     try:
         os.replace(source, target)
+        sync_file(target)  # a late write into a parked file may not be on the disk yet
+        sync_folder(target.parent)
     except OSError as exc:
         if exc.errno != errno.EXDEV:  # the review folder is on another disk: copy it
             raise
-        target.write_bytes(source.read_bytes())
+        write_atomic(target, source.read_bytes(), durable=True)
         source.unlink()
     return target
 
 
 def _keep_bytes(data: bytes, name: str, kind: str) -> Path:
     target = _copy_path(name, kind)
-    write_atomic(target, data)
+    write_atomic(target, data, durable=True)
     return target
 
 
 def publish(path: Path, data: bytes, expected: bytes, name: str) -> Publication:
     """Put `data` at `path` only if the file it replaces still holds `expected`
     (read under review_lock); otherwise publish nothing and keep `data` as a
-    conflict copy. `name` is the file's repository path."""
+    conflict copy. `name` is the file's repository path. The new file reaches
+    the disk before it takes the name, and the folder after (portable.sync,
+    F_FULLFSYNC on macOS), so a power loss leaves either version whole."""
+    result = _publish(path, data, expected, name)
+    sync_folder(path.parent, full=True)
+    return result
+
+
+def _publish(path: Path, data: bytes, expected: bytes, name: str) -> Publication:
     try:
         mode = stat.S_IMODE(path.stat().st_mode)
     except FileNotFoundError:  # removed since the locked read: the exchange below says so
@@ -109,7 +119,9 @@ def publish(path: Path, data: bytes, expected: bytes, name: str) -> Publication:
     try:
         with os.fdopen(fd, "wb") as handle:
             handle.write(data)
-        os.chmod(tmp, mode)  # mkstemp creates 0600
+            handle.flush()
+            os.chmod(tmp, mode)  # mkstemp creates 0600
+            sync(handle.fileno(), full=True)
         exchange(tmp, path)
     except ExchangeUnsupported:
         return _replace_checked(path, tmp, data, expected, name)

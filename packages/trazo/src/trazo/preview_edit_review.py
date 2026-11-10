@@ -76,7 +76,7 @@ def load() -> dict[str, Any] | None:
 
 def save(store: dict[str, Any]) -> None:
     from . import preview
-    write_json(preview.EDITS_PATH, store)
+    write_json(preview.EDITS_PATH, store, durable=True)
 
 
 def ensure() -> dict[str, Any]:
@@ -211,7 +211,8 @@ def change_edits(request: Any) -> dict[str, Any]:
             # rejection first, and the text it replaces is in history if trazo dies.
             history = read_file_history() if history is None else history
             history.append({"time": time.strftime("%Y-%m-%d %H:%M:%S"), "at": time.time_ns(), "file": name, "kind": "reject",
-                            "before_text": text, "before_sha": sha256_of(data), "after_sha": sha256_of(new)})
+                            "before_text": text, "before_sha": sha256_of(data), "after_sha": sha256_of(new),
+                            "pending": True})
             save_file_history(history)
             result = publish(path, new, data, name)
             warnings += [result.warning] if result.warning else []

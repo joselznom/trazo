@@ -80,14 +80,16 @@ def _set_version(path: Path, new_content: bytes) -> bool:
     moved = manifest.VERSION_LINE.sub(lambda _: match[0], data, count=1)
     if moved == data:
         return False
-    write_atomic(path, moved)
+    write_atomic(path, moved, durable=True)
     return True
 
 
 def _write(target: Path, data: bytes, executable: bool) -> None:
-    write_atomic(target, data)
+    # A new executable gets its x bits before it takes its name: the rerun of
+    # a killed update compares content only, so it would never add them.
+    write_atomic(target, data, 0o755 if executable else 0o644, durable=True)
     if executable:
-        make_executable(target)
+        make_executable(target)  # an existing file keeps its mode through write_atomic
 
 
 def _write_new(folder: Path, path: str, data: bytes, executable: bool, report: UpdateReport) -> None:

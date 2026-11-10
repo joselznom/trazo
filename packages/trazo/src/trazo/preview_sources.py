@@ -14,14 +14,13 @@ import os
 import time
 from pathlib import Path
 from typing import Any
-from uuid import uuid4
 
 from . import preview_edit_review, preview_locate, source_publish
 from .expand import Values, load_entries, resolve_include
 from .local_server import Conflict, NotFound
 from .local_server import RequestError as CommentError
-from .portable import can_exchange, replace
-from .review_storage import StoreError, read_list, review_lock, write_json
+from .portable import can_exchange
+from .review_storage import StoreError, keep_newest, quarantine, read_list, review_lock, write_json
 
 
 def sha256_of(data):
@@ -68,6 +67,9 @@ def read_file_history() -> list[dict[str, Any]]:
 
     A damaged undo store cannot safely describe an earlier manuscript. The first
     request reports its preserved copy; later requests record a new history.
+    A save is recorded "pending" before its file is published; reading settles
+    it (resolve_pending), so a save that failed or was killed leaves the undo
+    history as it was before it.
     """
     from . import preview
     path = preview.FILE_HISTORY_PATH
@@ -81,15 +83,28 @@ def read_file_history() -> list[dict[str, Any]]:
                 raise StoreError("invalid source history entry")
         json.dumps(entries, ensure_ascii=False).encode("utf-8")
     except (StoreError, UnicodeEncodeError) as exc:
-        backup = path.with_name(f"{path.stem}.corrupt-{uuid4().hex}{path.suffix}")
-        try:
-            replace(path, backup)
-        except OSError as error:
-            raise StoreError(f"Source history is corrupt and could not be preserved: {error}. "
-                             f"No manuscript text was changed. Check the filesystem error and retry.") from error
-        raise StoreError(f"Source history is corrupt; preserved unchanged at {backup}. "
-                         f"Retry your action to start new undo history. Previous undo entries are unavailable.") from exc
-    return entries
+        quarantine(path, "Source history", exc)
+    return [settled for settled in map(resolve_pending, entries) if settled is not None]
+
+
+def resolve_pending(entry: dict[str, Any]) -> dict[str, Any] | None:
+    """A pending save: dropped (None) when its file still holds the text from
+    before it, settled when it holds the saved text; otherwise (a third
+    version, or an unreadable file) kept pending, and undo refuses it."""
+    from . import preview
+    if not entry.get("pending"):
+        return entry
+    try:
+        current: str | None = sha256_of((preview.ROOT / entry["file"]).read_bytes())
+    except FileNotFoundError:
+        current = None
+    except OSError:
+        return entry
+    if current == entry.get("before_sha"):
+        return None
+    if current == entry["after_sha"]:
+        return {key: value for key, value in entry.items() if key != "pending"}
+    return entry
 
 
 def source_state(file, path, data, text):
@@ -122,12 +137,9 @@ def collided(file, path, result):
 
 def save_file_history(entries):
     from . import preview
-    entries = entries[-preview.FILE_HISTORY_LIMIT:]
-    sizes = [len(e.get("before_text", "")) for e in entries]
-    while len(entries) > 1 and sum(sizes) > preview.FILE_HISTORY_BYTES:  # drop the oldest
-        entries.pop(0)
-        sizes.pop(0)
-    write_json(preview.FILE_HISTORY_PATH, entries)
+    entries = keep_newest(entries, preview.FILE_HISTORY_LIMIT, preview.FILE_HISTORY_BYTES,
+                          lambda e: len(e.get("before_text", "")), bool(entries) and bool(entries[-1].get("pending")))
+    write_json(preview.FILE_HISTORY_PATH, entries, durable=True)
 
 
 def get_source(file):
@@ -194,7 +206,7 @@ def change_source(request):
             if new != data:
                 entries.append({"time": time.strftime("%Y-%m-%d %H:%M:%S"), "at": time.time_ns(), "file": file,
                                 "before_text": old, "before_sha": current,
-                                "after_sha": sha256_of(new)})
+                                "after_sha": sha256_of(new), "pending": True})
                 save_file_history(entries)
                 result = source_publish.publish(path, new, data, file)
                 if not result.published:

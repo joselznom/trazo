@@ -41,7 +41,6 @@ import json
 import os
 import shutil
 import sys
-import tempfile
 import zipfile
 from collections.abc import Callable
 from pathlib import Path
@@ -61,7 +60,7 @@ from .build_inputs import (
 )
 from .build_lock import child_env, locked
 from .project import ASSETS_DIR, PROJECT, Project
-from .review_storage import write_atomic, write_json
+from .review_storage import scratch_folder, write_atomic, write_json
 
 STATE_NAME = "steps.json"
 BUILD_ENV = "TRAZO_BUILD_ENV"
@@ -566,8 +565,8 @@ class Builder:
         self.did(f"docx: {name}")
         self.forget(f"docx:{name}")
         output.parent.mkdir(parents=True, exist_ok=True)
-        with tempfile.TemporaryDirectory(prefix=".trazo-", dir=output.parent) as temporary:
-            target = Path(temporary) / output.name
+        with scratch_folder(output.parent, ".trazo-") as temporary:
+            target = temporary / output.name
             self.run_pandoc(self.pandoc_args(source, numbering, target))
             for step in order(after):  # before docx-finish
                 if step["run"]:

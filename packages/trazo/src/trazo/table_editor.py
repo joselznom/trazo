@@ -302,7 +302,7 @@ def publish(label: str, spec: dict[str, Any], source: dict[str, Any], text: str)
     document save's `warning`, if any, for the reply."""
     from .preview_sources import change_source
     with tb.review_lock():
-        tb.write_atomic(tb.spec_path(label), tb.dump_spec(spec))
+        tb.write_atomic(tb.spec_path(label), tb.dump_spec(spec), full=True)
     tb.render_one(label)
     try:
         saved = change_source({"file": source["file"], "text": text, "base_sha256": source["sha256"]})

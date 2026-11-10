@@ -65,6 +65,10 @@ save makes the next save a 409 instead of overwriting it.
   APFS, not on Linux), so a writer holding it open still writes into a kept
   file. The fault harness accepts exactly this case, checking that the new text
   is published and the old text is in undo history.
+- Power loss: either path flushes the new file to the disk before it takes the
+  name and the folder after (`F_FULLFSYNC` on macOS, about 7 ms more per save),
+  so a power loss should leave one whole version. This bounds the loss by that
+  policy; no forced power-off was run ([storage limits](measurement-boundaries.md#storage-and-recovery-limits)).
 - Linux and Windows were not run locally; network filesystems were not tested.
 
 ## Evidence
