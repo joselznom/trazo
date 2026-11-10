@@ -64,32 +64,7 @@
     $("#te-ftext").textContent = text.startsWith("Saved") ? "Saved automatically · ⌘Z undoes" : text;
     $("#te-fdot").className = "te-dot" + (error ? " err" : busy || pending.size ? " warn" : "");
   }
-  let flashTimer = null;
-  // A short notice; with `action` ({label, run}) it stays longer and offers
-  // a button (Undo after a comment change). Hovering keeps it open.
-  function flash(text, action) {
-    let el = $(".te-flash");
-    if (!el) {
-      el = h("div", { class: "te-flash", role: "status" });
-      el.addEventListener("mouseenter", () => clearTimeout(flashTimer));
-      el.addEventListener("mouseleave", () => { flashTimer = setTimeout(() => el.remove(), 2600); });
-      document.body.append(el);
-    }
-    el.textContent = text;
-    if (action) el.append(h("button", { type: "button", text: action.label,
-      onclick: () => { clearTimeout(flashTimer); el.remove(); action.run(); } }));
-    clearTimeout(flashTimer);
-    flashTimer = setTimeout(() => el.remove(), action ? 6000 : 2600);
-  }
-  function banner(content, kind, actions) {
-    const el = $("#te-banner");
-    el.replaceChildren();
-    if (!content) { el.hidden = true; return; }
-    el.className = "te-banner" + (kind === "err" ? " err" : "");
-    el.append(h("div", { class: "te-grow" }, content), ...(actions || []),
-      h("button", { type: "button", class: "te-icon", "aria-label": "Dismiss", text: "✕", onclick: () => banner(null) }));
-    el.hidden = false;
-  }
+  const { flash, banner } = T.messages(h);
 
   // ---------------------------------------------------------------- spec helpers
   // Spec path of a leaf of the model: <id>, <group>.<leaf>, or <pivot>.<leaf>
