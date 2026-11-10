@@ -4,7 +4,8 @@ The preview's paths and state stay in trazo.preview, and this code reads them fr
 there when it runs (preview.NAME), so patching them on trazo.preview reaches it.
 
 The tables stages take the build lock without waiting: while another build holds
-it (build_lock.Busy), the pass runs again on the next tick, with no page error. The
+it (build_lock.Busy), their work stays pending and runs on the next tick; the
+pages still rebuild, and none shows an error. The
 project's tables command has 1200 seconds, or $PREVIEW_TABLES_TIMEOUT's (as
 PREVIEW_DOCX_TIMEOUT for the Word job that runs the same generator).
 """
@@ -14,7 +15,7 @@ import time
 from typing import cast
 
 from . import dependencies, labels, preview_edit_review, processes, table
-from .build_lock import WAITING, Busy, build_lock, child_env
+from .build_lock import Busy, build_lock, child_env
 
 
 def render_spec_tables() -> bool:
@@ -184,8 +185,9 @@ def watch(interval=0.5, stop_event=None, previous=None, numbers=None, failure=""
     outputs or data a generator writes), otherwise after 1, 2, 4 ... 30 s,
     and once it completes every page it could not show is rebuilt (only
     those that raised, after a PageFailed), so no change made before or
-    during the failure is skipped. Another build holding the lock is no
-    failure: the pass runs again on the next tick, its changes kept."""
+    during the failure is skipped. A tables stage that finds another build
+    holding the lock is no failure: the pages are built with the tables they
+    have, and the stage runs again on the next tick."""
     from . import preview
     previous = snapshot() if previous is None else previous
     # The numbers the pages used; unknown when sources changed during the
@@ -197,12 +199,18 @@ def watch(interval=0.5, stop_event=None, previous=None, numbers=None, failure=""
     if snapshot() != previous:
         shown = None
     failures, retry_at, failed_on = 0, 0.0, None
-    waiting = False  # another build holds the lock: said once, not a failure
+    waiting = False  # a tables stage found another build's lock: it stays pending, said once
     again = list(preview.DOCS) if failure else []  # pages a retry rebuilds
     outputs = [preview.ROOT / preview.PROJECT.relative(key) for key in ("table_output", "table_data")]
 
     def generated(path):
         return any(path.is_relative_to(folder) for folder in outputs)
+
+    def stage(run):  # a tables stage's result, None while another build holds the lock (not a failure)
+        try:
+            return run()
+        except Busy:
+            return None
 
     def sources(stamps):  # a failed table step may still have written its outputs
         return {path: stamp for path, stamp in stamps.items() if not generated(path)}
@@ -213,7 +221,7 @@ def watch(interval=0.5, stop_event=None, previous=None, numbers=None, failure=""
         elif stop_event.wait(interval):
             return
         requested: set[str] = set()
-        current, checked, before = None, time.time(), previous
+        current, checked = None, time.time()
         try:
             current = snapshot()
             if failure and sources(current) == failed_on and time.monotonic() < retry_at:
@@ -221,7 +229,7 @@ def watch(interval=0.5, stop_event=None, previous=None, numbers=None, failure=""
                 continue
             with preview.LOCK:  # pages asked for although no source changed (accepted edits)
                 requested, preview.WATCHER["rebuild"] = cast(set[str], preview.WATCHER["rebuild"]), set()
-            if current == previous and not requested and not failure:
+            if current == previous and not requested and not failure and not waiting:
                 preview.WATCHER["synced"] = checked  # preview_start waits for it (trazo.preview_inputs)
                 continue
             changed = {p for p in current.keys() | previous.keys()
@@ -233,29 +241,33 @@ def watch(interval=0.5, stop_event=None, previous=None, numbers=None, failure=""
             specs = [preview.ROOT / preview.PROJECT.relative(key) for key in preview.TABLE_SPEC_SOURCES]
             if any(p.is_relative_to(folder) for p in changed for folder in specs):
                 render_pending = True
-            rendered = False
+            rendered, regenerated, busy = False, False, False
             if render_pending and not tables_pending:
-                if not preview.render_spec_tables():
+                if (done := stage(preview.render_spec_tables)) is False:
                     # The table error replaces the watcher's, and its recovery rebuilds every page.
                     failure, failures, again = "", 0, []
                     continue  # unrelated prose edits must not hide the table error
-                render_pending, rendered = False, True
-                output_dir = table.OUTPUT_DIR
-                # Absorb the rendered Markdown so it does not trigger a second build.
-                previous.update({p: stamp for p, stamp in snapshot().items()
-                                 if p.is_relative_to(output_dir)})
+                if done:
+                    render_pending, rendered = False, True
+                    output_dir = table.OUTPUT_DIR
+                    # Absorb the rendered Markdown so it does not trigger a second build.
+                    previous.update({p: stamp for p, stamp in snapshot().items()
+                                     if p.is_relative_to(output_dir)})
+                busy = done is None
             if tables_pending:
-                if not preview.regenerate_tables():
+                if (done := stage(preview.regenerate_tables)) is False:
                     failure, failures, again = "", 0, []  # as for a failed render above
                     continue  # keep the error visible until the text is fixed
-                tables_pending = render_pending = False
-                # Absorb generated outputs only. Source edits made while the
-                # generator was running must still trigger the next rebuild.
-                previous = {p: stamp for p, stamp in previous.items() if not generated(p)}
-                previous.update({p: stamp for p, stamp in snapshot().items() if generated(p)})
-                targets = list(preview.DOCS)
-            else:
-                targets = list(preview.DOCS) if rendered else changed_documents(changed) if changed else []
+                if done:
+                    tables_pending = render_pending = False
+                    # Absorb generated outputs only. Source edits made while the
+                    # generator was running must still trigger the next rebuild.
+                    previous = {p: stamp for p, stamp in previous.items() if not generated(p)}
+                    previous.update({p: stamp for p, stamp in snapshot().items() if generated(p)})
+                    regenerated = True
+                busy = busy or done is None  # the pages are built with the tables they have
+            targets = (list(preview.DOCS) if rendered or regenerated
+                       else changed_documents(changed) if changed else [])
             # Pages asked for, and those showing a failure until they build again.
             targets += [name for name in preview.DOCS if (name in requested or name in again) and name not in targets]
             # One label index for the pages built now: an edit meanwhile
@@ -277,14 +289,10 @@ def watch(interval=0.5, stop_event=None, previous=None, numbers=None, failure=""
                 raise PageFailed(failed)
             if failure:
                 print("[preview] watcher recovered", flush=True)
-            failure, failures, again, waiting = "", 0, [], False
-        except Busy:  # another build holds the lock: the next tick runs this pass again, with no page error
-            previous = before
-            with preview.LOCK:
-                cast(set[str], preview.WATCHER["rebuild"]).update(requested)
-            if not waiting:
-                print(f"[preview] {WAITING}", flush=True)
-            waiting = True
+            failure, failures, again = "", 0, []
+            if busy and not waiting:
+                print("[preview] tables: waiting for another build of this project", flush=True)
+            waiting = busy
         except Exception as exc:  # keep watching; every page says why it is old
             # Nothing of this pass is lost: table work that failed stays pending, and
             # the retry rebuilds the pages that failed (every page after a watcher failure).

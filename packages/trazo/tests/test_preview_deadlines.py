@@ -77,18 +77,19 @@ class PreviewDeadlineTests(PreviewCase):
         self.assertTrue(wait_until(lambda: status(port)["manuscript"]["ok"]))
         spec = self.root / "tables/specs/results.json"
         section = self.root / "manuscript/main/01_introduction.md"
+        log = lambda: (self.root / ".build/preview.log").read_text(encoding="utf-8")  # noqa: E731
         with build_lock(Project(self.root, DEFAULTS, True), lambda text: None):
             spec.write_text(spec.read_text() + " ")
             section.write_text(section.read_text() + "\nWrittenDuringAnotherBuild.\n")
-            # Long enough for the old backoff to reach 4 s retries; no page may show an error meanwhile.
-            held_until = time.monotonic() + 8
-            while time.monotonic() < held_until:
-                state = status(port)["manuscript"]
-                self.assertEqual(state["error"], "", "another build's lock was shown as a failure")
-                time.sleep(0.25)
+            self.assertTrue(wait_until(lambda: "tables: waiting for another build" in log()), log())
+            # The text keeps following during the other build; only the tables wait.
+            self.assertTrue(wait_until(lambda: b"WrittenDuringAnotherBuild" in get(port, "/manuscript.html")))
+            self.assertFalse(wait_until(lambda: status(port)["manuscript"]["error"], timeout=4),
+                             "another build's lock was shown as a failure")
+            regenerated = log().count("tables: regenerated")
         released = time.monotonic()
-        self.assertTrue(wait_until(lambda: b"WrittenDuringAnotherBuild" in get(port, "/manuscript.html"), timeout=30))
-        self.assertLess(time.monotonic() - released, 3, "the edit waited for a backoff after the lock was released")
+        self.assertTrue(wait_until(lambda: log().count("tables: regenerated") > regenerated, timeout=30), log())
+        self.assertLess(time.monotonic() - released, 3, "the tables waited for a backoff after the lock was released")
         self.assertTrue(status(port)["manuscript"]["ok"], status(port))
 
     def test_a_table_save_waits_for_another_build_only_so_long(self) -> None:

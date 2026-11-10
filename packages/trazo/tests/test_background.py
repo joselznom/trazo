@@ -1,6 +1,5 @@
 """Real command lifecycle: logs, cancellation, timeouts and stale callbacks."""
 
-import os
 import sys
 import tempfile
 import time
@@ -8,6 +7,7 @@ import unittest
 from pathlib import Path
 
 import _support  # noqa: F401  (sets TRAZO_ROOT before trazo loads)
+from test_processes import DETACHED
 
 from trazo.background import CommandJob
 from trazo.portable import kill_group, pid_alive
@@ -100,11 +100,7 @@ class CommandTests(unittest.TestCase):
         self.assertIn("kept its output open", state["tail"][-1])
 
     def test_a_detached_child_holding_the_log_does_not_keep_the_job_running(self):
-        # The log passed on: Windows gives a DETACHED_PROCESS child no standard handles otherwise.
-        detached = (", stdout=sys.stdout, stderr=sys.stderr, "
-                    + ("creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP"
-                       if os.name == "nt" else "start_new_session=True"))
-        state = self.held(detached)
+        state = self.held(DETACHED)
         self.assertEqual((state["state"], state["exit_code"]), ("ok", 0), state)
 
 

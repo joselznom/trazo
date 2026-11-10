@@ -62,9 +62,10 @@ build is no longer reported as a timeout after 20 minutes. A holder outside the
 group (a deliberately detached session) is left running.
 
 The watcher takes the build lock without waiting: while another build holds it,
-the pass runs again on the next 0.5 s tick with its changes kept, logging
-"waiting for another build of this project" once and showing no page error;
-real failures keep the error and the backoff above. Table saves from the preview wait 20 s for the lock,
+the tables stages stay pending and run again on the next 0.5 s tick, the pages
+still rebuild with the tables they have, the log says "tables: waiting for
+another build of this project" once and no page shows an error; real failures
+keep the error and the backoff above. Table saves from the preview wait 20 s for the lock,
 then answer 503 and write nothing. The preview stops every command it started
 when it shuts down (and Python's exit does the same for any process), so a
 page's Pandoc no longer outlives it. A page whose Pandoc could not run, ran
