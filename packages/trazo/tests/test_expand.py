@@ -12,7 +12,7 @@ from unittest.mock import patch
 
 import _support
 
-from trazo import build_graph, dependencies, expand, submission_check
+from trazo import build_inputs, dependencies, expand, submission_check
 
 
 def write_values(path, values):
@@ -149,7 +149,7 @@ class SubstitutionTests(unittest.TestCase):
         doc.write_text(f"!include {part}\n\n{fenced}", encoding="utf-8")
         out = expand.expand_files([doc])
         self.assertTrue(out.startswith("Included part.\n") and out.endswith(fenced), out)
-        self.assertEqual(build_graph.expand_includes([doc]), [doc, part])
+        self.assertEqual(build_inputs.expand_includes([doc]), [doc, part])
         self.assertEqual(list(submission_check.includes(doc)), [part])
 
     def test_circular_include_fails(self):

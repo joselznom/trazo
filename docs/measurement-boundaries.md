@@ -93,8 +93,15 @@ failing in the harness. The [design disposition](measurement-writer-limits.md)
 explains why no incomplete hard-link or platform-specific exchange protocol is
 presented as a general solution.
 
-A first build during an edit can contain the earlier snapshot; the next build
-incorporates the change. Single-build snapshot coherence remains unproven.
+A Word build snapshots its watched inputs (content hash, mtime, size, inode)
+before reading them and again just before publishing; on any difference it
+discards the result, retries once, then fails and keeps the earlier DOCX. Steps,
+the table render and the diagram export compare pre-run and post-run snapshots
+and write no record when an input changed. So a published DOCX and its stamp
+describe one state of those inputs, and undoing a mid-build edit rebuilds it.
+Not covered: an edit undone with its mtime and inode restored, files outside the
+watched set (paths Pandoc resolves by itself, a step's undeclared reads), and
+documents a `[documents] build` command builds (mtime freshness).
 Persistent disk/permission/tool failures must be repaired in the environment;
 automatic recovery means the next ordinary operation succeeds after that fault
 is removed. ENOSPC was injected through file APIs; the owner's disk was not filled.
