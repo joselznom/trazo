@@ -124,7 +124,10 @@ class Counter(HTMLParser):
             self.heads[-1]["text"] += data
         if not data or self.inside(lambda t, i, c, s: s):
             return
-        in_abstract = in_header and self.inside(lambda t, i, c, s: t == "div" and "abstract" in c)
+        # The title block's abstract is a div inside the <header>; a raw <header>
+        # inside a `::: abstract` of the main text is not it.
+        header = next((n for n, entry in enumerate(self.stack) if entry[0] == "header"), len(self.stack))
+        in_abstract = any(t == "div" and "abstract" in c for t, i, c, s in self.stack[header:])
         if in_header and not in_abstract and not self.total:
             return
         # Inline markup can split a word (H<sub>2</sub>O): only whitespace or
@@ -138,7 +141,7 @@ class Counter(HTMLParser):
             return
         note = next((i for t, i, c, s in reversed(self.stack) if t == "li" and i.startswith("fn")), None)
         if in_abstract:
-            self.yaml_abstract += words
+            self.yaml_abstract = (self.yaml_abstract or 0) + words  # 0 since its div opened
         elif note and self.inside(lambda t, i, c, s: "footnotes" in c):
             self.notes[note] = self.notes.get(note, 0) + words
         elif self.heads:
