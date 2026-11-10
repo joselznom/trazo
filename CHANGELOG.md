@@ -51,6 +51,8 @@ Internal changes (tests, CI, refactoring) stay out.
 ### Changed
 
 - Saved changes appear sooner in a visible preview, especially in longer papers.
+- An open preview asks the server half as often while nothing changes, and
+  still shows a saved change as soon as it is built.
 - A change saved while the preview is still opening shows at once: its page
   builds before the other documents finish their first build.
 - The preview's selection bar tells apart what reaches Word from what does
