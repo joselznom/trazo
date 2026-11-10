@@ -238,7 +238,7 @@ class ShellTests(PreviewBrowserTestCase):
                 preview.STATE["comments"]["version"] += 1
             self.wait_for(f"performance.timeOrigin !== {origin} && document.readyState === 'complete'")
 
-    def test_a_build_between_serving_the_page_and_its_first_status_still_reloads(self):
+    def test_a_build_between_serving_the_page_and_its_first_status_still_reaches_it(self):
         page = preview.OUT_DIR / "manuscript.html"
         # The page's status requests wait in the browser until released, so
         # the next build lands after it was served and before it polls.
@@ -254,12 +254,12 @@ class ShellTests(PreviewBrowserTestCase):
         try:
             self.chrome.call("Page.navigate", {"url": self.url}, self.session)
             self.wait_for("document.readyState === 'complete' && document.body?.innerText.includes('Another paragraph.')")
-            served = self.evaluate("performance.timeOrigin")
             page.write_text(page.read_text().replace("Another paragraph.", "Next build."))
             with preview.LOCK:
                 preview.STATE["manuscript"]["version"] += 1
+                version = preview.STATE["manuscript"]["version"]
             self.evaluate("window.released = true")
-            self.wait_for(f"performance.timeOrigin !== {served} && document.body?.innerText.includes('Next build.')")
+            self.wait_for(f"document.body?.innerText.includes('Next build.') && loaded?.manuscript === {version}")
         finally:
             self.chrome.call("Page.removeScriptToEvaluateOnNewDocument", {"identifier": hold}, self.session)
 
