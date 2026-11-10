@@ -39,8 +39,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from . import __version__
-from .portable import no_window
+from . import __version__, processes
 from .project import CHROME_COMMANDS, CHROME_PATHS
 from .review_storage import write_json
 
@@ -120,8 +119,8 @@ def machine_name() -> str:
 def version_line(command: list[str]) -> str:
     """The first line `command --version` prints, or "" when it cannot run."""
     try:
-        result = subprocess.run([*command, "--version"], capture_output=True, timeout=30, **no_window())
-    except (OSError, subprocess.SubprocessError):
+        result = processes.run([*command, "--version"], timeout=30)
+    except OSError:  # processes.Timeout included
         return ""
     lines = (result.stdout or result.stderr).decode("utf-8", errors="replace").strip().splitlines()
     return lines[0].strip() if result.returncode == 0 and lines else ""

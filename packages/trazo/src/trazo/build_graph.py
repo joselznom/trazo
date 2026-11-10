@@ -40,7 +40,6 @@ import hashlib
 import json
 import os
 import shutil
-import subprocess
 import sys
 import tempfile
 import zipfile
@@ -48,7 +47,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from . import __version__
+from . import __version__, pandoc_run, processes
 from .build_inputs import (
     ATTEMPTS,
     Snapshot,
@@ -230,13 +229,8 @@ class Builder:
         """trazo's version and the first line of `pandoc --version`, read
         once per build."""
         if self._versions is None:
-            self._versions = {"trazo": __version__}
-            try:
-                result = subprocess.run([*self.project.command("pandoc"), "--version"], cwd=self.root,
-                                        capture_output=True, text=True)
-                self._versions["pandoc"] = (result.stdout.splitlines() or [""])[0]
-            except OSError:
-                self._versions["pandoc"] = ""
+            self._versions = {"trazo": __version__,
+                              "pandoc": pandoc_run.version(self.project.command("pandoc"), self.root)}
         return self._versions
 
     def did(self, label: str) -> None:
@@ -287,7 +281,10 @@ class Builder:
         overrides in $TRAZO_BUILD_ENV for a trazo build it calls."""
         env = env or {**os.environ, **self.env, BUILD_ENV: json.dumps(self.overrides, sort_keys=True)}
         try:
-            result = subprocess.run(argv, cwd=self.root, env=child_env(env))
+            result = processes.run(argv, cwd=self.root, env=child_env(env), capture=False,
+                                   timeout=self.project.config["build"]["timeout"] or None)
+        except processes.Timeout as exc:
+            raise BuildError(f"{what}: {exc} ([build] timeout)") from None
         except FileNotFoundError as exc:
             raise BuildError(f"{what}: {argv[0]} not found; install it, or run trazo doctor "
                              "to check the tools") from exc
@@ -477,7 +474,6 @@ class Builder:
 
     def run_pandoc(self, args: list[str]) -> None:
         """Run Pandoc through pandoc_run (trazo's cross-references)."""
-        from . import pandoc_run
         command = self.project.command("pandoc")
         try:
             result = pandoc_run.run(args, command=command, cwd=self.root, text=True)

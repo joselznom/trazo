@@ -188,28 +188,28 @@ tables = [{json.dumps(sys.executable)}, "-c", "open('tables.txt', 'w').write('re
         self.assertTrue(output.is_file())
 
     def in_preview(self, action, done):
-        """Run a preview watcher action while a build holds the lock: it
-        waits, says so, and `done()` is false until the build finishes."""
+        """Run a preview watcher action while a build holds the lock: it does
+        not wait (the watcher retries a Busy pass), so `done()` stays false;
+        once the build finished, the same action runs."""
         data = tomllib.loads((self.root / "trazo.toml").read_text())
         paper = project.Project(self.root, project.merge(project.DEFAULTS, data), True)
         holder = self.hold()
-        output, result = io.StringIO(), []
+        output = io.StringIO()
         with patch.object(preview, "PROJECT", paper), patch.object(preview, "ROOT", self.root), \
                 contextlib.redirect_stdout(output):
-            worker = threading.Thread(target=lambda: result.append(action()))
-            worker.start()
-            deadline = time.monotonic() + 60
-            while WAITING not in output.getvalue() and time.monotonic() < deadline:
-                time.sleep(0.05)
-            self.assertIn(f"[preview] {WAITING}", output.getvalue())
+            started = time.monotonic()
+            with self.assertRaises(build_lock.Busy):
+                action()
+            self.assertLess(time.monotonic() - started, 5, "the watcher waited for the other build")
+            self.assertNotIn(WAITING, output.getvalue())
             self.assertFalse(done(output.getvalue()))
             (self.root / "go").write_text("")
-            worker.join(60)
-        self.assertEqual(holder.wait(60), 0)
+            self.assertEqual(holder.wait(60), 0)
+            result = action()
         self.assertTrue(done(output.getvalue()))
-        return result
+        return [result]
 
-    def test_the_preview_regenerates_tables_after_a_running_build(self):
+    def test_the_preview_regenerates_tables_once_a_running_build_ends(self):
         result = self.in_preview(preview.regenerate_tables, lambda _: (self.root / "tables.txt").exists())
         self.assertEqual(result, [True])
 
@@ -227,7 +227,7 @@ tables = [{json.dumps(sys.executable)}, "-c", "open('tables.txt', 'w').write('re
         self.assertEqual(result, [True], output.getvalue())
         self.assertEqual((self.root / "inner.txt").read_text(), "inner")
 
-    def test_the_preview_renders_spec_tables_after_a_running_build(self):
+    def test_the_preview_renders_spec_tables_once_a_running_build_ends(self):
         self.in_preview(preview.render_spec_tables, lambda output: "[preview] tables: rendered" in output)
 
 

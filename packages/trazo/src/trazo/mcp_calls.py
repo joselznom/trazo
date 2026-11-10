@@ -1,8 +1,8 @@
 """How the trazo MCP server (trazo.mcp) runs a tool call: the
 project it names, and `trazo` subprocesses in the project folder, each
-in its own process group, killed on notifications/cancelled or when the
-server exits. Each subprocess call has a finite deadline (1200 seconds by
-default; TRAZO_MCP_TIMEOUT sets positive finite seconds)."""
+in its own process group (trazo.processes), stopped on notifications/cancelled
+or when the server exits. Each subprocess call has a finite deadline (1200
+seconds by default; TRAZO_MCP_TIMEOUT sets positive finite seconds)."""
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ import threading
 from pathlib import Path
 from typing import Any
 
-from . import portable
+from . import processes
 from .project import CONFIG_NAME, ConfigError, Project
 
 
@@ -77,11 +77,13 @@ class Calls:
             self.cancelled[key] = True
             process = self.processes.get(key)
         if process:
-            portable.kill_group(process.pid)
+            processes.stop(process)
 
     def run(self, key, where: Project | Path, *argv: str, env=None) -> subprocess.CompletedProcess:
         """`trazo ARGV` for the call `key`, with `env` added, in the project
-        folder, or in the folder `where` (outside any project: paper_create)."""
+        folder, or in the folder `where` (outside any project: paper_create).
+        A process it started that keeps the output open after it exits is
+        stopped after processes.LINGER seconds, and the result says so."""
         try:
             timeout = float(os.environ.get("TRAZO_MCP_TIMEOUT", "1200"))
         except ValueError:
@@ -92,41 +94,31 @@ class Calls:
         with self.lock:
             if self.closed or self.cancelled.get(key):
                 raise ToolError("cancelled")
-            process = subprocess.Popen(trazo_argv(*argv), cwd=cwd, env={**base, **(env or {})},
-                                       stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                                       encoding="utf-8", errors="replace", **portable.group_options())
-            self.processes[key] = process
+
+        def started(process: subprocess.Popen) -> None:
+            with self.lock:
+                self.processes[key] = process
+                if self.closed or self.cancelled.get(key):
+                    raise ToolError("cancelled")
         try:
-            try:
-                stdout, stderr = process.communicate(timeout=timeout)
-            except subprocess.TimeoutExpired:
-                portable.kill_group(process.pid)
-                try:
-                    stdout, stderr = process.communicate(timeout=5)
-                except subprocess.TimeoutExpired as exc:
-                    # A descendant that detached itself may still hold a pipe open.
-                    stdout, stderr = exc.stdout, exc.stderr
-                    process.kill()
-                    process.wait(timeout=5)
-                finally:
-                    if os.name != "nt":  # Windows reader threads own these streams until EOF.
-                        for stream in (process.stdout, process.stderr):
-                            if stream is not None:
-                                stream.close()
-                output = [value.decode("utf-8", "replace") if isinstance(value, bytes) else value or ""
-                          for value in (stderr, stdout)]
-                message = (f"trazo {' '.join(argv)} timed out after {timeout:g} s; "
-                           "the call was stopped. Fix the blocked command and retry, or increase "
-                           "TRAZO_MCP_TIMEOUT for a deliberately longer operation")
-                raise ToolError((message + "\n" + "\n".join(output)).strip()) from None
+            result = processes.run(trazo_argv(*argv), timeout=timeout, cwd=cwd, env={**base, **(env or {})},
+                                   text=True, started=started)
+        except processes.Timeout as exc:
+            output = [str(value or "") for value in (exc.stderr, exc.stdout)]  # text=True: str
+            message = (f"trazo {' '.join(argv)} timed out after {timeout:g} s; "
+                       "the call was stopped. Fix the blocked command and retry, or increase "
+                       "TRAZO_MCP_TIMEOUT for a deliberately longer operation")
+            raise ToolError((message + "\n" + "\n".join(output)).strip()) from None
         finally:
             with self.lock:
                 self.processes.pop(key, None)
-        return subprocess.CompletedProcess(process.args, process.returncode, stdout, stderr)
+        if isinstance(result, processes.Held):
+            result.stderr += f"\ntrazo: {result.note}\n"
+        return result
 
     def close(self) -> None:
         with self.lock:
             self.closed = True
-            processes = list(self.processes.values())
-        for process in processes:
-            portable.kill_group(process.pid)
+            running = list(self.processes.values())
+        for process in running:
+            processes.stop(process)

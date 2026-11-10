@@ -35,7 +35,7 @@ import urllib.request
 from pathlib import Path
 from typing import Any, NamedTuple
 
-from . import machine
+from . import machine, processes
 
 LATEST_URL = "https://raw.githubusercontent.com/{repository}/main/.claude-plugin/plugin.json"
 GITHUB = re.compile(r"https://github\.com/([\w.-]+/[\w-]+(?:\.[\w-]+)*?)(?:\.git)?/?")
@@ -151,9 +151,8 @@ def plugin_update(args: dict[str, Any]) -> dict[str, Any]:
     env = {**os.environ, CONFIG_ENV[install.app]: str(install.config)}
     for step in steps:
         try:
-            result = subprocess.run([cli, *step], cwd=cwd, env=env, stdin=subprocess.DEVNULL, capture_output=True,
-                                    text=True, timeout=CLI_TIMEOUT, **machine.no_window())
-        except (OSError, subprocess.TimeoutExpired) as exc:
+            result = processes.run([cli, *step], cwd=cwd, env=env, text=True, timeout=CLI_TIMEOUT)
+        except OSError as exc:  # processes.Timeout included
             return {**reply, "error": f"{install.app} {' '.join(step)}: {exc}"}
         if result.returncode:
             return {**reply, "error": last_line(result)}

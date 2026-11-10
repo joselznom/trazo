@@ -2,24 +2,34 @@
 
 The preview's paths and state stay in trazo.preview, and this code reads them from
 there when it runs (preview.NAME), so patching them on trazo.preview reaches it.
+
+The tables stages take the build lock without waiting: while another build holds
+it, the pass fails with build_lock.Busy and is retried like any failure. The
+project's tables command has TABLES_TIMEOUT seconds (PREVIEW_TABLES_TIMEOUT, as
+PREVIEW_DOCX_TIMEOUT for the Word job that runs the same generator).
 """
 
+import os
 import subprocess
 import time
 from typing import cast
 
-from . import dependencies, labels, preview_edit_review, table
-from .build_lock import build_lock, child_env
+from . import dependencies, labels, preview_edit_review, processes, table
+from .build_lock import Busy, build_lock, child_env
+
+TABLES_TIMEOUT = float(os.environ.get("PREVIEW_TABLES_TIMEOUT") or 1200)  # seconds
 
 
 def render_spec_tables() -> bool:
     """Render spec tables, keeping the last page and reporting any failure in its status."""
     from . import preview
     try:
-        with build_lock(preview.PROJECT, lambda text: print(f"[preview] {text}", flush=True)):
+        with build_lock(preview.PROJECT, lambda text: print(f"[preview] {text}", flush=True), wait=0):
             tables = table.render_all()
         failed = [t for t in tables if t.markdown is None]
         error = "; ".join(f"{t.label}: " + "; ".join(i["message"] for i in t.errors) for t in failed)
+    except Busy:  # not the tables' fault: the watcher retries
+        raise
     except Exception as exc:  # a broken spec must not stop the watcher or look like success
         error = f"{type(exc).__name__}: {exc}"
     if error:
@@ -34,8 +44,8 @@ def regenerate_tables():
     """Rerun the tables stage (or command) after a spec change; report a failure."""
     from . import preview
     log = lambda text: print(f"[preview] {text}", flush=True)  # noqa: E731
-    # The tables stage writes build records and outputs: wait for a build running meanwhile.
-    with build_lock(preview.PROJECT, log):
+    # The tables stage writes build records and outputs: never during another build.
+    with build_lock(preview.PROJECT, log, wait=0):
         if not preview.PROJECT.command("tables"):
             from . import build_graph
             try:
@@ -46,8 +56,11 @@ def regenerate_tables():
         else:
             command = preview.PROJECT.command("tables")
             try:  # child_env: a trazo the command calls runs in this turn
-                result = subprocess.run(command, cwd=preview.ROOT, capture_output=True, text=True,
-                                        env=child_env())
+                result = processes.run(command, cwd=preview.ROOT, text=True, env=child_env(),
+                                       timeout=TABLES_TIMEOUT)
+            except processes.Timeout as exc:  # kept pending: the next spec change runs it again
+                exc.hint = "PREVIEW_TABLES_TIMEOUT sets the limit"
+                result = subprocess.CompletedProcess([], 1, "", str(exc))
             except OSError as exc:
                 result = subprocess.CompletedProcess([], 127, "", f"could not run the tables command: {exc}")
             lines = [line for line in result.stderr.splitlines() if line.strip()]

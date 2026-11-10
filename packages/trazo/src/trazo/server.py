@@ -16,7 +16,7 @@ from functools import lru_cache
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
-from . import counts
+from . import counts, processes
 from .frontmatter import separate_title_page
 from .local_server import GuardedHandler, LocalServer
 from .portable import address_in_use
@@ -291,6 +291,7 @@ def serve(port=8765, on_bind=None):
             stop_event.set()
             preview.DOCX_JOB.stop("cancelled")
             diagram_editor.shutdown()
+            processes.stop_all()  # a page's Pandoc, the tables command: none outlives the preview
             for worker in workers:
                 worker.join(timeout=5)
 

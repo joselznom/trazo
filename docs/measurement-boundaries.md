@@ -13,7 +13,7 @@ combined product. Owners remain useful when line numbers move.
 
 | Handler | User-visible behavior and disposition |
 | --- | --- |
-| `background.py:79`, `CommandJob.run` | The owning job records an error and terminates the child. Its cleanup `wait()` still has no local timeout; the universal bounded-process invariant remains open. |
+| `background.py:73`, `CommandJob.run` | The job runs through `processes.run`: it ends when its command exits (a process that keeps the log open is stopped after 5 s and noted in the log), at its deadline, or on cancel; the group is stopped with SIGTERM, then SIGKILL after the job's grace, and every wait has a bound. Corrected in the process-bounds PR. |
 | `browser.py:141`, `Chrome.__init__` | Cleans up and re-raises; does not suppress the original failure. |
 | `browser.py:249`, `Chrome.target` | Cleans up and re-raises. |
 | `browser.py:300`, `Chrome.discard` | Prints a failed close to the server log, never to the page status; `Chrome.close` reaps Chrome before it removes the profile whatever the close reply was, so the failure leaks neither the process nor the profile. Corrected in the silent-errors PR. |
@@ -28,7 +28,7 @@ combined product. Owners remain useful when line numbers move.
 | `preview_locate.py:30`, `lookup` | Optional matching degrades to a space. No source write; a programming error could be hidden. Retained, explicitly limited fallback. |
 | `preview_sources.py:215`, `locate_source` | Optional generated-value matching degrades to an empty mapping. No source write; retained fallback. |
 | `preview_watch.py:22`, `render_spec_tables` | Now marks every document unsuccessful with an actionable table error and retains the last good page. Retry remains pending. Corrected in the table-error PR. |
-| `preview_watch.py:43`, `regenerate_tables` | Captures generator failure as a table error and exposes it in preview state. |
+| `preview_watch.py:43`, `regenerate_tables` | Captures generator failure, or the tables command running past its 1200 s deadline (stopped with its group), as a table error and exposes it in preview state. A build lock held elsewhere fails the pass, which the watcher retries. |
 | `preview_watch.py:116`, `build_all` | Sets the failed document's error and preserves its last good version. The pass then counts as failed (`PageFailed`): the error stays on that page only, is printed once, and only that page is retried with the watcher's backoff below, so fixing a permission alone brings it back. Corrected in the silent-errors PR. |
 | `preview_watch.py:159`, `build_and_watch`, and `:269`, `watch` | An unexpected failure of the first builds or of a watcher pass sets every page's `error` (last good page kept, as for table errors), prints one log line per distinct error and leaves the watcher running. It is retried at once on a new change (table outputs and data a failed generator wrote do not count), otherwise after 1, 2, 4 ... 30 s; table work that failed stays pending, requested rebuilds are put back, and the first complete pass rebuilds every page, reruns the drift check and clears the error, so no change made before or during the failure is skipped. Corrected in the silent-errors PR. |
 | `review_storage.py:52`, `write_atomic` | Removes its temporary file on an ordinary exception and re-raises. Atomic rename is not a multi-file transaction or power-loss durability. SIGKILL may leave an unused temporary file. |
@@ -39,26 +39,42 @@ browser cleanup) are corrected in the silent-errors PR. The two optional
 matching fallbacks are separate from those failures and do not acknowledge a
 source save.
 
-## Scope of the new deadline
+## Scope of the deadlines
 
-MCP tools that use `Calls.run` have a positive finite deadline, 1200 seconds by
-default. Timeout kills the owned process group, bounds pipe draining to five
-seconds, includes captured output and leaves the same MCP session usable. The
-real detached-descendant test proves that a pipe held by a deliberately detached
-process cannot block the reply indefinitely. That process is outside the owned
-group and survives until the test cleans it up.
+Every program trazo runs goes through one runner, `processes.run`, extracted
+from the MCP deadline (`Calls.run` keeps its 1200-second `TRAZO_MCP_TIMEOUT`
+contract). Each command runs in its own group (POSIX: a new session; Windows:
+a job object, nested inside its parent's) and has a finite deadline: Pandoc
+600 s per document across both cross-reference stages (`TRAZO_PANDOC_TIMEOUT`),
+metadata and form-field reads 60 s, `pandoc --version` 30 s, `uv sync` 1800 s
+(`TRAZO_UV_TIMEOUT`), the preview's tables command 1200 s
+(`PREVIEW_TABLES_TIMEOUT`) and a paper's own steps and commands 3600 s
+(`[build] timeout`; 0 turns it off). On expiry, Ctrl+C, SIGTERM or SIGHUP the
+group is stopped (SIGTERM or SIGINT, then SIGKILL after 3 s; a nested trazo
+stops its own groups first, since its owners wait 5 s) and the error names the
+command and the limit. Output a descendant keeps open after the command exits
+delays the result by 5 s at most: the group is killed and the result, a `Held`,
+carries the real exit code. That is the one change to the MCP contract: such a
+build is no longer reported as a timeout after 20 minutes. A holder outside the
+group (a deliberately detached session) is left running.
 
-Standalone CLI builds still reach unbounded calls in `build_graph.py`, metadata
-reads in `frontmatter.py` and environment work in `uv_sync.py`. The existing
-preview watcher and custom table commands are not brought under the MCP deadline
-once the tool has returned. Default build-lock waits are also unbounded outside
-the preparation path that sets a 20-second wait. Some shutdown paths use an
-unbounded reap after termination. These are open boundaries, not successful
-proof of the universal no-hang invariant.
+The watcher takes the build lock without waiting: while another build holds it,
+the pass fails with "another build of this project is running" and is retried
+with the backoff above. Table saves from the preview wait 20 s for the lock,
+then answer 503 and write nothing. The preview stops every command it started
+when it shuts down (and Python's exit does the same for any process), so a
+page's Pandoc no longer outlives it. A page whose Pandoc could not run, ran
+out of time or was killed by a signal joins the watcher's 1 to 30 s retry; text
+Pandoc rejects is not rebuilt until it changes.
 
-Windows avoids closing pipes owned by still-running reader threads. A detached
-process can keep such a daemon thread alive. The changed Windows path and Linux
-process-group behavior were not run locally; all measured evidence is macOS.
+Limits: the CLI still waits for the build lock without a bound (its holders are
+now bounded, and the terminal shows the waiting line); `review_lock` waits only
+on a stalled filesystem; the Rosetta `sysctl` probe keeps its leader-only
+10-second timeout. Processes left behind by a command that exited normally
+without holding its output are not stopped, as before. A process a command
+starts in the microseconds before Windows assigns it to the job escapes it.
+Evidence is macOS; Windows runs the runner and lifecycle tests in
+`windows.yml`, and Linux runs them in CI.
 
 ## Viewer page loads
 

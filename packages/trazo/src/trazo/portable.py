@@ -97,11 +97,43 @@ def pid_alive(pid: int) -> bool:
     return True
 
 
+class Job:
+    """Windows: a job object holding a started process and what it starts
+    (trazo.processes). TerminateJobObject ends them all, also those whose
+    parent already exited, which taskkill /T cannot find, and those of a job
+    nested in it. A process the command starts before it joins escapes, but
+    a program takes far longer to start one."""
+
+    def __init__(self, process: subprocess.Popen) -> None:
+        kernel32 = _kernel32()
+        self.handle = kernel32.CreateJobObjectW(None, None)
+        if not self.handle:
+            raise OSError("CreateJobObjectW failed")
+        if not kernel32.AssignProcessToJobObject(self.handle, int(process._handle)):  # type: ignore[attr-defined]
+            self.close()
+            raise OSError("AssignProcessToJobObject failed")
+
+    def terminate(self) -> None:
+        if self.handle:
+            _kernel32().TerminateJobObject(self.handle, 1)
+
+    def close(self) -> None:
+        """Forget the job; its processes keep running."""
+        if self.handle:
+            _kernel32().CloseHandle(self.handle)
+            self.handle = None
+
+
 @functools.cache
 def _kernel32() -> Any:
     """A private kernel32 (its restype settings stay out of ctypes.windll)."""
     kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
     kernel32.OpenProcess.restype = ctypes.c_void_p
+    kernel32.CreateJobObjectW.restype = ctypes.c_void_p
+    kernel32.CreateJobObjectW.argtypes = [ctypes.c_void_p, ctypes.c_wchar_p]
+    kernel32.AssignProcessToJobObject.argtypes = [ctypes.c_void_p, ctypes.c_void_p]
+    kernel32.TerminateJobObject.argtypes = [ctypes.c_void_p, ctypes.c_uint]
+    kernel32.CloseHandle.argtypes = [ctypes.c_void_p]
     return kernel32
 
 

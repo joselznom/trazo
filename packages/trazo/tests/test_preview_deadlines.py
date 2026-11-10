@@ -1,0 +1,155 @@
+"""Preview: a hung tables command or page Pandoc ends with an error, Pandoc
+that could not finish is retried while text Pandoc rejects is not, another
+build's lock never blocks the watcher or a table save for long, and nothing
+the preview started outlives it."""
+
+import http.client
+import json
+import os
+import shutil
+import signal
+import sys
+import threading
+import time
+import unittest
+from pathlib import Path
+from unittest.mock import patch
+
+import _support  # noqa: F401  (sets TRAZO_ROOT before trazo loads)
+from test_mcp import Session, free_port, wait_until
+from test_preview_watch_failures import PreviewCase, get, status
+
+from trazo import portable
+from trazo.build_lock import build_lock
+from trazo.project import DEFAULTS, Project
+
+HANG = Path(__file__).with_name("_hang.py")
+
+
+def pids_in(path: Path) -> list[int]:
+    return [int(pid) for pid in path.read_text().split()] if path.is_file() else []
+
+
+@unittest.skipUnless(shutil.which("pandoc"), "needs Pandoc")
+class PreviewDeadlineTests(PreviewCase):
+    def setUp(self) -> None:
+        self.root = self.project()
+        self.pids = self.root.parent / "hang.pids"
+        self.addCleanup(self.end_stand_ins)
+
+    def end_stand_ins(self) -> None:
+        """What the fix should have ended, so a failing run leaves nothing behind."""
+        for pid in pids_in(self.pids):
+            if portable.pid_alive(pid):  # one process each, not a group leader
+                portable.kill_group(pid) if os.name == "nt" else os.kill(pid, signal.SIGKILL)
+
+    def gone(self) -> bool:
+        return not any(portable.pid_alive(pid) for pid in pids_in(self.pids))
+
+    def configure(self, name: str, command: list[str]) -> None:
+        config = self.root / "trazo.toml"
+        rows = [row for row in config.read_text().splitlines() if not row.startswith(f"{name} = ")]
+        config.write_text("\n".join(rows).replace("[commands]", f"[commands]\n{name} = {json.dumps(command)}") + "\n")
+
+    def pandoc(self, mode: str) -> None:
+        self.configure("pandoc", [sys.executable, str(HANG), str(self.pids), shutil.which("pandoc"), mode])
+
+    def start_with(self, env: dict[str, str]) -> int:
+        with patch.dict(os.environ, env):  # the MCP server and the preview it starts inherit them
+            session = Session(self.root.parent, free_port())
+        self.addCleanup(session.close)
+        start = session.tool("preview_start", project=str(self.root))
+        self.assertFalse(start["isError"], start["content"])
+        self.session = session
+        return start["structuredContent"]["port"]
+
+    def test_a_hung_tables_command_is_stopped_and_shown(self) -> None:
+        flag = self.root.parent / "hang-tables"
+        child = "import time; time.sleep(3600)"
+        script = ("import os, pathlib, subprocess, sys, time\n"
+                  f"if pathlib.Path({str(flag)!r}).exists():\n"
+                  f"    child = subprocess.Popen([sys.executable, '-c', {child!r}])\n"
+                  f"    open({str(self.pids)!r}, 'a').write(f'{{os.getpid()}} {{child.pid}}\\n')\n"
+                  "    time.sleep(3600)\n")
+        self.configure("tables", [sys.executable, "-c", script])
+        port = self.start_with({"PREVIEW_TABLES_TIMEOUT": "2"})
+        self.assertTrue(wait_until(lambda: status(port)["manuscript"]["ok"]))
+        flag.touch()  # from now on the command hangs
+        spec = self.root / "tables/specs/results.json"
+        section = self.root / "manuscript/main/01_introduction.md"
+        spec.write_text(spec.read_text() + " ")
+        self.assertTrue(wait_until(lambda: "did not finish within 2 s" in status(port)["manuscript"]["error"]),
+                        status(port))
+        self.assertIn("PREVIEW_TABLES_TIMEOUT", status(port)["manuscript"]["error"])
+        self.assertTrue(wait_until(self.gone), "the tables command or its child is still running")
+        flag.unlink()
+        section.write_text(section.read_text() + "\nWrittenAfterTheHang.\n")
+        spec.write_text(spec.read_text() + " ")  # the next spec change runs the command again
+        self.assertTrue(wait_until(lambda: status(port)["manuscript"]["ok"]
+                                   and b"WrittenAfterTheHang" in get(port, "/manuscript.html")), status(port))
+
+    def test_another_builds_lock_does_not_block_the_watcher(self) -> None:
+        port = self.start_with({})
+        self.assertTrue(wait_until(lambda: status(port)["manuscript"]["ok"]))
+        spec = self.root / "tables/specs/results.json"
+        with build_lock(Project(self.root, DEFAULTS, True), lambda text: None):
+            spec.write_text(spec.read_text() + " ")
+            self.assertTrue(wait_until(lambda: "another build of this project is running"
+                                       in status(port)["manuscript"]["error"]), status(port))
+        # Released: the retry (1, 2, 4 ... s) runs the tables stage and rebuilds the page.
+        self.assertTrue(wait_until(lambda: status(port)["manuscript"]["ok"], timeout=30), status(port))
+
+    def test_a_table_save_waits_for_another_build_only_so_long(self) -> None:
+        port = self.start_with({})
+        self.assertTrue(wait_until(lambda: status(port)["manuscript"]["ok"]))
+        spec = self.root / "tables/specs/results.json"
+        before = spec.read_bytes()
+        connection = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
+        connection.request("GET", "/__table?label=results")
+        sha = json.loads(connection.getresponse().read())["sha256"]
+        connection.close()
+        reply: dict = {}
+
+        def save() -> None:
+            save_connection = http.client.HTTPConnection("127.0.0.1", port, timeout=60)
+            body = json.dumps({"label": "results", "base_sha256": sha,
+                               "ops": [{"op": "set", "path": "title", "value": "Saved during a build"}]})
+            save_connection.request("POST", "/__table", body, {"Content-Type": "application/json",
+                                                                "Origin": f"http://127.0.0.1:{port}"})
+            response = save_connection.getresponse()
+            reply.update(status=response.status, body=json.loads(response.read()))
+        with build_lock(Project(self.root, DEFAULTS, True), lambda text: None):
+            worker = threading.Thread(target=save, daemon=True)
+            worker.start()
+            worker.join(40)
+            self.assertFalse(worker.is_alive(), "the save waited for the other build without end")
+        self.assertEqual(reply["status"], 503, reply)
+        self.assertIn("another build of this project was still running after 20 s", reply["body"]["error"])
+        self.assertEqual(spec.read_bytes(), before, "a save that could not render wrote its spec")
+
+    def test_a_hung_page_pandoc_ends_with_the_preview(self) -> None:
+        self.pandoc("page")
+        self.start_with({})
+        self.assertTrue(wait_until(lambda: pids_in(self.pids)), "the page build did not start Pandoc")
+        stop = self.session.tool("preview_stop", project=str(self.root))
+        self.assertFalse(stop["isError"], stop["content"])
+        self.assertTrue(wait_until(self.gone, timeout=20), "the page's Pandoc outlived the preview")
+
+    def test_pandoc_that_ran_out_of_time_is_retried_without_an_edit(self) -> None:
+        self.pandoc("once-page")  # the first page build hangs, the next ones work
+        port = self.start_with({"TRAZO_PANDOC_TIMEOUT": "2"})
+        self.assertTrue(wait_until(lambda: status(port)["manuscript"]["ok"], timeout=30), status(port))
+        self.assertTrue(wait_until(self.gone), "the Pandoc that ran out of time is still running")
+
+    def test_text_pandoc_rejects_is_not_built_again_until_it_changes(self) -> None:
+        self.pandoc("fail-page")
+        port = self.start_with({})
+        self.assertTrue(wait_until(lambda: all("rejected" in status(port)[name]["error"]
+                                               for name in ("manuscript", "supplementary"))), status(port))
+        calls = len(pids_in(self.pids))
+        time.sleep(4)  # longer than the first retries of a failure Pandoc could not finish
+        self.assertEqual(len(pids_in(self.pids)), calls, "Pandoc ran again on text that did not change")
+
+
+if __name__ == "__main__":
+    unittest.main()

@@ -4,7 +4,9 @@ server.py mounts these paths; the guards, anti-framing headers and
 JSON errors are local_server's (400 bad request, 404 unknown table or
 comment, 409 conflict, 422 invalid result, 500 server error). Every change
 goes through trazo.table (the same functions, validation and history as
-`trazo table patch` and `undo`), and a saved table is rendered at once.
+`trazo table patch` and `undo`), and a saved table is rendered at once, under
+the build lock: a save that waited SAVE_LOCK_WAIT seconds for another build
+of the project fails with 503 and writes nothing.
 
 GET  /tables                       the editor page (assets/table/editor.html;
                                    the table label is the URL hash, /tables#LABEL)
@@ -53,11 +55,12 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
+from . import build_lock, table_hand
 from . import table as tb
-from . import table_hand
 from .local_server import Conflict, NotFound, RequestError, Unprocessable
 from .project import ASSETS_DIR, PROJECT
 
+SAVE_LOCK_WAIT = 20  # seconds, as the preview's own preparation waits (trazo.preview_inputs)
 EDITOR_PAGE = ASSETS_DIR / "table" / "editor.html"
 RECORDS_SHOWN = 50
 VALUES_SHOWN = 200
@@ -70,6 +73,25 @@ def spec_file(label: Any) -> str:
     if not tb.spec_path(label).is_file():
         raise NotFound(f"no table spec named {label}")
     return label
+
+
+class Busy(RequestError):
+    """Another build of the project held the build lock (HTTP 503)."""
+
+    status = 503
+
+
+def rendering(route: Callable[[Any], Any]) -> Callable[[Any], Any]:
+    """A route that renders tables, run holding the build lock (taken first, so a
+    save that cannot have it writes nothing)."""
+    def run(request: Any) -> Any:
+        try:
+            with build_lock.build_lock(PROJECT, lambda text: print(f"[preview] {text}", flush=True),
+                                       wait=SAVE_LOCK_WAIT):
+                return route(request)
+        except build_lock.Busy as exc:
+            raise Busy(f"Not saved: {exc}. Save again once it ends") from exc
+    return run
 
 
 def errors_to_http(run: Callable[[], Any]) -> Any:
@@ -356,8 +378,9 @@ def status() -> dict[str, Any]:
 
 GET = {"/__tables": lambda q: list_tables(), "/__table": get_table, "/__table/sections": lambda q: sections(),
        "/__table-comments": get_comments, "/__table-status": lambda q: status()}
-POST = {"/__table": save_table, "/__table/preview": preview_spec, "/__table/shared": save_shared,
-        "/__table/undo": undo_table, "/__table/new": new_table, "/__table/convert": lambda r: errors_to_http(lambda: convert_table(r)),
+POST = {"/__table": rendering(save_table), "/__table/preview": preview_spec, "/__table/shared": rendering(save_shared),
+        "/__table/undo": rendering(undo_table), "/__table/new": rendering(new_table),
+        "/__table/convert": rendering(lambda r: errors_to_http(lambda: convert_table(r))),
         "/__table-comments": change_comments}
 
 

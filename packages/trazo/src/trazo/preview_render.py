@@ -8,7 +8,7 @@ import json
 import os
 import re
 
-from . import pandoc_run, preview_edit_review, table
+from . import pandoc_run, preview_edit_review, processes, table
 from .expand import FENCE, ValuesError, expand_files
 from .numbering import metadata_file
 from .pandoc_options import mathml_flag
@@ -87,15 +87,21 @@ def title_prefixes(project):
     return {name: doc.get("title_prefix", "") for name, doc in project.config["documents"].items()}
 
 
+class PandocUnavailable(OSError):
+    """Pandoc could not run, ran out of time or was killed: nothing the text
+    can fix, so the watcher builds the page again later (trazo.preview_watch)."""
+
+
 def render(name, out_dir, *, for_counts=False):
     """Build a document's preview page as <out_dir>/<name>.html; returns
-    (error, pandoc warnings), error "" on success. The served pages are
-    built in the preview folder; `trazo counts` uses one of its own.
-    Intermediate inputs keep their last complete version if a write fails."""
+    (error, pandoc warnings), error "" on success, and raises
+    PandocUnavailable. The served pages are built in the preview folder;
+    `trazo counts` uses one of its own. Intermediate inputs keep their last
+    complete version if a write fails."""
     from . import preview
     sections = preview.PROJECT.document_files(name)
     out_dir.mkdir(parents=True, exist_ok=True)
-    error, warnings = "", []
+    error, warnings, unavailable = "", [], ""
     # The served page marks the pending edits (preview_edit_review); counts do not.
     read, seen = (None, None) if for_counts else preview_edit_review.reader()
     try:
@@ -130,11 +136,15 @@ def render(name, out_dir, *, for_counts=False):
                  f"--include-after-body={after_body}", "-o", str(partial)],
                 command=list(command), cwd=preview.ROOT, text=True,
             )
+        except processes.Timeout as exc:
+            unavailable = str(exc)
         except OSError as exc:  # pandoc missing or not executable
-            error = f"could not run pandoc: {exc}"
+            unavailable = f"could not run pandoc: {exc}"
         else:
             lines = [line for line in result.stderr.splitlines() if line.strip()]
-            if result.returncode != 0:
+            if result.returncode < 0:  # a signal (POSIX), not the text
+                unavailable = f"pandoc was stopped by signal {-result.returncode}"
+            elif result.returncode != 0:
                 error = "\n".join(lines) or f"pandoc exited with {result.returncode}"
             else:
                 warnings = lines
@@ -159,4 +169,6 @@ def render(name, out_dir, *, for_counts=False):
                     if seen:
                         seen()
         partial.unlink(missing_ok=True)
+    if unavailable:
+        raise PandocUnavailable(unavailable)
     return error, warnings

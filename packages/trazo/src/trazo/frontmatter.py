@@ -2,13 +2,14 @@
 
 import json
 import re
-import subprocess
 import tempfile
 from functools import lru_cache
 from pathlib import Path
 
-from .portable import no_window
+from . import processes
 from .project import PROJECT
+
+TIMEOUT = 60  # seconds for Pandoc to read the metadata file: it takes well under one
 
 
 class MetadataError(ValueError):
@@ -22,14 +23,17 @@ def _read(path, mtime_ns, size, command):
         template.write_text("$meta-json$", encoding="utf-8")
         try:
             # An empty document on stdin: Windows has no /dev/null.
-            result = subprocess.run(
+            result = processes.run(
                 [*command, "-f", "markdown", f"--metadata-file={path}",
                  "-t", "markdown", f"--template={template}"],
-                input="", capture_output=True, encoding="utf-8", check=True, **no_window())
+                input="\n", text=True, timeout=TIMEOUT)
+            if result.returncode:
+                raise MetadataError(f"cannot read metadata {path}: {result.stderr.strip()}")
             return json.loads(result.stdout)
-        except (OSError, subprocess.CalledProcessError, ValueError) as exc:
-            detail = exc.stderr if isinstance(exc, subprocess.CalledProcessError) else str(exc)
-            raise MetadataError(f"cannot read metadata {path}: {detail.strip()}") from exc
+        except (OSError, ValueError) as exc:  # processes.Timeout is an OSError
+            if isinstance(exc, MetadataError):
+                raise
+            raise MetadataError(f"cannot read metadata {path}: {exc}") from exc
 
 
 def read_metadata():
