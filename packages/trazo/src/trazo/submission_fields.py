@@ -8,6 +8,7 @@ highlights some journals ask for: Pandoc renders the expanded Markdown
 
 import json
 import re
+import subprocess
 import tempfile
 from functools import lru_cache
 from pathlib import Path
@@ -21,6 +22,7 @@ from .submission_check import HEADING, read, sections
 KEY_POINTS = ["key points", "highlights", "key results"]
 # Separates the parts of one Pandoc run; never in a paper.
 MARK = "TrazoFormField"
+FIELD_TIMEOUT = 60  # seconds for Pandoc's plain text of the fields, as for the metadata
 
 
 @lru_cache(maxsize=16)
@@ -32,8 +34,12 @@ def _plain(text, command, flags, numbers, stamps):
             path = Path(folder) / "numbering.json"
             path.write_text(numbers, encoding="utf-8")
             flags = (*flags, f"--metadata-file={path}")
-        result = pandoc_run.run(["-f", "markdown", "-t", "plain", "--wrap=none", *flags],
-                                input=text, text=True, command=list(command), cwd=PROJECT.root)
+        try:
+            result = pandoc_run.run(["-f", "markdown", "-t", "plain", "--wrap=none", *flags],
+                                    input=text, text=True, command=list(command), cwd=PROJECT.root,
+                                    timeout=FIELD_TIMEOUT)
+        except subprocess.TimeoutExpired as exc:
+            raise ValueError(str(exc)) from None
     if result.returncode:
         raise ValueError(result.stderr.strip() or f"Pandoc exited with {result.returncode}")
     return result.stdout

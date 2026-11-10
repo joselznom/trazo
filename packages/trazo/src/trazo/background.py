@@ -1,6 +1,5 @@
 """One background command, its bounded log, and process-group cancellation."""
 
-import os
 import subprocess
 import threading
 import time
@@ -8,7 +7,7 @@ from collections import deque
 from pathlib import Path
 from typing import Any
 
-from .portable import group_options, kill_group
+from . import processes
 
 
 class CommandJob:
@@ -25,24 +24,18 @@ class CommandJob:
         with self.lock:
             return {**self.state, self.log_key: list(self.state[self.log_key])}
 
-    def stop(self, reason: str, expected: subprocess.Popen | None = None) -> bool:
+    def stop(self, reason: str) -> bool:
+        """End the running command's group: SIGTERM, then SIGKILL after
+        `grace` seconds (at once without grace; Windows ends it at once)."""
         with self.lock:
-            if self.state["state"] != "running" or (expected is not None and self.proc is not expected):
+            if self.state["state"] != "running":
                 return False
             if self.reason is not None:
                 return True
             self.reason = reason
             if self.proc is not None:
-                self.terminate(self.proc)
+                processes.stop(self.proc, self.grace)
             return True
-
-    def terminate(self, proc: subprocess.Popen) -> None:
-        kill_group(proc.pid, bool(self.grace))
-        if self.grace and os.name != "nt":  # Windows ended the whole tree at once
-            # Descendants can hold the pipe open after the leader exits.
-            killer = threading.Timer(self.grace, kill_group, [proc.pid])
-            killer.daemon = False
-            killer.start()
 
     def start(self, command: list[str], cwd: Path, timeout: float,
               initial: tuple[str, ...] = (), **details: Any) -> bool:
@@ -56,37 +49,33 @@ class CommandJob:
         return True
 
     def run(self, command: list[str], cwd: Path, timeout: float, initial: tuple[str, ...]) -> None:
+        """The command until it exits (trazo.processes: a process it started
+        that keeps the log open is stopped after LINGER seconds), or until the
+        deadline, which stops its group."""
         lines = deque(initial, maxlen=self.limit)
-        code, timer = -1, None
-        try:
-            proc = subprocess.Popen(command, cwd=cwd, stdout=subprocess.PIPE,
-                                    stderr=subprocess.STDOUT, text=True, errors="replace",
-                                    **group_options())
+        code = -1
+
+        def line(text: str) -> None:
+            lines.append(text.rstrip())
+            with self.lock:
+                self.state[self.log_key] = list(lines)
+
+        def started(proc: subprocess.Popen) -> None:
             with self.lock:
                 self.proc = proc
                 if self.reason is not None:  # cancellation during process startup
-                    self.terminate(proc)
-            timer = threading.Timer(timeout, self.stop, ["timeout", proc])
-            timer.daemon = True
-            timer.start()
-            assert proc.stdout is not None
-            with proc.stdout:
-                for line in proc.stdout:
-                    lines.append(line.rstrip())
-                    with self.lock:
-                        self.state[self.log_key] = list(lines)
-            code = proc.wait()
+                    processes.stop(proc, self.grace)
+        try:
+            result = processes.run(command, cwd=cwd, timeout=timeout, on_line=line, grace=self.grace,
+                                   started=started)
+            code = result.returncode
+            if isinstance(result, processes.Held):
+                lines.append(result.note)
+        except processes.Timeout:
+            with self.lock:
+                self.reason = self.reason or "timeout"
         except Exception as exc:
             lines.append(f"could not run {command[0]}: {exc}")
-            with self.lock:
-                proc = self.proc
-                if proc is not None:
-                    self.terminate(proc)
-            if proc is not None:
-                proc.wait()
-        finally:
-            if timer:
-                timer.cancel()
         with self.lock:
             reason, self.proc = self.reason, None
             if reason == "timeout":

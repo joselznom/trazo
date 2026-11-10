@@ -104,6 +104,20 @@ Internal changes (tests, CI, refactoring) stay out.
 - A preview, table editor or diagram editor page whose script failed to load
   (seen now and then on Windows) reloads itself once instead of staying half
   started; if the script fails again, the page says to reload it.
+- Nothing trazo runs can hang forever any more, and what it stops leaves
+  nothing behind. A build whose Pandoc stalls stops after 10 minutes, a
+  metadata read after 1 minute, `uv sync` after 30 minutes and your own build
+  steps and commands after 1 hour (`[build] timeout` in trazo.toml), each with
+  an error that says what stopped and keeps the earlier Word file. The
+  preview's tables command stops after 20 minutes and says so on the page; a
+  build running elsewhere no longer freezes the preview (it catches up as soon
+  as that build ends), and a table save during one fails after 20 seconds
+  instead of waiting. Pandoc that could not finish a page is retried by itself. A build
+  whose script leaves a helper program running is no longer reported as
+  timed out after 20 minutes, nor stuck "running" in the preview. Stopping
+  the preview, Ctrl+C or a cancelled agent call also ends the programs they
+  started. `TRAZO_PANDOC_TIMEOUT`, `TRAZO_UV_TIMEOUT` and
+  `PREVIEW_TABLES_TIMEOUT` set other limits in seconds.
 - A save, build or paper update that is killed (a crash, a forced quit) no
   longer leaves its temporary files behind for good: the next save of the same
   file, or the next Word build, removes them once they are 10 minutes old, and

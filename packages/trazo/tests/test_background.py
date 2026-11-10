@@ -5,16 +5,17 @@ import tempfile
 import time
 import unittest
 from pathlib import Path
-from unittest.mock import patch
 
 import _support  # noqa: F401  (sets TRAZO_ROOT before trazo loads)
+from test_processes import DETACHED
 
 from trazo.background import CommandJob
+from trazo.portable import kill_group, pid_alive
 
 
 class CommandTests(unittest.TestCase):
-    def wait_for(self, condition):
-        deadline = time.monotonic() + 5
+    def wait_for(self, condition, seconds=5):
+        deadline = time.monotonic() + seconds
         while time.monotonic() < deadline:
             if condition():
                 return
@@ -25,8 +26,8 @@ class CommandTests(unittest.TestCase):
         self.addCleanup(job.stop, "cancelled")
         self.assertTrue(job.start([sys.executable, "-u", "-c", source], Path.cwd(), timeout))
 
-    def finished(self, job):
-        self.wait_for(lambda: job.status()["state"] != "running")
+    def finished(self, job, seconds=5):
+        self.wait_for(lambda: job.status()["state"] != "running", seconds)
         return job.status()
 
     def test_exit_status_and_bounded_log(self):
@@ -70,30 +71,37 @@ class CommandTests(unittest.TestCase):
                     self.assertFalse(marker.exists(), "a descendant survived process-group cleanup")
                     self.assertFalse(job.stop("cancelled"))
 
-    def test_expired_timer_cannot_cancel_a_later_command(self):
-        callbacks = []
-
-        class Timer:
-            def __init__(self, timeout, callback, args):
-                callbacks.append(lambda: callback(*args))
-
-            def start(self):
-                pass
-
-            def cancel(self):
-                pass
-
+    def test_a_deadline_belongs_to_its_own_command(self):
         job = CommandJob("export", "messages", 3)
-        with patch("trazo.background.threading.Timer", Timer):
-            self.start(job, "print('first')")
-            self.assertEqual(self.finished(job)["state"], "ok")
-            old_timeout = callbacks[0]
-            self.start(job, "import time; print('second'); time.sleep(10)")
-            self.wait_for(lambda: "second" in job.status()["messages"])
-            self.assertFalse(old_timeout())
-            self.assertEqual(job.status()["state"], "running")
-            self.assertTrue(job.stop("cancelled"))
-            self.assertEqual(self.finished(job)["state"], "error")
+        self.start(job, "print('first')", timeout=1)
+        self.assertEqual(self.finished(job)["state"], "ok")
+        # Longer than the first command's deadline: nothing of it may stop this one.
+        self.start(job, "import time; print('second', flush=True); time.sleep(1.5)", timeout=10)
+        self.assertEqual(self.finished(job)["state"], "ok", job.status())
+
+    def held(self, flags: str) -> dict:
+        """A command that exits 0 at once, leaving a child that keeps its log open for a minute."""
+        job = CommandJob("build", "tail", 5, grace=5)
+        marker = Path(self.enterContext(tempfile.TemporaryDirectory())) / "holder.pid"
+        child = f"import os, pathlib, time; pathlib.Path({str(marker)!r}).write_text(str(os.getpid())); time.sleep(60)"
+        if flags:  # outside the job's group: ours to end
+            self.addCleanup(lambda: marker.is_file() and pid_alive(int(marker.read_text()))
+                            and kill_group(int(marker.read_text())))
+        started = time.monotonic()
+        self.start(job, f"import subprocess, sys; subprocess.Popen([sys.executable, '-c', {child!r}]{flags})",
+                   timeout=60)
+        state = self.finished(job, 15)
+        self.assertLess(time.monotonic() - started, 15)
+        return state
+
+    def test_a_child_holding_the_log_does_not_turn_success_into_a_timeout(self):
+        state = self.held("")
+        self.assertEqual((state["state"], state["exit_code"]), ("ok", 0), state)
+        self.assertIn("kept its output open", state["tail"][-1])
+
+    def test_a_detached_child_holding_the_log_does_not_keep_the_job_running(self):
+        state = self.held(DETACHED)
+        self.assertEqual((state["state"], state["exit_code"]), ("ok", 0), state)
 
 
 if __name__ == "__main__":

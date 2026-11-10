@@ -16,6 +16,8 @@ from pathlib import Path
 import _support  # noqa: F401  (sets TRAZO_ROOT before trazo is imported)
 from test_mcp import Session, answers, free_port, gone, make_project, wait_until
 
+from trazo import portable
+
 # Windows has no SIGKILL: os.kill ends a process with any other signal.
 KILL = getattr(signal, "SIGKILL", signal.SIGTERM)
 
@@ -209,6 +211,24 @@ class McpLifetimeTests(unittest.TestCase):
     @unittest.skipIf(os.name == "nt", "POSIX detached session holding an inherited pipe")
     def test_detached_descendant_cannot_block_the_timeout_reply(self):
         self.timed_out_build(detached=True)
+
+    def test_a_build_whose_child_keeps_the_output_open_succeeds_without_waiting_for_the_deadline(self):
+        session = self.session(env={"TRAZO_MCP_TIMEOUT": "60"})
+        marker = self.tmp / "holder.pid"
+        child = f"import os, pathlib, time; pathlib.Path({str(marker)!r}).write_text(str(os.getpid())); time.sleep(60)"
+        # commands.docx exits at once; the child it leaves keeps the build's output open.
+        project = make_project(self.tmp, docx=f"import subprocess, sys; subprocess.Popen([sys.executable, '-c', {child!r}])")
+        self.addCleanup(lambda: marker.is_file() and not gone(int(marker.read_text()))
+                        and portable.kill_group(int(marker.read_text())))  # its own group: ours to end
+        started = time.monotonic()
+        session.request("tools/call", {"name": "build", "arguments": {"project": str(project)}})
+        try:
+            reply = session.reply(timeout=30)
+        except queue.Empty:
+            self.fail("the build waited for the child, not for itself")
+        self.assertLess(time.monotonic() - started, 30)
+        self.assertFalse(reply["result"]["isError"], reply["result"])
+        self.assertIn("kept its output open", " ".join(reply["result"]["structuredContent"]["warnings"]))
 
     def test_invalid_deadlines_fail_before_running_the_command(self):
         marker = self.tmp / "must-not-run"

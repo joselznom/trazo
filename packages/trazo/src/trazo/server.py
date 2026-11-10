@@ -16,7 +16,7 @@ from functools import lru_cache
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
-from . import counts
+from . import counts, processes
 from .frontmatter import separate_title_page
 from .local_server import GuardedHandler, LocalServer
 from .portable import address_in_use
@@ -291,8 +291,13 @@ def serve(port=8765, on_bind=None):
             stop_event.set()
             preview.DOCX_JOB.stop("cancelled")
             diagram_editor.shutdown()
+            # A page's Pandoc, the tables command: none outlives the preview, and the
+            # watcher, which may still be in a pass, cannot start another.
+            processes.stop_all(close=True)
             for worker in workers:
                 worker.join(timeout=5)
+            if not any(worker.is_alive() for worker in workers):  # a serve() run in-process (tests)
+                processes.reopen()
 
 
 def serve_from_terminal(port: int, command: str) -> None:
