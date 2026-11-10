@@ -19,7 +19,9 @@ what it started, and on Windows then reads the pipes without a bound:
   is never an exception.
 
 Stopping is graceful on POSIX: SIGTERM (SIGINT after Ctrl+C), then SIGKILL
-after STOP_WAIT seconds. Windows ends a job at once. Processes still running
+of what is left after the run's grace. A command gets half of that grace as
+its own ($TRAZO_STOP_GRACE), so a trazo it runs stops its groups in time.
+Windows ends a job at once. Processes still running
 after a command exited normally, without holding its pipes, are left alone.
 """
 
@@ -39,11 +41,9 @@ from . import portable
 from .process_pipes import Selector, Threads, decode
 
 LINGER = 5.0  # seconds a descendant may hold the pipes after the command exits
-# Seconds a stopped group gets to end before SIGKILL (a trazo in it stops its own
-# groups meanwhile, after at most this long, so the group gets one more second):
-# less than the 5 s the owners of a trazo process (trazo.background, trazo.mcp_calls) give it.
-STOP_WAIT = 3.0
-GRACE = 5.0  # for a group with a trazo in it (stop()'s default): more than that trazo's own
+STOP_WAIT = 3.0  # seconds to reap a killed command; one stuck in the kernel is not waited for
+STOP_ENV = "TRAZO_STOP_GRACE"  # the grace a run's command gets for its own runs: half the run's
+GRACE = 5.0  # stop()'s default, and the MCP calls' and the preview Word job's grace
 KILL = getattr(signal, "SIGKILL", signal.SIGTERM)  # Windows ends a group whatever the signal
 
 
@@ -151,7 +151,7 @@ _CLOSED = False  # stop_all(close=True) ran: no command starts until reopen()
 def run(argv: Sequence[str | os.PathLike[str]], *, timeout: float | None, cwd: str | os.PathLike[str] | None = None,
         env: Mapping[str, str] | None = None, input: bytes | str | None = None, capture: bool = True,
         text: bool = False, on_line: Callable[[str], None] | None = None, hint: str = "",
-        grace: float = STOP_WAIT + 1.0,
+        grace: float | None = None,
         started: Callable[[subprocess.Popen[bytes]], None] | None = None) -> subprocess.CompletedProcess[Any]:
     """Run argv for `timeout` seconds at most (positive and finite; None only
     where a user turned the limit off); raises OSError when it cannot start
@@ -163,13 +163,20 @@ def run(argv: Sequence[str | os.PathLike[str]], *, timeout: float | None, cwd: s
     without being kept. started(process) runs once the command started (to
     register it for stop()); what it raises stops the command. `hint` names
     the setting that sets the limit, for the Timeout's message. `grace`: the
-    seconds a stopped group gets between SIGTERM and SIGKILL."""
+    seconds a stopped group gets between SIGTERM and SIGKILL (default
+    $TRAZO_STOP_GRACE's, else 4)."""
     if timeout is not None and not 0 < timeout < float("inf"):
         raise ValueError("timeout must be a positive finite number of seconds")
     command = [os.fspath(arg) for arg in argv]
+    if grace is None:
+        try:
+            grace = env_seconds(STOP_ENV, 4.0)
+        except ValueError:  # set by the trazo that started this one, never by hand
+            grace = 4.0
+    env = {**(os.environ if env is None else env), STOP_ENV: f"{max(0.5, grace / 2):g}"}
     data = input.encode("utf-8") if isinstance(input, str) else input
     pipes = capture or on_line is not None
-    options: dict[str, Any] = {"cwd": cwd, "env": None if env is None else dict(env)}
+    options: dict[str, Any] = {"cwd": cwd, "env": env}
     if pipes:
         options.update(stdin=subprocess.PIPE if data else subprocess.DEVNULL, stdout=subprocess.PIPE,
                        stderr=subprocess.STDOUT if on_line is not None else subprocess.PIPE,

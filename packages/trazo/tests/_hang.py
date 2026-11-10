@@ -7,7 +7,8 @@ MODE picks the call that hangs: docx (writes a .docx), meta (reads the
 metadata), page (writes a preview page), help (`--help`), sync (uv sync),
 any, or several joined by "+". With MODE "once-page" only the first page
 hangs; with "fail-page" every page fails at once, as Pandoc does on text it
-rejects; with "stubborn-..." the call that hangs ignores SIGTERM. A call that hangs appends
+rejects; with "stubborn-..." the call that hangs ignores SIGTERM; with
+"killed-..." it kills itself with SIGKILL (POSIX). A call that hangs appends
 "<its pid> <its child's pid>" to PID_FILE, so a test can check both ended
 (a failing call appends its pid alone). Tests import the helpers below.
 """
@@ -50,8 +51,11 @@ def set_command(root: Path, name: str, argv: list[str], *tables: str) -> None:
 
 def main() -> None:
     pid_file, real, mode, *args = sys.argv[1:]
-    once, fail, stubborn = (mode.startswith(prefix) for prefix in ("once-", "fail-", "stubborn-"))
-    kinds = mode.removeprefix("once-").removeprefix("fail-").removeprefix("stubborn-").split("+")
+    prefixes = ("once-", "fail-", "stubborn-", "killed-")
+    once, fail, stubborn, killed = (mode.startswith(prefix) for prefix in prefixes)
+    for prefix in prefixes:
+        mode = mode.removeprefix(prefix)
+    kinds = mode.split("+")
     calls = {"docx": any(arg.endswith(".docx") for arg in args),
              "meta": any("metadata.template" in arg for arg in args),
              "page": any(arg.endswith(".html.tmp") for arg in args),
@@ -59,6 +63,8 @@ def main() -> None:
              "sync": args[:1] == ["sync"],
              "any": True}
     hit = any(calls[kind] for kind in kinds)
+    if hit and killed:
+        os.kill(os.getpid(), signal.SIGKILL)
     if hit and fail:
         with open(pid_file, "a") as record:
             record.write(f"{os.getpid()}\n")

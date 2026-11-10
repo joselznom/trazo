@@ -158,6 +158,14 @@ class PageMetadataTests(unittest.TestCase):
                 self.assertRaisesRegex(preview_render.PandocUnavailable, "did not finish within 1 s"):
             preview.build("manuscript")  # the watcher retries what this raises (PageFailed)
 
+    @unittest.skipIf(os.name == "nt", "a signal")
+    def test_a_metadata_read_killed_by_a_signal_is_retried_not_shown_as_a_text_error(self) -> None:
+        pids = Path(self.enterContext(tempfile.TemporaryDirectory())) / "hang.pids"
+        command = _hang.command(pids, shutil.which("pandoc"), "killed-meta")
+        with patch.dict(preview.PROJECT.config["commands"], {"pandoc": command}), \
+                self.assertRaisesRegex(preview_render.PandocUnavailable, "signal 9"):
+            preview.build("manuscript")
+
 
 if __name__ == "__main__":
     unittest.main()

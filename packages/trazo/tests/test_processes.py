@@ -125,7 +125,8 @@ class SignalTests(unittest.TestCase):
     def test_a_nested_runner_stops_its_own_commands_before_its_group_is_killed(self) -> None:
         with tempfile.TemporaryDirectory() as folder:
             pid_file = Path(folder) / "grandchild.pid"
-            grandchild = ("import os, time; "
+            # It ignores SIGTERM: the nested runner needs its own grace before it kills it.
+            grandchild = ("import os, signal, time; signal.signal(signal.SIGTERM, signal.SIG_IGN); "
                           f"open({str(pid_file)!r}, 'w').write(str(os.getpid())); time.sleep(60)")
             # A trazo run by a wrapper: it needs a moment after SIGTERM before it stops its own command.
             nested = Path(folder) / "nested.py"
@@ -136,7 +137,7 @@ class SignalTests(unittest.TestCase):
             env = {**os.environ, "PYTHONPATH": os.pathsep.join(sys.path)}
             with self.assertRaises(processes.Timeout):  # the wrapper (sh) exits at once on SIGTERM
                 processes.run(["/bin/sh", "-c", f"{PY!r} {str(nested)!r} & wait"], timeout=2, capture=False, env=env)
-            self.assertTrue(wait_until(lambda: gone(int(pid_file.read_text())), 10),
+            self.assertTrue(gone(int(pid_file.read_text())),
                             "the nested runner was killed before it stopped its command")
 
 

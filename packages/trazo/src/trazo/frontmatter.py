@@ -44,6 +44,8 @@ def _read(path, mtime_ns, size, command):
             if isinstance(exc, processes.Timeout):
                 _STOPPED[key] = (time.monotonic() + TIMEOUT, message)
             raise MetadataUnavailable(message) from exc
+        if result.returncode < 0:  # a signal (POSIX), not the file
+            raise MetadataUnavailable(f"cannot read metadata {path}: pandoc was stopped by signal {-result.returncode}")
         if result.returncode:
             raise MetadataError(f"cannot read metadata {path}: {result.stderr.strip()}")
         try:
