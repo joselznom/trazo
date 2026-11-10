@@ -31,7 +31,7 @@ combined product. Owners remain useful when line numbers move.
 | `preview_watch.py:43`, `regenerate_tables` | Captures generator failure as a table error and exposes it in preview state. |
 | `preview_watch.py:116`, `build_all` | Sets the failed document's error and preserves its last good version. The pass then counts as failed (`PageFailed`): the error stays on that page only, is printed once, and only that page is retried with the watcher's backoff below, so fixing a permission alone brings it back. Corrected in the silent-errors PR. |
 | `preview_watch.py:159`, `build_and_watch`, and `:269`, `watch` | An unexpected failure of the first builds or of a watcher pass sets every page's `error` (last good page kept, as for table errors), prints one log line per distinct error and leaves the watcher running. It is retried at once on a new change (table outputs and data a failed generator wrote do not count), otherwise after 1, 2, 4 ... 30 s; table work that failed stays pending, requested rebuilds are put back, and the first complete pass rebuilds every page, reruns the drift check and clears the error, so no change made before or during the failure is skipped. Corrected in the silent-errors PR. |
-| `review_storage.py:52`, `write_atomic` | Removes its temporary file on an ordinary exception and re-raises. Atomic rename is not a multi-file transaction or power-loss durability. SIGKILL may leave an unused temporary file. |
+| `review_storage.py:79`, `write_atomic` | Removes its temporary file on an ordinary exception and re-raises. Atomic rename is not a multi-file transaction. SIGKILL leaves the temporary file, locked while it was written; the next write of the same file removes it once it is 600 s old and unlocked (storage limits below). |
 | `table_editor.py:276`, `publish` | Rolls back a newly created table and re-raises. A rollback failure could mask the initiating error; this was not reproduced in the bounded campaign. |
 
 The three silent-error findings (outer watcher, table drift checking and
@@ -79,13 +79,50 @@ prints the failed resources with their status and the server's request log.
 Table and diagram history is now persisted before source publication. Pending
 entries reconcile on the next operation: an unpublished save restores the prior
 undo entry, and a published save retains the previous text. Failed grouped
-autosaves preserve the prior group. History retention still has a size/count
-limit; an unsuccessful attempt near that limit can evict the oldest entry.
+autosaves preserve the prior group. Manuscript saves and edit rejections are
+recorded "pending" the same way and settled on the next read, so a failed or
+killed save leaves undo as it was. History keeps a size/count limit (200 entries
+and 5 MB for tables and diagrams, 50 saves and 20 MB for the manuscript); the
+pending entry does not count, so a failed attempt at the limit evicts nothing,
+and a store holds at most one entry over it until the next save.
 
-Corrupt manuscript history is moved atomically to a unique backup before any
-source edit. The failing operation reports the backup and retry advice; the next
-normal operation works. This preserves damaged bytes, not a promise to reconstruct
-old undo entries from them. Keyboard undo now shows the same error.
+Corrupt manuscript, table or diagram history is moved atomically to a unique
+backup (`<name>.corrupt-<id>.json`) before any edit. The failing operation
+reports the backup and retry advice; the next normal operation starts a new
+history. This preserves damaged bytes, not a promise to reconstruct old undo
+entries from them: salvaging entries stays a documented limit. Table and diagram
+history that is valid JSON with malformed entries is not quarantined: non-object
+entries are dropped silently on the next save. Keyboard undo now shows the same
+error.
+
+A writer killed before its rename leaves `<name>.<8 characters>.tmp` beside the
+file, and a killed Word build leaves `output/.trazo-*` with an unfinished DOCX.
+Each is locked while in use (the folder through its `.lock` file); the next write
+of the same file, or the next Word build, removes those older than 600 s that
+nobody holds, the same grace as the parked files of a source save. A writer
+suspended between creating its file and locking it (microseconds) for 10 minutes
+loses it and fails visibly. On network or synced folders another machine's lock
+is invisible. Temporaries of files never written again stay; new papers'
+`.gitignore` hides both temporary patterns. Not covered: `trazo setup`'s
+`.setup-*` folder and `trazo new`'s staging folder after a kill (code reading).
+
+Durability: user data is synced (`portable.sync`): file and folder `fsync` for
+histories, comments, conflict copies and the files `trazo update` writes, and
+`F_FULLFSYNC` on macOS for the files a save publishes (sources, table specs,
+diagrams), since macOS `fsync` leaves data in the drive's cache. Build outputs
+are not synced: a build makes them again. Measured with `perf_counter` on APFS
+(20 kB, 200 samples, a shared machine): `write_atomic` 0.15 ms unsynced, 0.19 ms
+with `fsync`, 7.0 ms with `F_FULLFSYNC`; `source_publish.publish` 2.8 ms before,
+10 ms after. Power loss itself is bounded by this policy, not proven: no forced
+power-off was run, Linux and Windows were not measured, and a filesystem that
+refuses a sync (some network or FUSE volumes) falls back to `fsync` or nothing.
+
+A `trazo update` killed after adding an executable left it at 0644, and the
+rerun compares content only; a new executable now gets its mode before it takes
+its name. Coverage gaps still open, none a demonstrated bug: faults inside
+native executables (Pandoc, Chrome, `uv sync`), fault injection during `trazo
+setup` and `update` beyond that case, each browser editing mode's handling of a
+500 or 409, the fault harness on Linux and Windows, and power loss.
 
 Independent writers that ignore `review_lock` no longer lose text to a
 concurrent source, table or diagram save on filesystems with atomic exchange (APFS; Linux ext4,

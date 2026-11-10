@@ -115,4 +115,5 @@ def read(folder: Path) -> dict:
 
 
 def write(folder: Path, manifest: dict) -> None:
-    write_atomic(Path(folder) / PATH, (json.dumps(manifest, indent=1, ensure_ascii=False) + "\n").encode("utf-8"))
+    write_atomic(Path(folder) / PATH, (json.dumps(manifest, indent=1, ensure_ascii=False) + "\n").encode("utf-8"),
+                 durable=True)

@@ -11,8 +11,10 @@ newest HISTORY_LIMIT entries are kept, within HISTORY_BYTES.
 Read-modify-write happens under review_storage.review_lock(); `record`,
 `revert_file` and `publish` expect the caller to hold it; `write_file` and
 `undo` take it. A pending publication keeps the prior file's sha256 and the
-previous undo entry, so a failed replacement can be reconciled on the next read. Journaling an attempted
-save can evict the oldest entries at the history limits even if publication fails.
+previous undo entry, so a failed replacement can be reconciled on the next read. The pending entry
+does not count against the limits, so a failed publication never evicts an older entry. A damaged
+history file is set aside unchanged as the manuscript's is (review_storage.quarantine): the operation
+that finds it reports where, and the next one starts a new history.
 An existing file is replaced through source_publish: a program that ignores the
 lock and writes the file after the caller's read keeps its version, the text not
 saved goes to the conflict copies, the history is left as it was and `error` is
@@ -32,7 +34,7 @@ from pathlib import Path
 from typing import Any
 
 from . import source_publish
-from .review_storage import ROOT, read_list, review_lock, write_atomic
+from .review_storage import ROOT, StoreError, quarantine, read_list, review_lock, write_atomic
 
 HISTORY_LIMIT = 200
 HISTORY_BYTES = 5_000_000
@@ -73,8 +75,12 @@ class History:
         return warning
 
     def load(self) -> list[Entry]:
+        try:
+            stored = read_list(self.path)
+        except StoreError as exc:
+            quarantine(self.path, f"{self.path.name} (undo history)", exc)
         history: list[Entry] = []
-        for entry in read_list(self.path):
+        for entry in stored:
             if not isinstance(entry, dict) or entry.get("kind") not in self.kinds:
                 continue
             pending = entry.get("pending")
@@ -97,12 +103,15 @@ class History:
         return history
 
     def save(self, history: list[Entry]) -> None:
-        history = history[-HISTORY_LIMIT:]
-        sizes = [len(json.dumps(e, ensure_ascii=False)) for e in history]
-        while len(history) > 1 and sum(sizes) > HISTORY_BYTES:
+        # A pending entry at the end is not counted: if its publication fails,
+        # the next load drops it, and the oldest entry must still be there.
+        spare = 1 if history and "pending" in history[-1] else 0
+        history = history[-(HISTORY_LIMIT + spare):]
+        sizes = [len(json.dumps(e, ensure_ascii=False)) for e in history[:len(history) - spare]]
+        while len(sizes) > 1 and sum(sizes) > HISTORY_BYTES:
             history.pop(0)
             sizes.pop(0)
-        write_atomic(self.path, (json.dumps(history, ensure_ascii=False) + "\n").encode("utf-8"))
+        write_atomic(self.path, (json.dumps(history, ensure_ascii=False) + "\n").encode("utf-8"), durable=True)
 
     def record(self, entry: Entry) -> None:
         """Append one entry (the caller holds review_lock)."""
@@ -147,7 +156,7 @@ class History:
             history.append(prepared)
         self.save(history)
         if expected is None:
-            write_atomic(path, data)
+            write_atomic(path, data, full=True)
             return ""
         result = self._replace(path, data, expected)
         if not result.published:

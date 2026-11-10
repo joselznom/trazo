@@ -104,6 +104,22 @@ Internal changes (tests, CI, refactoring) stay out.
 - A preview, table editor or diagram editor page whose script failed to load
   (seen now and then on Windows) reloads itself once instead of staying half
   started; if the script fails again, the page says to reload it.
+- A save, build or paper update that is killed (a crash, a forced quit) no
+  longer leaves its temporary files behind for good: the next save of the same
+  file, or the next Word build, removes them once they are 10 minutes old, and
+  new papers' `.gitignore` hides them from git meanwhile. A failed save at the
+  undo limit (200 table or diagram changes, 50 manuscript saves) no longer
+  drops the oldest undo, and after a failed manuscript save Undo save works at
+  once instead of first reporting a changed file. A damaged table or diagram
+  undo history is set aside in a separate file, as the manuscript's already
+  is, instead of blocking every save. Saves now reach the disk before trazo
+  reports them (on a Mac, past the drive's cache for the files you write), and
+  a paper update killed midway leaves `scripts/trazo` executable.
+
+### Upgrade notes
+
+- `trazo update` adds the lines that hide trazo's temporary files to
+  `.gitignore`; if you changed that file, merge `.gitignore.new` into it.
 
 ### Removed
 

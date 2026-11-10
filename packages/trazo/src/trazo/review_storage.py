@@ -1,16 +1,29 @@
-"""Review storage: configuration, cross-process locking and atomic JSON writes."""
+"""Review storage: configuration, cross-process locking, atomic writes and
+damaged stores.
 
+A writer killed mid-write (SIGKILL, a crash) leaves its temporary file or
+folder behind. Each is locked while in use, and the next write of the same
+file (for a folder, the next scratch_folder in the same place) removes those
+older than ORPHAN_SECONDS that nobody holds: a live writer keeps its file even
+when suspended for longer than that.
+"""
+
+import glob
 import json
 import os
+import re
+import shutil
 import stat
 import tempfile
 import threading
+import time
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any
+from typing import Any, NoReturn
+from uuid import uuid4
 
-from .portable import lock, replace, unlock
+from .portable import lock, replace, sync, sync_folder, try_lock, unlock
 from .project import PROJECT
 
 ROOT = PROJECT.root
@@ -18,6 +31,7 @@ ROOT = PROJECT.root
 REVIEW_DIR = Path(os.environ.get("PREVIEW_REVIEW_DIR") or PROJECT.path("review"))
 LOCK_PATH = REVIEW_DIR / ".lock"
 _THREAD_LOCK = threading.Lock()
+ORPHAN_SECONDS = 600  # a writer's own time with its temporary file (source_publish.DISPLACED_GRACE too)
 
 
 class StoreError(Exception):
@@ -39,19 +53,95 @@ def review_lock() -> Iterator[None]:
             unlock(handle)
 
 
-def write_atomic(path: Path, data: bytes, default_mode: int = 0o644) -> None:
-    """Write bytes atomically through a uniquely named temporary file."""
+def write_atomic(path: Path, data: bytes, default_mode: int = 0o644, *,
+                 durable: bool = False, full: bool = False) -> None:
+    """Write bytes atomically through a uniquely named temporary file beside
+    `path` (`<name>.<8 characters>.tmp`), then remove_orphans(path).
+
+    `durable` is for the user's own data (sources, specs, histories, comments):
+    the file and then its folder are synced (portable.sync), so a power loss
+    leaves the old or the new file, never a renamed empty one. `full` (implies
+    `durable`) uses F_FULLFSYNC on macOS. Build outputs need neither: a build
+    makes them again.
+    """
     path.parent.mkdir(parents=True, exist_ok=True)
     mode = stat.S_IMODE(path.stat().st_mode) if path.exists() else default_mode
     fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=path.name + ".", suffix=".tmp")
     try:
         with os.fdopen(fd, "wb") as handle:
+            try_lock(handle)  # held until closed: remove_orphans leaves the file alone
             handle.write(data)
-        os.chmod(tmp, mode)  # mkstemp creates 0600
+            handle.flush()
+            os.chmod(tmp, mode)  # mkstemp creates 0600
+            if durable or full:
+                sync(handle.fileno(), full)
         replace(tmp, path)
     except BaseException:
         Path(tmp).unlink(missing_ok=True)
         raise
+    if durable or full:
+        sync_folder(path.parent, full)
+    remove_orphans(path)
+
+
+def remove_orphans(path: Path) -> None:
+    """Remove the temporary files killed writers of `path` left: named as
+    write_atomic names them, older than ORPHAN_SECONDS and not locked. Never
+    an error of the write that calls it."""
+    pattern = re.compile(re.escape(path.name) + r"\.[a-z0-9_]{8}\.tmp")
+    try:
+        names = os.listdir(path.parent)
+    except OSError:
+        return
+    for name in names:
+        candidate = path.parent / name
+        if pattern.fullmatch(name) and _abandoned(candidate, candidate):
+            try:
+                candidate.unlink()
+            except OSError:
+                pass
+
+
+@contextmanager
+def scratch_folder(parent: Path, prefix: str) -> Iterator[Path]:
+    """A temporary folder in `parent`, locked through its `.lock` file while in
+    use and removed after. The folders with `prefix` that killed users left
+    there are removed first, as remove_orphans does for files."""
+    for leftover in parent.glob(glob.escape(prefix) + "*"):
+        if leftover.is_dir() and _abandoned(leftover, leftover / ".lock"):
+            shutil.rmtree(leftover, ignore_errors=True)
+    with tempfile.TemporaryDirectory(prefix=prefix, dir=parent) as folder, \
+            open(Path(folder) / ".lock", "wb") as handle:
+        try_lock(handle)
+        yield Path(folder)
+
+
+def _abandoned(candidate: Path, lock_file: Path) -> bool:
+    """Whether `candidate` was left by a killed writer: older than
+    ORPHAN_SECONDS (a live writer took its lock right after creating it) and
+    `lock_file` free. A folder without one comes from an earlier trazo."""
+    try:
+        if time.time() - candidate.stat().st_mtime < ORPHAN_SECONDS:
+            return False
+        with open(lock_file, "rb") as handle:
+            return try_lock(handle)
+    except FileNotFoundError:
+        return lock_file != candidate
+    except OSError:  # unreadable: not trazo's to remove
+        return False
+
+
+def quarantine(path: Path, what: str, cause: Exception) -> NoReturn:
+    """Move the damaged store at `path` aside, unchanged, and raise StoreError
+    saying where; the next operation starts a new one. `what` names it."""
+    backup = path.with_name(f"{path.stem}.corrupt-{uuid4().hex}{path.suffix}")
+    try:
+        replace(path, backup)
+    except OSError as error:
+        raise StoreError(f"{what} is corrupt and could not be preserved: {error}. "
+                         f"No file was changed. Check the filesystem error and retry.") from error
+    raise StoreError(f"{what} is corrupt; preserved unchanged at {backup}. "
+                     f"Retry your action to start new undo history. Previous undo entries are unavailable.") from cause
 
 
 def holds_text(path: Path, text: str) -> bool:
@@ -61,8 +151,8 @@ def holds_text(path: Path, text: str) -> bool:
     return path.read_text(encoding="utf-8", errors="surrogateescape") == text
 
 
-def write_json(path: Path, data: Any, **dump: Any) -> None:
-    write_atomic(path, (json.dumps(data, ensure_ascii=False, **dump) + "\n").encode("utf-8"))
+def write_json(path: Path, data: Any, *, durable: bool = False, **dump: Any) -> None:
+    write_atomic(path, (json.dumps(data, ensure_ascii=False, **dump) + "\n").encode("utf-8"), durable=durable)
 
 
 def read_list(path: Path) -> list[Any]:
