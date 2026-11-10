@@ -54,7 +54,7 @@ class WritingInPlaceTests(UndoCase):
         self.leave()
         self.wait_for("document.querySelector('.pv-write-bar')")
         version = self.built_again(TEXT.replace("lazy", "sleepy").replace("A second paragraph", "A rewritten second paragraph"))
-        self.wait_for(f"loaded.manuscript === {version}")
+        self.wait_for(f"loaded?.manuscript === {version}")
         self.assertIn("A rewritten second paragraph", self.evaluate(PAGE_TEXT))
         self.assertIn("very", self.evaluate("document.querySelector('.pv-write-failed').textContent"))
 
@@ -69,7 +69,7 @@ class WritingInPlaceTests(UndoCase):
         self.assertIn("First paragraph. Second paragraph.", self.source())
         self.new_value("121")
         version = self.built_again(self.source())
-        self.wait_for(f"loaded.manuscript === {version}")
+        self.wait_for(f"loaded?.manuscript === {version}")
         self.assertIn("121 fields", self.evaluate(PAGE_TEXT))
 
     def test_undo_takes_back_a_break_after_a_build_changed_its_section(self):
