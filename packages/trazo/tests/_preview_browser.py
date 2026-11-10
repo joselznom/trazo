@@ -14,11 +14,11 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+import _browser_trace as trace
 import _support  # noqa: F401  (sets TRAZO_ROOT before trazo loads)
 
 from trazo import diagram, preview
 from trazo.browser import BrowserError
-from trazo.local_server import LocalServer
 
 
 @unittest.skipUnless(diagram.CHROME and Path(diagram.CHROME).exists(), "needs Chrome")
@@ -27,8 +27,12 @@ class PreviewBrowserTestCase(unittest.TestCase):
     def setUpClass(cls):
         cls.chrome = diagram.Chrome()
         cls.addClassCleanup(cls.chrome.close)
+        # 6 of the 9 Windows label timeouts were in the first two tests of a class, the
+        # first pages this Chrome opens: record each page's place in its Chrome's life.
+        cls.chrome_started, cls.pages = trace.record(event="chrome", cls=cls.__name__)["t"], 0
 
     def setUp(self):
+        self.trace_start = trace.record(event="test", id=self.id().split(".", 1)[-1])["t"]
         folder = tempfile.TemporaryDirectory(prefix="trazo-viewer-")
         self.addCleanup(folder.cleanup)
         root = Path(folder.name)
@@ -60,7 +64,7 @@ class PreviewBrowserTestCase(unittest.TestCase):
                 + "".join(f'<script src="/__assets/preview/{script}"></script>' for script in preview.VIEWER_SCRIPTS)
                 + '</body></html>',
                 encoding="utf-8")
-        server = self.server = LocalServer(("127.0.0.1", 0), preview.Handler)
+        server = self.server = trace.TracedServer(("127.0.0.1", 0), trace.TracedHandler)
         server.daemon_threads = False  # server_close waits for the requests in flight
         self.addCleanup(server.server_close)
         thread = threading.Thread(target=server.serve_forever, daemon=True)
@@ -89,7 +93,7 @@ class PreviewBrowserTestCase(unittest.TestCase):
             stack: e.error?.stack, resource: e.target?.src || e.target?.href}), true);
           addEventListener('unhandledrejection', e => window.__trazoTestErrors.push({
             kind: 'rejection', message: String(e.reason), stack: e.reason?.stack}));
-        """}, self.session)
+        """ + trace.PAGE_SCRIPT}, self.session)
 
     def evaluate(self, expression, session=None):
         reply = self.chrome.call("Runtime.evaluate", {
@@ -120,6 +124,9 @@ class PreviewBrowserTestCase(unittest.TestCase):
         self.fail(f"{expression}\n{self.what_the_page_waits_for(session)}")
 
     def open(self, query=""):
+        type(self).pages += 1
+        trace.record(event="navigate", url=self.url + query, page_of_chrome=self.pages,
+                     chrome_age=round(trace.now() - self.chrome_started, 3))
         self.chrome.call("Page.navigate", {"url": self.url + query}, self.session)
         self.wait_for("document.querySelector('.pv-bs-label')?.textContent.length > 0")
         self.wait_for("document.readyState === 'complete'")
@@ -139,6 +146,13 @@ class PreviewBrowserTestCase(unittest.TestCase):
               finished: performance.getEntriesByType('resource').map(e => new URL(e.name).pathname)})""", session)
         except (BrowserError, AssertionError) as exc:
             page = f"unavailable: {exc}"
+        try:
+            traced = self.evaluate(trace.PAGE_STATE, session)
+        except (BrowserError, AssertionError) as exc:
+            traced = f"unavailable: {exc}"
+        server_log = trace.report(self.trace_start)
+        page = (f"{page}\ntraced page: {json.dumps(traced)}\nserver probe: {trace.probe(self.server.server_port)}"
+                f"\nat {trace.now()} s; server log since the test started:\n{server_log}")
         frames = sys._current_frames()
         running = ["".join(traceback.format_stack(frames[t.ident])) for t in threading.enumerate()
                    if "process_request_thread" in t.name and t.ident in frames]
