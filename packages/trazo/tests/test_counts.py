@@ -65,6 +65,13 @@ class CountTests(unittest.TestCase):
         self.assertEqual((found["words"], found["abstract"]), (1, 3))
         self.assertIsNone(counts.count_page(page.replace('class="abstract"', 'class="other"'), [])["abstract"])
 
+    def test_raw_header_inside_a_body_abstract_div_is_not_the_metadata_abstract(self):
+        # Pandoc's HTML for `::: abstract` holding a raw `<header>Hello world</header>`.
+        page = ('<section class="level1"><h1>Intro</h1><p>One two three.</p>\n'
+                '<div class="abstract">\n<header>\nHello world\n</header>\n</div></section>')
+        found = counts.count_page(page, [])
+        self.assertEqual((found["words"], found["abstract"]), (3, None))
+
     def test_heading_matches_whole_phrases(self):
         phrases = ["abstract", "data availability", "declarations", "funding", "appendix", "ethics"]
         for text, excluded in {"Abstract": True, "ABSTRACT:": True, "2.1 Data availability statement": True,
