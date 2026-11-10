@@ -202,10 +202,8 @@ def watch(interval=0.5, stop_event=None, previous=None, numbers=None, failure=""
     tables_pending, render_pending = False, False
     # After a failure (`failure` is its message) the next complete pass rebuilds every page.
     shown = numbered() if numbers is None and not failure else numbers
-    # A change seen already (a save while the first pages built) is rebuilt
-    # at once, not after a poll interval.
-    pending = snapshot() != previous
-    if pending:
+    at_once = snapshot() != previous
+    if at_once:
         shown = None
     failures, retry_at, failed_on = 0, 0.0, None
     waiting = False  # a tables stage found another build's lock: it stays pending, said once
@@ -225,8 +223,8 @@ def watch(interval=0.5, stop_event=None, previous=None, numbers=None, failure=""
         return {path: stamp for path, stamp in stamps.items() if not generated(path)}
 
     while True:
-        if pending:
-            pending = False
+        if at_once:
+            at_once = False
         elif stop_event is None:
             time.sleep(interval)
         elif stop_event.wait(interval):

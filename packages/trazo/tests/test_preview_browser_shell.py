@@ -238,10 +238,8 @@ class ShellTests(PreviewBrowserTestCase):
 
     def test_a_build_between_serving_the_page_and_its_first_status_still_reloads(self):
         page = preview.OUT_DIR / "manuscript.html"
-        original = page.read_text()
-        self.open()
-        # The next page's status requests wait in the browser until released,
-        # so the build after it lands once it was served and before it polls.
+        # The page's status requests wait in the browser until released, so
+        # the next build lands after it was served and before it polls.
         hold = self.chrome.call("Page.addScriptToEvaluateOnNewDocument", {"source": """
           (() => {
             const fetch = window.fetch;
@@ -251,18 +249,17 @@ class ShellTests(PreviewBrowserTestCase):
               return fetch(url, options);
             };
           })();"""}, self.session)["identifier"]
-        origin = self.evaluate("performance.timeOrigin")
-        page.write_text(original.replace("Another paragraph.", "Second build."))
-        with preview.LOCK:
-            preview.STATE["manuscript"]["version"] += 1
-        self.wait_for(f"performance.timeOrigin !== {origin} && document.body?.innerText.includes('Second build.')")
-        self.chrome.call("Page.removeScriptToEvaluateOnNewDocument", {"identifier": hold}, self.session)
-        served = self.evaluate("performance.timeOrigin")
-        page.write_text(original.replace("Another paragraph.", "Third build."))
-        with preview.LOCK:
-            preview.STATE["manuscript"]["version"] += 1
-        self.evaluate("window.released = true")
-        self.wait_for(f"performance.timeOrigin !== {served} && document.body?.innerText.includes('Third build.')")
+        try:
+            self.chrome.call("Page.navigate", {"url": self.url}, self.session)
+            self.wait_for("document.readyState === 'complete' && document.body?.innerText.includes('Another paragraph.')")
+            served = self.evaluate("performance.timeOrigin")
+            page.write_text(page.read_text().replace("Another paragraph.", "Next build."))
+            with preview.LOCK:
+                preview.STATE["manuscript"]["version"] += 1
+            self.evaluate("window.released = true")
+            self.wait_for(f"performance.timeOrigin !== {served} && document.body?.innerText.includes('Next build.')")
+        finally:
+            self.chrome.call("Page.removeScriptToEvaluateOnNewDocument", {"identifier": hold}, self.session)
 
     def test_reload_shows_the_last_build_status_and_figures_count_at_once(self):
         self.open()

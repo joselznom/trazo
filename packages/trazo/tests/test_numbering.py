@@ -1,6 +1,5 @@
 """Supplementary numbering survives preview, references and selected exports."""
 
-import hashlib
 import io
 import re
 import shutil
@@ -251,7 +250,7 @@ class BetweenDocuments(unittest.TestCase):
         with mock.patch.object(preview, "build", side_effect=building):
             preview.build_and_watch(stop)
         self.assertEqual(built[:2], ["manuscript", "manuscript"])
-        self.assertEqual(sorted(set(built)), sorted(PROJECT.documents))
+        self.assertEqual(set(built), set(PROJECT.documents))
         self.assertIn("Saved while the preview opened", (preview.OUT_DIR / "manuscript.html").read_text())
 
     def test_a_page_holds_its_reload_until_the_pass_that_read_its_save_ends(self):
@@ -268,9 +267,9 @@ class BetweenDocuments(unittest.TestCase):
         file, build, held = "manuscript/main/98_cross.md", preview.build, []
 
         def save(words):  # as the page saves, through /__source
-            text = (_support.ROOT / file).read_text()
-            preview.change_source({"file": file, "text": text + f"\n{words}\n",
-                                   "base_sha256": hashlib.sha256(text.encode()).hexdigest()})
+            loaded = preview.get_source(file)
+            preview.change_source({"file": file, "text": loaded["text"] + f"\n{words}\n",
+                                   "base_sha256": loaded["sha256"]})
 
         def building(name):  # the second save lands after the first pass read the sources
             done = build(name)
