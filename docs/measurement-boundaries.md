@@ -74,8 +74,8 @@ Pandoc rejects is not rebuilt until it changes.
 
 A change the watcher already sees when it starts (a save while the first
 pages build) is built at once, not after a tick, and its page before the
-other documents' first builds. A page holds its reload while a save from the
-preview is not built (`building` in `/__status` and `/__workspace`); the
+other documents' first builds. A page holds its update (in place or by a
+reload) while a save from the preview is not built (`building` in `/__status` and `/__workspace`); the
 pass that read the save releases it when that pass ends, not the next idle
 tick. A pass still waiting for the tables lock keeps it held.
 
@@ -89,7 +89,8 @@ in-memory status, never a workspace build; comments and the Word build,
 which other processes change, are read again every 0.25 s, as the old poll
 did. Each visible tab holds one server thread for at most a second, and
 closing the server answers its held requests at once. MCP views and the
-editors keep the one-second workspace scan. Evidence is macOS; CI runs the
+editors keep the one-second workspace scan, every 0.1 s while a save from the
+preview builds. Evidence is macOS; CI runs the
 tests on Linux.
 
 Limits: a nested trazo whose SIGTERM handler is held up longer than its share
@@ -120,8 +121,8 @@ prints the failed resources with their status and the server's request log.
 A document page carries the version it was served at
 (`<meta name="trazo-version">`, read before the file), and the viewer
 compares its first status with it, so a build that lands between serving
-the page and that status still reloads it. A build between the two reads
-causes one extra reload, never a missed one.
+the page and that status still reaches it, in place or by a reload. A build
+between the two reads causes one extra update, never a missed one.
 
 ## Storage and recovery limits
 

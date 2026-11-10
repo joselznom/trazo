@@ -46,7 +46,7 @@ With 20 observations, p95 remains a sparse empirical tail estimate.
 | Operation | Start | End |
 | --- | --- | --- |
 | `preview_start` | Send the real MCP tool request | Main manuscript has content and status, fonts ready and two animation frames elapsed |
-| `save_visible` | Browser POST to the actual source-save endpoint | A unique new paragraph is visible after the real watcher/reload pipeline |
+| `save_visible` | Browser POST to the actual source-save endpoint | A unique new paragraph is visible after the real watcher and page update (in place or reload) |
 | `table_open` | Navigate/reload the table editor | Table cells exist, fonts ready and two frames elapsed |
 | `diagram_open` | Navigate/reload the diagram editor | Diagram SVG nodes exist, fonts ready and two frames elapsed |
 | `word_full` | MCP `build(force=true)` | Successful reply after both Word files are built |
