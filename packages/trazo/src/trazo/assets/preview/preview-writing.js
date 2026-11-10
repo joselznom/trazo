@@ -109,9 +109,10 @@
 
   // A reload the page cannot avoid (preview-update.js) may come with the caret in
   // a paragraph with nothing unsaved: the page comes back writing there, at the
-  // same place, if the paragraph reads the same. Kept before the reload, not on
-  // unload: an MCP App view swaps frames without one.
+  // same place, if the paragraph reads the same. Kept as the page goes (pagehide,
+  // which an MCP App view also sends when it swaps frames), and only for a reload.
   const caretKey = "preview-caret:" + Trazo.path();
+  window.addEventListener("pagehide", () => { if (App.reloading()) keepCaret(); });
   function keepCaret() {
     const selection = getSelection();
     if (!writing || !selection.rangeCount || !writing.el.dataset.label) { sdel(caretKey); return; }

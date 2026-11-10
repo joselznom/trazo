@@ -176,11 +176,9 @@
       if (stale && !all.building) {
         const how = view === "doc" ? await updatePage() : "reload";
         if (how === "done" || how === "partial") { loaded[doc] = versions[doc]; blocksHeld = how === "partial"; }
-        else if (how === "reload" && !hasUnsaved()) {  // also with the caret in the text: it comes back
-          keepCaret();
-          if (await App.reload(() => !hasUnsaved())) return;
-          sdel(caretKey);
-        }
+        // Also with the caret in the text: it comes back (restoreCaret). An MCP App
+        // view's page may stay after all, so the next poll goes on.
+        else if (how === "reload" && !hasUnsaved() && App.reload(() => !hasUnsaved())) { polling = false; return; }
       }
       hold.hidden = !(busy && (versions[doc] !== loaded[doc] || blocksHeld || (view !== "doc" && stale)));
       if (view === "doc") for (const n of docNames) if (n !== doc) loaded[n] = versions[n];  // not shown here
