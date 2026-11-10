@@ -180,11 +180,13 @@
       // In the document view the page changes in place when it can (preview-update.js),
       // also while the author writes; a reload waits for unsaved words.
       if (stale && !all.building) {
-        const how = view === "doc" ? await updatePage() : "reload";
+        // A write answered after this status was asked for: the build may lack it (the next status says).
+        const wrote = () => App.writes() !== all.writes;
+        const how = view === "doc" ? await updatePage(wrote) : "reload";
         if (how === "done" || how === "partial") { loaded[doc] = versions[doc]; blocksHeld = how === "partial"; }
         // Also with the caret in the text: it comes back (restoreCaret). An MCP App
         // view's page may stay after all, so the next poll goes on.
-        else if (how === "reload" && !hasUnsaved() && App.reload(() => !hasUnsaved())) { polling = false; return; }
+        else if (how === "reload" && !wrote() && !hasUnsaved() && App.reload(() => !hasUnsaved())) { polling = false; return; }
       }
       hold.hidden = !(busy && (versions[doc] !== loaded[doc] || blocksHeld || (view !== "doc" && stale)));
       if (view === "doc") for (const n of docNames) if (n !== doc) loaded[n] = versions[n];  // not shown here

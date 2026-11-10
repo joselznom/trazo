@@ -138,16 +138,17 @@
   // busy: the next poll tries again) or "reload".
   // A save or a step on its way, or a comment being written, changes the page itself.
   const busyWriting = () => saves > 0 || waiting || stylesSaving.size || writing?.joining || addingComment || !editor.hidden;
-  async function updatePage() {
+  // `wrote`: whether a write was answered since the status that asked for this build.
+  async function updatePage(wrote = () => false) {
     if (tableEditors.size || captionEditors.size) return "reload";  // they reopen after it
-    if (busyWriting()) return "later";
+    if (busyWriting() || wrote()) return "later";
     let next;
     try {
       const response = await fetch(`/${encodeURIComponent(doc)}.html`, { cache: "no-store" });
       if (!response.ok) return "reload";
       next = new DOMParser().parseFromString(await response.text(), "text/html");
     } catch (e) { return "reload"; }
-    if (busyWriting()) return "later";  // again: it may have started meanwhile
+    if (busyWriting() || wrote()) return "later";  // again: it may have started, or ended, meanwhile
     const plan = planUpdate(next);
     if (!plan) return "reload";
     const tracked = new Set(plan.groups.flatMap((group) => group.old.map((r) => outerOf(r.el))));

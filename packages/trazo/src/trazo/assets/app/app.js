@@ -79,13 +79,16 @@
     return true;
   }
 
+  // Writes answered so far: a status asked for before the last of them may
+  // not know of it yet (its `building`), so a page does not show that build.
+  let writes = 0;
   async function api(url, body, method) {
     const verb = method || (body === undefined ? "GET" : "POST");
     const response = await fetch(url, { method: verb,
       cache: "no-store", headers: body === undefined ? {} : { "Content-Type": "application/json" },
       body: body === undefined ? undefined : JSON.stringify(body) });
     const data = await response.json().catch(() => ({ error: `HTTP ${response.status}` }));
-    if (verb !== "GET") pollSoon();  // a save starts a build: learn of it now, not at the next poll
+    if (verb !== "GET") { writes++; pollSoon(); }  // a save starts a build: learn of it now, not at the next poll
     return { ok: response.ok, status: response.status, data };
   }
 
@@ -111,6 +114,7 @@
     const fast = !window.TRAZO_VIEW && [...listeners.values()].some(Boolean)
       && !["comments", "docx", "synced", "building", "digest", "server"].some(name => Object.hasOwn(latest?.documents || {}, name));
     let failed = false;
+    const asked = writes;
     try {
       const due = workspaceAt + 1000 - performance.now();
       const workspace = !fast || !latest || due <= 0;
@@ -118,13 +122,13 @@
         : `/__status?since=${encodeURIComponent(digest)}&wait=${Math.ceil(due) / 1000}`);
       if (!result.ok) throw new Error(result.data.error || "Workspace unavailable");
       if (workspace) {
-        latest = result.data;
+        latest = { ...result.data, writes: asked };
         workspaceAt = performance.now();
       } else {
         digest = result.data.digest;
         latest = { ...latest,
           documents: Object.fromEntries(Object.keys(latest.documents).map(name => [name, result.data[name]])),
-          comments: result.data.comments, docx: result.data.docx, building: result.data.building };
+          comments: result.data.comments, docx: result.data.docx, building: result.data.building, writes: asked };
       }
       await Promise.allSettled([...listeners.keys()].map(fn => fn(latest, null)));
     } catch (error) {
@@ -336,5 +340,5 @@
     load: (scope, name) => api(`/__review?scope=${scope}${name == null ? "" : "&name=" + encodeURIComponent(name)}`),
     change: (scope, body) => api("/__review", { ...body, scope }),
   };
-  window.Trazo = { api, watch, el, commentDeletion, plainClick, readPrefs, savePrefs, theme, mountTheme, editorLink, returnUrl, review, reveal, reload, reloading: () => reloadPending, path: pagePath, search: pageSearch, replaceHash, applyTheme };
+  window.Trazo = { api, watch, el, commentDeletion, plainClick, readPrefs, savePrefs, theme, mountTheme, editorLink, returnUrl, review, reveal, reload, reloading: () => reloadPending, writes: () => writes, path: pagePath, search: pageSearch, replaceHash, applyTheme };
 })();
