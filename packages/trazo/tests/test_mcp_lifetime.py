@@ -7,6 +7,7 @@ import queue
 import shutil
 import signal
 import socket
+import subprocess
 import tempfile
 import time
 import unittest
@@ -14,6 +15,8 @@ from pathlib import Path
 
 import _support  # noqa: F401  (sets TRAZO_ROOT before trazo is imported)
 from test_mcp import Session, answers, free_port, gone, make_project, wait_until
+
+from trazo import portable
 
 # Windows has no SIGKILL: os.kill ends a process with any other signal.
 KILL = getattr(signal, "SIGKILL", signal.SIGTERM)
@@ -148,6 +151,94 @@ class McpLifetimeTests(unittest.TestCase):
         id_ = session.request("tools/call", {"name": "build", "arguments": {"project": str(project)}})
         self.assertTrue(wait_until(lambda: marker.is_file() and marker.read_text()), "commands.docx did not start")
         return id_, int(marker.read_text()), docx
+
+    def timed_out_build(self, detached: bool = False) -> None:
+        session = self.session(env={"TRAZO_MCP_TIMEOUT": "5"})
+        marker, resume = self.tmp / "child.pid", self.tmp / "resume"
+        child = ("import os, pathlib, sys, time; "
+                 "print('building Word: stdout context', flush=True); "
+                 "print('building Word: stderr context', file=sys.stderr, flush=True); "
+                 f"pathlib.Path({str(marker)!r}).write_text(str(os.getpid())); time.sleep(60)")
+        source = ("import pathlib, subprocess, sys; "
+                  f"subprocess.run([sys.executable, '-c', {child!r}], start_new_session={detached!r}) "
+                  f"if not pathlib.Path({str(resume)!r}).exists() else None")
+        project = make_project(self.tmp, docx=source)
+        docx = project / "output" / "manuscript.docx"
+        docx.parent.mkdir(exist_ok=True)
+        subprocess.run(["pandoc", "-o", str(docx)], input="Last good paragraph.", text=True,
+                       capture_output=True, check=True, timeout=10)
+        before = docx.read_bytes()
+
+        def stop_detached_child() -> None:
+            if marker.is_file():
+                try:
+                    os.kill(int(marker.read_text()), KILL)
+                except ProcessLookupError:
+                    pass
+
+        if detached:
+            # This deliberately independent session is outside the MCP process group.
+            self.addCleanup(stop_detached_child)
+        started = time.monotonic()
+        key = session.request("tools/call", {"name": "build", "arguments": {"project": str(project)}})
+        self.assertTrue(wait_until(lambda: marker.is_file() and marker.read_text()), "child did not start")
+        pid = int(marker.read_text())
+        try:
+            reply = session.reply(timeout=15)
+        except queue.Empty:
+            self.fail("the tool did not enforce its deadline")
+        self.assertLess(time.monotonic() - started, 15)
+        self.assertEqual(reply["id"], key)
+        result = reply["result"]
+        self.assertTrue(result["isError"], result)
+        error = result["content"][0]["text"]
+        self.assertIn("timed out", error)
+        self.assertIn("building Word: stdout context", error)
+        self.assertIn("building Word: stderr context", error)
+        if detached:
+            self.assertFalse(gone(pid), "the detached child must still hold the pipe during cleanup")
+        else:
+            self.assertTrue(wait_until(lambda: gone(pid)), "build descendant survived its deadline")
+        self.assertEqual(docx.read_bytes(), before)
+        self.assertEqual(session.rpc("ping")["result"], {})
+        resume.touch()
+        recovered = session.tool("build", project=str(project))
+        self.assertFalse(recovered["isError"], recovered)
+
+    def test_timed_out_build_reports_failure_kills_descendants_and_recovers(self):
+        self.timed_out_build()
+
+    @unittest.skipIf(os.name == "nt", "POSIX detached session holding an inherited pipe")
+    def test_detached_descendant_cannot_block_the_timeout_reply(self):
+        self.timed_out_build(detached=True)
+
+    def test_a_build_whose_child_keeps_the_output_open_succeeds_without_waiting_for_the_deadline(self):
+        session = self.session(env={"TRAZO_MCP_TIMEOUT": "60"})
+        marker = self.tmp / "holder.pid"
+        child = f"import os, pathlib, time; pathlib.Path({str(marker)!r}).write_text(str(os.getpid())); time.sleep(60)"
+        # commands.docx exits at once; the child it leaves keeps the build's output open.
+        project = make_project(self.tmp, docx=f"import subprocess, sys; subprocess.Popen([sys.executable, '-c', {child!r}])")
+        self.addCleanup(lambda: marker.is_file() and not gone(int(marker.read_text()))
+                        and portable.kill_group(int(marker.read_text())))  # its own group: ours to end
+        started = time.monotonic()
+        session.request("tools/call", {"name": "build", "arguments": {"project": str(project)}})
+        try:
+            reply = session.reply(timeout=30)
+        except queue.Empty:
+            self.fail("the build waited for the child, not for itself")
+        self.assertLess(time.monotonic() - started, 30)
+        self.assertFalse(reply["result"]["isError"], reply["result"])
+        self.assertIn("kept its output open", " ".join(reply["result"]["structuredContent"]["warnings"]))
+
+    def test_invalid_deadlines_fail_before_running_the_command(self):
+        marker = self.tmp / "must-not-run"
+        project = make_project(self.tmp, docx=f"import pathlib; pathlib.Path({str(marker)!r}).touch()")
+        for value in ("0", "-1", "nan", "inf", "invalid"):
+            with self.subTest(timeout=value):
+                result = self.session(env={"TRAZO_MCP_TIMEOUT": value}).tool("build", project=str(project))
+                self.assertTrue(result["isError"], result)
+                self.assertIn("positive finite", result["content"][0]["text"])
+                self.assertFalse(marker.exists())
 
     def test_build_is_killed_when_the_server_exits(self):
         session = self.session()

@@ -63,6 +63,8 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     module, _, function = COMMANDS[name][0].partition(":")
     module = importlib.import_module(f".{module}", __package__)
+    from .processes import stop_on_signals
+    stop_on_signals()  # SIGTERM from an MCP call or a preview job ends the commands this one runs
     try:
         return getattr(module, function or "main")(rest) or 0
     except KeyboardInterrupt:

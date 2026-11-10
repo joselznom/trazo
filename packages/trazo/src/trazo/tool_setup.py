@@ -31,7 +31,6 @@ import os
 import platform
 import shutil
 import stat
-import subprocess
 import sys
 import tempfile
 import time
@@ -42,7 +41,7 @@ from functools import partial
 from pathlib import Path
 from typing import IO, Any, NamedTuple, cast
 
-from . import machine, manifest
+from . import machine, manifest, processes
 
 
 class Asset(NamedTuple):
@@ -257,7 +256,7 @@ def quarantine(path: Path) -> str | None:
     """macOS: the com.apple.quarantine value on path, "" without one; None elsewhere."""
     if sys.platform != "darwin":
         return None
-    result = subprocess.run(["/usr/bin/xattr", "-p", QUARANTINE, str(path)], capture_output=True, text=True)
+    result = processes.run(["/usr/bin/xattr", "-p", QUARANTINE, str(path)], text=True, timeout=10)
     return result.stdout.strip() if result.returncode == 0 else ""
 
 

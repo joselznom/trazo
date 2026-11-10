@@ -40,7 +40,7 @@ class ProjectTests(unittest.TestCase):
         self.assertEqual(found.number_prefixes, {"manuscript": "", "supplementary": "S"})
         self.assertEqual(found.command("docx"), [])  # built in
         self.assertEqual(found.command_hint("values"), "scripts/trazo build --prepare=inputs")
-        self.assertEqual(found.config["build"], {"env": {}, "steps": []})
+        self.assertEqual(found.config["build"], {"env": {}, "steps": [], "timeout": 3600})
 
     def test_root_is_found_from_a_subfolder(self):
         folder = Path(tempfile.mkdtemp())

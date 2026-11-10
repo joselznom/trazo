@@ -57,7 +57,7 @@ refuses if the file or comment changed since). Autosaves are coalesced:
 an autosave from the same client to the same diagram updates the previous
 autosave entry instead of adding one, when that entry is the last in the
 history, the file still has the content it wrote, the previous autosave
-was less than COALESCE_SECONDS (20 s) ago and the entry spans less than
+was less than diagram_save.COALESCE_SECONDS (20 s) ago and the entry spans less than
 COALESCE_SPAN (5 min). Explicit saves (autosave false) always add an entry.
 
 Check reuses one long-lived headless Chrome (started on first use, closed
@@ -86,9 +86,10 @@ from urllib.parse import unquote
 
 from . import diagram as dg
 from .background import CommandJob
-from .dependencies import file_digest, render_revision
+from .dependencies import render_revision
+from .diagram_save import diagram_file, file_state, save_diagram
 from .expand import ValuesError, load_values
-from .local_server import Conflict, NotFound, RequestError, Unprocessable
+from .local_server import Conflict, NotFound, RequestError
 from .project import ASSETS_DIR, PROJECT
 from .review_comments import CommentStore
 from .review_storage import review_lock
@@ -99,8 +100,6 @@ CHECK_TIMEOUT = float(os.environ.get("DIAGRAM_CHECK_TIMEOUT") or 20)  # per Chro
 EXPORT_TIMEOUT = float(os.environ.get("DIAGRAM_EXPORT_TIMEOUT") or 300)
 CHECK_WAIT = 30.0
 CHROME_IDLE = 300.0
-COALESCE_SECONDS = 20.0
-COALESCE_SPAN = 300.0
 EMBED_DIR = PROJECT.path("figure_embeds")
 SERVED_PREFIXES = ("figures/fonts/", "figures/output/svg/", "figures/external/")
 PREFIX = "/__diagrams/"
@@ -118,25 +117,6 @@ class Busy(RequestError):
 # ---------------------------------------------------------------- diagrams
 
 
-def diagram_file(name: Any, must_exist: bool = True) -> Path:
-    """figures/diagrams/NAME.json for a valid NAME; never a symbolic link."""
-    if not isinstance(name, str) or not dg.NAME_RE.match(name):
-        raise RequestError(f"invalid diagram name {name!r} "
-                           "(use lowercase letters, digits, - and _)")
-    path = dg.DIAGRAM_DIR / f"{name}.json"
-    if path.is_symlink():
-        raise RequestError("symbolic links are not allowed")
-    if must_exist and not path.is_file():
-        raise NotFound(f"no diagram named {name}")
-    return path
-
-
-def file_state(path: Path) -> dict[str, Any]:
-    info = path.stat()
-    return {"name": path.stem, "file": dg.rel(path), "sha256": file_digest(path),
-            "mtime_ns": info.st_mtime_ns, "bytes": info.st_size}
-
-
 def diagram_paths() -> list[Path]:
     return [p for p in dg.all_diagrams() if dg.NAME_RE.match(p.stem) and not p.is_symlink()]
 
@@ -147,6 +127,8 @@ def list_diagrams() -> list[dict[str, Any]]:
 
 def get_diagram(name: str) -> dict[str, Any]:
     path = diagram_file(name)
+    with review_lock():
+        dg.HISTORY.sweep(path)
     data = path.read_bytes()
     state = file_state(path)
     state.pop("bytes")
@@ -157,73 +139,6 @@ def get_diagram(name: str) -> dict[str, Any]:
     except ValueError as exc:
         parsed, error = None, str(exc)
     return {**state, "text": text, "diagram": parsed, "parse_error": error}
-
-
-def save_diagram(name: str, request: Any) -> dict[str, Any]:
-    """Write a diagram if the file still has base_sha256; record history (see docstring)."""
-    if not isinstance(request, dict):
-        raise RequestError("request body must be a JSON object")
-    diagram = request.get("diagram")
-    if not isinstance(diagram, dict):
-        raise RequestError("diagram must be a JSON object")
-    base = request.get("base_sha256")
-    if base is not None and not isinstance(base, str):
-        raise RequestError("base_sha256 must be a string or null")
-    autosave = request.get("autosave", False)
-    client = request.get("client", "")
-    label = request.get("label", "")
-    if not isinstance(autosave, bool) or not isinstance(client, str) or not isinstance(label, str):
-        raise RequestError("autosave must be a boolean; client and label strings")
-    issues = dg.validate(diagram, dg.load_tokens())
-    if issues:
-        raise Unprocessable("not a valid diagram; nothing was written", issues=issues)
-    data = dg.dump_diagram(diagram)
-    with review_lock():
-        path = diagram_file(name, must_exist=False)
-        current = path.read_bytes() if path.exists() else None
-        current_sha = dg.sha256_bytes(current) if current is not None else None
-        if base != current_sha:
-            why = ("the diagram no longer exists" if current is None
-                   else "a diagram with this name already exists" if base is None
-                   else "the diagram changed on disk since it was loaded")
-            raise Conflict(why,
-                           sha256=current_sha,
-                           text=current.decode("utf-8", "replace") if current is not None else None)
-        recorded = None
-        if data != current:
-            dg.write_atomic(path, data)
-            recorded = record_save(path, current, data, autosave, client, label[:200])
-    return {**file_state(path), "changed": recorded is not None, "history": recorded}
-
-
-def record_save(path: Path, before: bytes | None, data: bytes, autosave: bool,
-                client: str, label: str) -> str:
-    """Add or extend (coalesce) the history entry of an editor save; returns which."""
-    history = dg.load_history()
-    now = time.time()
-    file = dg.rel(path)
-    last = history[-1] if history else None
-    before_sha = dg.sha256_bytes(before) if before is not None else None
-    if (autosave and last is not None and last.get("kind") == "file"
-            and last.get("file") == file and last.get("source") == "editor"
-            and last.get("autosave") is True and last.get("client") == client
-            and last.get("after_sha") == before_sha
-            and now - float(last.get("epoch", 0)) <= COALESCE_SECONDS
-            and now - float(last.get("started", 0)) <= COALESCE_SPAN):
-        saves = int(last.get("saves", 1)) + 1
-        last.update(after_sha=dg.sha256_bytes(data), epoch=now, time=dg.now(), saves=saves,
-                    label=f"editor autosave {path.stem} ({saves} saves)")
-        outcome = "merged"
-    else:
-        history.append({
-            "time": dg.now(), "kind": "file", "file": file,
-            "label": label or f"editor {'autosave' if autosave else 'save'} {path.stem}",
-            "before": before.decode("utf-8") if before is not None else None,
-            "after_sha": dg.sha256_bytes(data), "source": "editor", "autosave": autosave,
-            "client": client, "started": now, "epoch": now, "saves": 1})
-        outcome = "new"
-    dg.save_history(history)
-    return outcome
 
 
 def get_payload(name: str) -> dict[str, Any]:
@@ -331,10 +246,7 @@ class SharedChrome:
 
     def drop(self) -> None:
         if self.chrome is not None:
-            try:
-                self.chrome.close()
-            except Exception:
-                pass
+            self.chrome.discard()
             self.chrome = None
 
     def check(self, name: str, exports: bool) -> dict[str, Any]:

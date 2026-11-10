@@ -16,3 +16,10 @@ dist/
 
 # Internal notes (kept locally in the main checkout)
 /internal/
+
+# Measurement campaign records, kept locally rather than in the repository
+docs/measurement-*.md
+docs/measurement-baseline.json
+docs/measurements/
+docs/open-points.md
+docs/open-points/

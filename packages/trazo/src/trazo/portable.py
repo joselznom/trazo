@@ -1,5 +1,5 @@
-"""What trazo does differently on Windows: process groups, file locks and
-checking a PID.
+"""What trazo does differently on Windows: process groups, file locks,
+checking a PID and syncing a folder; and on macOS, flushing the drive's cache.
 
 POSIX ends a process group with killpg and locks with flock. Windows has
 neither: a group is the process tree that taskkill /T ends (forcefully: a
@@ -17,6 +17,7 @@ import functools
 import os
 import signal
 import subprocess
+import sys
 import time
 from typing import IO, Any
 
@@ -46,6 +47,134 @@ def replace(source: str | os.PathLike[str], target: str | os.PathLike[str]) -> N
     os.replace(source, target)
 
 
+# fsync answers these where a filesystem cannot sync (some network and FUSE
+# volumes, a folder on some systems): nothing more can be done there.
+_NO_SYNC = frozenset({errno.EINVAL, errno.ENOTSUP, errno.EOPNOTSUPP, errno.ENOTTY})
+
+
+def sync(fd: int, full: bool = False) -> None:
+    """Flush an open file to the disk (fsync). macOS fsync leaves the data in
+    the drive's own cache, so `full` there uses F_FULLFSYNC, which empties it
+    (about 7 ms), and falls back to fsync where the filesystem does not support
+    it. Any other failure, such as EIO, is raised."""
+    if full and sys.platform == "darwin":
+        try:
+            fcntl.fcntl(fd, fcntl.F_FULLFSYNC)
+            return
+        except OSError as exc:
+            if exc.errno not in _NO_SYNC:
+                raise
+    try:
+        os.fsync(fd)
+    except OSError as exc:
+        if exc.errno not in _NO_SYNC:
+            raise
+
+
+def sync_file(path: str | os.PathLike[str]) -> None:
+    """sync() a file that is not open (Windows flushes only a writable handle)."""
+    fd = os.open(path, os.O_RDWR if os.name == "nt" else os.O_RDONLY)
+    try:
+        sync(fd)
+    finally:
+        os.close(fd)
+
+
+def sync_folder(folder: str | os.PathLike[str], full: bool = False) -> None:
+    """sync() a folder, so the names a rename put in it survive a power loss.
+    Windows cannot open a folder that way: there it is left to the filesystem."""
+    if os.name == "nt":
+        return
+    fd = os.open(folder, os.O_RDONLY)
+    try:
+        sync(fd, full)
+    finally:
+        os.close(fd)
+
+
+# Filesystems whose atomic exchange trazo uses: macOS APFS (renamex_np with
+# RENAME_SWAP) and, on Linux, ext4, XFS, Btrfs and tmpfs (renameat2 with
+# RENAME_EXCHANGE). Others are never tried, not even to catch ENOTSUP: on a
+# FAT volume renamex_np left the calling process stuck in the kernel.
+EXCHANGE_FILESYSTEMS = frozenset({"apfs", "ext4", "xfs", "btrfs", "tmpfs"})
+_LINUX_FILESYSTEMS = {0xEF53: "ext4", 0x58465342: "xfs", 0x9123683E: "btrfs", 0x01021994: "tmpfs"}
+
+
+class ExchangeUnsupported(OSError):
+    """This platform or filesystem cannot swap two names atomically."""
+
+
+@functools.cache
+def _libc() -> Any:
+    """The C library, with errno, on macOS and Linux; None elsewhere."""
+    if sys.platform != "darwin" and not sys.platform.startswith("linux"):
+        return None
+    import ctypes
+    return ctypes.CDLL(None, use_errno=True)
+
+
+@functools.cache
+def _statfs() -> Any:
+    import ctypes
+    libc = _libc()
+    if libc is None:
+        return None
+    # Intel Macs name the 64-bit-inode struct statfs$INODE64; Apple silicon has only that one.
+    statfs = getattr(libc, "statfs$INODE64", None) if sys.platform == "darwin" else None
+    statfs = statfs or libc.statfs
+    statfs.argtypes = [ctypes.c_char_p, ctypes.c_char_p]
+    return statfs
+
+
+def filesystem_type(folder: str | os.PathLike[str]) -> str:
+    """The type of the filesystem `folder` is on ("apfs", "ext4"...); "" when unknown."""
+    import ctypes
+    statfs = _statfs()
+    buffer = ctypes.create_string_buffer(4096)  # larger than struct statfs on either system
+    if statfs is None or statfs(os.fsencode(folder), buffer) != 0:
+        return ""
+    if sys.platform == "darwin":
+        return buffer.raw[72:88].split(b"\0", 1)[0].decode("ascii", "replace")  # f_fstypename
+    magic = ctypes.c_long.from_buffer(buffer).value & 0xFFFFFFFF  # f_type comes first
+    return _LINUX_FILESYSTEMS.get(magic, f"{magic:#x}")
+
+
+@functools.cache
+def _exchange_call() -> Any:
+    """The native swap of two paths, or None where the C library has none."""
+    import ctypes
+    libc = _libc()
+    if libc is None:
+        return None
+    if sys.platform == "darwin":
+        renamex_np = libc.renamex_np
+        renamex_np.argtypes = [ctypes.c_char_p, ctypes.c_char_p, ctypes.c_uint]
+        return lambda a, b: renamex_np(a, b, 0x2)  # RENAME_SWAP
+    renameat2 = getattr(libc, "renameat2", None)  # glibc 2.28 and later
+    if renameat2 is None:
+        return None
+    renameat2.argtypes = [ctypes.c_int, ctypes.c_char_p, ctypes.c_int, ctypes.c_char_p, ctypes.c_uint]
+    return lambda a, b: renameat2(-100, a, -100, b, 0x2)  # AT_FDCWD, RENAME_EXCHANGE
+
+
+def can_exchange(folder: str | os.PathLike[str]) -> bool:
+    """Whether exchange() works for two names in `folder`."""
+    return filesystem_type(folder) in EXCHANGE_FILESYSTEMS and _exchange_call() is not None
+
+
+def exchange(a: str | os.PathLike[str], b: str | os.PathLike[str]) -> None:
+    """Swap the files named `a` and `b` (in one folder) in one step. Raises
+    ExchangeUnsupported, without trying, where can_exchange() is false, and
+    when the system refuses the call; OSError for any other failure."""
+    import ctypes
+    if not can_exchange(os.path.dirname(os.fspath(b)) or "."):
+        raise ExchangeUnsupported(errno.ENOTSUP, "this filesystem cannot swap files atomically", os.fspath(b))
+    if _exchange_call()(os.fsencode(a), os.fsencode(b)) != 0:
+        code = ctypes.get_errno()
+        error = ExchangeUnsupported if code in (errno.ENOTSUP, errno.EINVAL, errno.ENOSYS) else OSError
+        raise error(code, os.strerror(code), os.fspath(b))
+
+
 def no_window() -> dict[str, Any]:
     """Popen options: no console window on Windows."""
     return {"creationflags": subprocess.CREATE_NO_WINDOW} if os.name == "nt" else {}
@@ -58,9 +187,9 @@ def group_options() -> dict[str, Any]:
     return {"start_new_session": True}
 
 
-def kill_group(pid: int, graceful: bool = False) -> None:
-    """End the group `pid` leads: SIGTERM when graceful, else SIGKILL; on
-    Windows, always force-end the process tree. A group already gone is fine."""
+def kill_group(pid: int, signum: int | None = None) -> None:
+    """Send the group `pid` leads `signum` (default SIGKILL); on Windows,
+    always force-end the process tree. A group already gone is fine."""
     if os.name == "nt":
         taskkill = os.path.join(os.environ.get("SystemRoot", r"C:\Windows"), "System32", "taskkill.exe")
         try:
@@ -70,7 +199,7 @@ def kill_group(pid: int, graceful: bool = False) -> None:
             pass
         return
     try:
-        os.killpg(pid, signal.SIGTERM if graceful else signal.SIGKILL)
+        os.killpg(pid, signal.SIGKILL if signum is None else signum)
     except (ProcessLookupError, PermissionError):
         pass
 
@@ -97,11 +226,43 @@ def pid_alive(pid: int) -> bool:
     return True
 
 
+class Job:
+    """Windows: a job object holding a started process and what it starts
+    (trazo.processes). TerminateJobObject ends them all, also those whose
+    parent already exited, which taskkill /T cannot find, and those of a job
+    nested in it. A process the command starts before it joins escapes, but
+    a program takes far longer to start one."""
+
+    def __init__(self, process: subprocess.Popen) -> None:
+        kernel32 = _kernel32()
+        self.handle = kernel32.CreateJobObjectW(None, None)
+        if not self.handle:
+            raise OSError("CreateJobObjectW failed")
+        if not kernel32.AssignProcessToJobObject(self.handle, int(process._handle)):  # type: ignore[attr-defined]
+            self.close()
+            raise OSError("AssignProcessToJobObject failed")
+
+    def terminate(self) -> None:
+        if self.handle:
+            _kernel32().TerminateJobObject(self.handle, 1)
+
+    def close(self) -> None:
+        """Forget the job; its processes keep running."""
+        if self.handle:
+            _kernel32().CloseHandle(self.handle)
+            self.handle = None
+
+
 @functools.cache
 def _kernel32() -> Any:
     """A private kernel32 (its restype settings stay out of ctypes.windll)."""
     kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
     kernel32.OpenProcess.restype = ctypes.c_void_p
+    kernel32.CreateJobObjectW.restype = ctypes.c_void_p
+    kernel32.CreateJobObjectW.argtypes = [ctypes.c_void_p, ctypes.c_wchar_p]
+    kernel32.AssignProcessToJobObject.argtypes = [ctypes.c_void_p, ctypes.c_void_p]
+    kernel32.TerminateJobObject.argtypes = [ctypes.c_void_p, ctypes.c_uint]
+    kernel32.CloseHandle.argtypes = [ctypes.c_void_p]
     return kernel32
 
 

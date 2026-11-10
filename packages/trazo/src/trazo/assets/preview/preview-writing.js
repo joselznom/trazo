@@ -206,7 +206,11 @@
         refused(ed, result.status, result.payload);
         return;
       }
-      if (done) { showSaveState("Saved", true); done(result.payload); }
+      if (done) {
+        showSaveState("Saved", true);
+        done(result.payload);
+        if (result.payload.warning) toast(result.payload.warning);
+      }
       else blockSaved(ed, result.payload, group, sent);
       if (step) stepSaved(step, result.payload, sent);
     });
@@ -268,18 +272,21 @@
     if (!payload.parts.length) dropParagraph(ed);
     showSaveState("Saved", true);
     // A heading without an id of its own gets one from its text: a link to the old one breaks.
-    const anchor = ed.el.closest("section")?.id || ed.el.id;
+    const anchor = ed.el.closest("section")?.id || ed.el.id, notes = [];
     if (isHeading(ed.el) && ed.mark.dataset.auto && anchor && $$(`a[href="#${CSS.escape(anchor)}"]`, page).length)
-      toast("A link in the text points to this heading by its old name: give the heading an id or update the link.");
+      notes.push("A link in the text points to this heading by its old name: give the heading an id or update the link.");
+    if (payload.warning) notes.push(payload.warning);  // trouble after the save was written
+    if (notes.length) toast(notes.join(" "));
   }
 
   // Outside the text, Cmd+Z undoes the latest change, a saved paragraph or a comment.
   async function undoLatest() {
     const { ok, payload } = await postJson(`/__undo?doc=${encodeURIComponent(doc)}`);
     if (ok && payload.kind === "comment" && undoLabel) send({ op: "undo" }, `Undone: ${undoLabel}`);
-    if (!ok || payload.kind !== "file") return;
+    if (!ok) { toast(`Not undone: ${refusal(payload)}.`); return; }
+    if (payload.kind !== "file") return;
     const { ok: undone, payload: answer } = await postJson("/__source", { op: "undo", file: payload.file });
-    toast(undone ? `Undone: the last save of ${payload.file}` : `Not undone: ${refusal(answer)}.`);
+    toast(undone ? `Undone: the last save of ${payload.file}${answer.warning ? ". " + answer.warning : ""}` : `Not undone: ${refusal(answer)}.`);
   }
 
   function discardWriting(ed) {

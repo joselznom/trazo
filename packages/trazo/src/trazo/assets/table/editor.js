@@ -64,32 +64,7 @@
     $("#te-ftext").textContent = text.startsWith("Saved") ? "Saved automatically · ⌘Z undoes" : text;
     $("#te-fdot").className = "te-dot" + (error ? " err" : busy || pending.size ? " warn" : "");
   }
-  let flashTimer = null;
-  // A short notice; with `action` ({label, run}) it stays longer and offers
-  // a button (Undo after a comment change). Hovering keeps it open.
-  function flash(text, action) {
-    let el = $(".te-flash");
-    if (!el) {
-      el = h("div", { class: "te-flash", role: "status" });
-      el.addEventListener("mouseenter", () => clearTimeout(flashTimer));
-      el.addEventListener("mouseleave", () => { flashTimer = setTimeout(() => el.remove(), 2600); });
-      document.body.append(el);
-    }
-    el.textContent = text;
-    if (action) el.append(h("button", { type: "button", text: action.label,
-      onclick: () => { clearTimeout(flashTimer); el.remove(); action.run(); } }));
-    clearTimeout(flashTimer);
-    flashTimer = setTimeout(() => el.remove(), action ? 6000 : 2600);
-  }
-  function banner(content, kind, actions) {
-    const el = $("#te-banner");
-    el.replaceChildren();
-    if (!content) { el.hidden = true; return; }
-    el.className = "te-banner" + (kind === "err" ? " err" : "");
-    el.append(h("div", { class: "te-grow" }, content), ...(actions || []),
-      h("button", { type: "button", class: "te-icon", "aria-label": "Dismiss", text: "✕", onclick: () => banner(null) }));
-    el.hidden = false;
-  }
+  const { flash, banner, warned, conflict, failed } = T.messages(h);
 
   // ---------------------------------------------------------------- spec helpers
   // Spec path of a leaf of the model: <id>, <group>.<leaf>, or <pivot>.<leaf>
@@ -251,12 +226,12 @@
         if (!$("#te-banner").classList.contains("err")) banner(null);
         accept(r.data);
         setSave(`Saved · ${opts.shared ? st.shared.file : st.file}`);
+        warned(r.data);
         loadList();
       } else if (r.status === 409) {
         blocked = true;
         setSave("Not saved: changed elsewhere", true);
-        banner("This table changed on disk since it was loaded (another edit or an agent). Your last edits are not saved.", "err",
-          [h("button", { type: "button", class: "pv-btn sm", text: "Reload (lose my edits)", onclick: reloadAfterConflict })]);
+        conflict(r.data, reloadAfterConflict);
       } else if (r.status === 422) {
         setSave("Not saved: fix the errors", true);
         showIssues(r.data.issues || [], r.data.error);
@@ -650,13 +625,13 @@
     const r = await api("/__table/undo", { label, hidden: showHidden });
     if (r.ok) {
       blocked = false;
-      banner(null);
+      banner(r.data.warning, "err");
       accept(r.data);
       flash(r.data.undone.replace(/^undone: /, "Undone: ").replace(/; next undo: .*$/, ""));
       setSave(`Saved · ${st.file}`);
       loadList();
     } else {
-      flash(r.data.error || "Undo failed");
+      failed(r.data, "Undo failed");
       loadTable(true);
     }
   }

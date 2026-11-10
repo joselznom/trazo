@@ -165,6 +165,15 @@ class CommentTests(unittest.TestCase):
         removed = preview.change_comments({"op": "delete", "ids": [mark["comments"][0]["id"], other]})
         self.assertEqual(removed["undo"], "remove 2 highlights")
 
+    def test_a_change_without_a_string_id_is_a_bad_request(self):
+        preview.change_comments({"op": "add", "doc": "manuscript", "comment": "Fix"})
+        for request, message in (({"op": "update", "status": "done"}, "id is required"),
+                                 ({"op": "reply", "id": 7, "text": "Done"}, "id must be a string")):
+            with self.subTest(request=request):
+                with self.assertRaisesRegex(preview.CommentError, message) as raised:
+                    preview.change_comments(request)
+                self.assertEqual(raised.exception.status, 400)
+
     def test_unknown_document_is_refused(self):
         with self.assertRaises(preview.CommentError):
             preview.change_comments({"op": "add", "doc": "nope", "comment": "x"})

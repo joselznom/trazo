@@ -12,7 +12,9 @@ Filters and --citeproc keep their side of the crossref filter: those
 before it run in stage 1, where Pandoc's output format is JSON (a filter
 there sees FORMAT=json, not the real format); those after it run in stage 2.
 A call without the crossref filter runs unchanged. `--log` covers both
-stages (stage 1's messages first), and `timeout` is for the whole run.
+stages (stage 1's messages first), and `timeout` is for the whole run:
+TIMEOUT seconds unless the caller sets a shorter one (trazo.processes runs
+each stage and stops it, with what it started, when time runs out).
 `--defaults` cannot be split, so it fails with the crossref filter.
 """
 
@@ -24,8 +26,14 @@ import tempfile
 import time
 from pathlib import Path, PurePath
 
-from . import crossref
+from . import crossref, processes
+from .process_pipes import decode  # noqa: F401  (callers that run Pandoc with bytes decode its messages with it)
 from .project import PROJECT
+
+# Seconds one Pandoc run may take: hundreds of times the slowest measured Word
+# build. TRAZO_PANDOC_TIMEOUT sets another for a document that needs longer.
+TIMEOUT_ENV = "TRAZO_PANDOC_TIMEOUT"
+VERSION_TIMEOUT = 30  # seconds for `pandoc --version`, which answers at once
 
 FILTER_NAME = "pandoc-crossref"  # marks where trazo's pass goes
 # Long options that take a value, and the short forms Pandoc accepts.
@@ -122,27 +130,47 @@ def split(args: list[str]) -> tuple[list[str], list[str]] | None:
     return first + ["--to=json"], second
 
 
+def version(command: list[str], cwd) -> str:
+    """The first line of `pandoc --version`; "" when Pandoc cannot start."""
+    try:
+        result = processes.run([*command, "--version"], cwd=cwd, text=True, timeout=VERSION_TIMEOUT,
+                               hint="check commands.pandoc")
+    except processes.Timeout:
+        raise
+    except OSError:
+        return ""
+    return (result.stdout.splitlines() or [""])[0]
+
+
 def run(args: list[str], *, input: bytes | str | None = None, text: bool = False,
         timeout: float | None = None, command: list[str] | None = None,
         cwd=None) -> subprocess.CompletedProcess:
     """Like subprocess.run([*pandoc, *args], capture_output=True, cwd=cwd)
-    (the project root by default); raises OSError or TimeoutExpired as it does,
-    and ValueError for `--defaults` with the crossref filter."""
+    (the project root by default), with `timeout` seconds at most (default
+    TIMEOUT_ENV's, else 600); raises OSError when Pandoc cannot start,
+    processes.Timeout (a TimeoutExpired) when it runs out of time, and
+    ValueError for `--defaults` with the crossref filter."""
+    timeout = processes.env_seconds(TIMEOUT_ENV, 600) if timeout is None else timeout
     command = list(command or PROJECT.command("pandoc"))
-    cwd = cwd or PROJECT.root
+    try:
+        return _run(args, input, text, timeout, command, cwd or PROJECT.root)
+    except processes.Timeout as exc:  # the whole run's limit, not what was left for a stage
+        exc.cmd, exc.timeout, exc.hint = [*command, *args], timeout, f"{TIMEOUT_ENV} sets the limit"
+        raise
+
+
+def _run(args: list[str], input: bytes | str | None, text: bool, timeout: float, command: list[str],
+         cwd) -> subprocess.CompletedProcess:
     stages = split(args)
     if stages is None:
-        return subprocess.run([*command, *args], input=input, cwd=cwd,
-                              capture_output=True, text=text, timeout=timeout)
+        return processes.run([*command, *args], input=input, cwd=cwd, text=text, timeout=timeout)
     first, second = stages
-    deadline = None if timeout is None else time.monotonic() + timeout
+    deadline = time.monotonic() + timeout
 
     def remaining():
-        if deadline is None:
-            return None
         left = deadline - time.monotonic()
         if left <= 0:
-            raise subprocess.TimeoutExpired([*command, *args], timeout)
+            raise processes.Timeout([*command, *args], timeout)
         return left
 
     data = input.encode("utf-8") if isinstance(input, str) else input
@@ -151,8 +179,7 @@ def run(args: list[str], *, input: bytes | str | None = None, text: bool = False
         first_log = Path(folder) / "stage1-log.json"
         if log is not None:
             first = [*first, f"--log={first_log}"]
-        result = subprocess.run([*command, *first], input=data, cwd=cwd,
-                                capture_output=True, timeout=remaining())
+        result = processes.run([*command, *first], input=data, cwd=cwd, timeout=remaining())
         messages = result.stderr
         if result.returncode == 0:
             found: list[str] = []
@@ -171,9 +198,6 @@ def run(args: list[str], *, input: bytes | str | None = None, text: bool = False
     return subprocess.CompletedProcess([*command, *args], result.returncode, decode(result.stdout), decode(messages))
 
 
-def decode(data: bytes) -> str:
-    """Text as subprocess.run(text=True) gives it: universal newlines (Windows programs write CRLF)."""
-    return data.decode("utf-8", errors="replace").replace("\r\n", "\n").replace("\r", "\n")
 
 
 def merge_logs(first: Path, final: Path) -> None:
@@ -195,9 +219,7 @@ def second_stage(command, args, doc, sources, cwd, timeout, folder):
     HTML title (the input file name) does not change."""
     data = json.dumps(doc, ensure_ascii=False).encode("utf-8")
     if not sources or sources[0] == "-":
-        return subprocess.run([*command, *args], input=data, cwd=cwd,
-                              capture_output=True, timeout=timeout)
+        return processes.run([*command, *args], input=data, cwd=cwd, timeout=timeout)
     path = Path(folder) / f"{PurePath(sources[0]).stem}.json"
     path.write_bytes(data)
-    return subprocess.run([*command, *args, str(path)], cwd=cwd,
-                          capture_output=True, timeout=timeout)
+    return processes.run([*command, *args, str(path)], cwd=cwd, timeout=timeout)

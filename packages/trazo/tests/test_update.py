@@ -4,6 +4,9 @@ import hashlib
 import json
 import os
 import shutil
+import signal
+import subprocess
+import sys
 import tempfile
 import tomllib
 import unittest
@@ -14,9 +17,16 @@ import _support  # noqa: F401  (sets TRAZO_ROOT before trazo loads)
 
 from trazo import agents, cli, manifest, new, update, variants
 from trazo.agents import MARKER_NAME as MARKER
-from trazo.project import DEFAULTS, Project, merge
+from trazo.project import DEFAULTS, PACKAGE_DIR, Project, merge
 
 TITLE = 'A "quoted" title: C:\\papers 😀'
+
+# trazo update of the folder in argv[1], killed where it makes a file executable.
+KILLED_UPDATE = """import os, signal, sys
+from trazo import update
+update.make_executable = lambda path: os.kill(os.getpid(), signal.SIGKILL)
+update.update(sys.argv[1])
+"""
 
 
 def older_store(folder: Path) -> variants.Store:
@@ -247,6 +257,19 @@ class UpdateTest(unittest.TestCase):
         self.assertFalse((self.project / "data/example.csv").exists())
         self.assertIn({"path": "AGENTS.md", "reason": "deleted in the project; not restored"}, report.skipped)
         self.assertIn("notes/ideas.md", report.added)
+
+    @unittest.skipIf(os.name == "nt", "SIGKILL and the executable bit")
+    def test_an_executable_added_by_a_killed_update_is_executable_after_the_rerun(self):
+        saved = manifest.read(self.project)
+        del saved["files"]["scripts/trazo"]  # as if new in this release
+        manifest.write(self.project, saved)
+        (self.project / "scripts/trazo").unlink()
+        killed = subprocess.run([sys.executable, "-c", KILLED_UPDATE, str(self.project)], timeout=120,
+                                env={**os.environ, "PYTHONPATH": str(PACKAGE_DIR.parent)})
+        self.assertEqual(killed.returncode, -signal.SIGKILL)
+        self.assertTrue((self.project / "scripts/trazo").is_file())
+        update.update(self.project, self.store)
+        self.assertTrue(os.access(self.project / "scripts/trazo", os.X_OK))
 
     def test_same_release_changes_nothing(self):
         fresh = self.tmp / "same"

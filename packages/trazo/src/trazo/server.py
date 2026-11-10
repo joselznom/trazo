@@ -17,7 +17,7 @@ from functools import lru_cache
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
-from . import counts
+from . import counts, processes
 from .frontmatter import separate_title_page
 from .local_server import GuardedHandler, LocalServer
 from .portable import address_in_use
@@ -84,6 +84,46 @@ def page_stamp(page: str) -> str:
     return digest.hexdigest()[:32]
 
 
+# A page load opens about 45 connections to this server, and on Windows one of
+# them now and then fails inside the browser without reaching it: that script
+# never runs, or that stylesheet (a <link>, or an @import in it, which fails its
+# <link>) never applies, and the page stays half-started. A trazo script or
+# stylesheet that fails while the page is still parsing shows the viewer's reload
+# note and reloads the page, once per tab (sessionStorage; no storage, no reload),
+# so it cannot loop; a page that then loads clears the count. Nothing the user
+# typed can be lost: until parsing ends the page shows nothing (rel=expect below)
+# and the viewer and editors are not built yet; the head's stylesheets block the
+# body's scripts, so they fail while it parses. Later failures change nothing, and
+# so do fonts and images: text falls back to another face, a figure shows empty.
+# decorate_page puts it first in head, before every script and stylesheet.
+LOAD_GUARD = """<script>(() => {
+  const key = "trazo-script-reload";
+  let failed = false;
+  addEventListener("error", (event) => {
+    const file = event.target;
+    if (failed || document.readyState !== "loading" || !(file instanceof Element)
+        || !file.matches("script[src], link[rel~=stylesheet]")
+        || !(file.src || file.href).startsWith(location.origin + "/__assets/")) return;
+    failed = true;
+    let reload = false;
+    try { if (!sessionStorage.getItem(key)) { sessionStorage.setItem(key, "1"); reload = true; } } catch (e) { /* no storage */ }
+    const note = () => {  // the same note as preview-page.js shows
+      if (document.getElementById("pk-script-note")) return;
+      const p = document.createElement("p");
+      p.id = "pk-script-note";
+      p.style.cssText = "margin:2em;font:16px system-ui,sans-serif";
+      p.textContent = "Viewer scripts did not load; reload the page.";
+      document.body.prepend(p);
+    };
+    if (document.body) note(); else addEventListener("DOMContentLoaded", note);
+    if (reload) { stop(); location.reload(); }  // never in an MCP view: its page inlines every script and stylesheet
+  }, true);
+  addEventListener("load", () => {
+    if (!failed) try { sessionStorage.removeItem(key); } catch (e) { /* no storage */ }
+  });
+})();</script>"""
+
+
 def image_stamp(page: str) -> str:
     """A digest of the local images a document page shows (path, size, time):
     the viewer reloads for a build that changed one, as its blocks read the same."""
@@ -95,11 +135,13 @@ def image_stamp(page: str) -> str:
     return digest.hexdigest()[:32]
 
 
-def decorate_page(page, counts=None, stamp=False):
+def decorate_page(page, counts=None, stamp=False, version=None):
     """A page with the workspace's shared head; `counts` (a document page's,
     from counts.page_counts) becomes window.PREVIEW_COUNTS. `stamp` adds
     <meta name="trazo-page"> with the page_stamp of the decorated page, and
-    <meta name="trazo-images"> with its image_stamp."""
+    <meta name="trazo-images"> with its image_stamp; `version`,
+    <meta name="trazo-version">: the document version it was served at,
+    which the viewer compares with its first status."""
     # builds: document name -> the DOCX its full build writes ("" = no full build).
     builds = {name: PROJECT.config["documents"][name]["docx"] if PROJECT.document_build(name) is not None else ""
               for name in PROJECT.documents}
@@ -131,9 +173,12 @@ def decorate_page(page, counts=None, stamp=False):
     if end:
         page = head + '<span id="pk-shell-ready" hidden></span>' + end + rest
     page = page.replace("</head>", shared + "</head>", 1)
+    page = re.sub(r"<head\b[^>]*>", lambda tag: tag[0] + LOAD_GUARD, page, count=1)
     if stamp:
         page = page.replace("</head>", f'<meta name="trazo-page" content="{page_stamp(page)}">'
                             f'<meta name="trazo-images" content="{image_stamp(page)}"></head>', 1)
+    if version is not None:  # after the stamp: a rebuild of the same text keeps its comment anchors
+        page = page.replace("</head>", f'<meta name="trazo-version" content="{int(version)}"></head>', 1)
     return page.encode()
 
 
@@ -155,8 +200,12 @@ def served_page(path: str) -> bytes | None:
     built = static_file(path)
     if not built:
         return stub_page(name)
+    # The version before the text: a build landing in between makes the page
+    # reload once more, never keep an older text than it claims.
+    with preview.LOCK:
+        version = preview.STATE.get(name, {}).get("version")  # none: the viewer keeps its first status
     page = built.read_text(encoding="utf-8")
-    return decorate_page(page, served_counts(name, page), stamp=True)
+    return decorate_page(page, served_counts(name, page), stamp=True, version=version)
 
 
 def stub_page(name: str) -> bytes:
@@ -270,8 +319,13 @@ def serve(port=8765, on_bind=None):
             watching.set()
             preview.DOCX_JOB.stop("cancelled")
             diagram_editor.shutdown()
+            # A page's Pandoc, the tables command: none outlives the preview, and the
+            # watcher, which may still be in a pass, cannot start another.
+            processes.stop_all(close=True)
             for worker in workers:
                 worker.join(timeout=5)
+            if not any(worker.is_alive() for worker in workers):  # a serve() run in-process (tests)
+                processes.reopen()
 
 
 def serve_from_terminal(port: int, command: str) -> None:

@@ -58,6 +58,11 @@ Internal changes (tests, CI, refactoring) stay out.
   write: only the paragraph you are in waits until you leave it. A new
   section or a rebuilt image still reloads the page, and if you were writing
   with nothing unsaved, the caret comes back where it was.
+- Saved changes appear sooner in a visible preview, especially in longer papers.
+- An open preview asks the server half as often while nothing changes, and
+  still shows a saved change as soon as it is built.
+- A change saved while the preview is still opening shows at once: its page
+  builds before the other documents finish their first build.
 - The preview's selection bar tells apart what reaches Word from what does
   not. **Underline**, the reading mark, is now **Highlight** and paints the
   text violet; it still stays out of Word and out of the agent's list, and
@@ -86,10 +91,84 @@ Internal changes (tests, CI, refactoring) stay out.
 
 ### Fixed
 
+- A save from the preview no longer stays, now and then, on the page as an
+  edit to review instead of your text: a build that read it while it was
+  being saved runs again.
+- A preview page no longer keeps an older text when a build lands while it
+  loads: it reloads to the new one.
+- A corrupt manuscript undo history is preserved in a separate file and shown as
+  an error. Retrying resumes saving and undoing new changes without repairing
+  the old history by hand.
+- Broken table data or specs now show an error in the preview and keep the last
+  good page. Fixing them refreshes the page, including manuscript edits made meanwhile.
+- A build, check or paper update run by the agent that hangs now stops after
+  20 minutes with an error, instead of waiting forever.
+- A failed table or diagram save keeps the last saved text and its undo history,
+  including when a diagram autosave is interrupted.
 - The table editor no longer shows "null" under a table without a note (#15).
+- A Word file is published only from sources, bibliography, metadata and
+  figures that held still while it was built. When one changes mid-build,
+  trazo builds it again once; if it changes again, the build fails and keeps
+  the earlier Word file. A step or diagram export whose inputs change while it
+  runs fails too, and the next build runs it again, instead of reporting
+  "up to date" with stale output. Undoing such an edit now rebuilds the file.
+- A save from the preview, the table editor or the diagram editor no longer
+  overwrites a change that an agent, an editor or a sync app makes to the same
+  file while it is saved, on a Mac's APFS disk or Linux's ext4, XFS, Btrfs or
+  tmpfs: that version stays in the file, your text is copied to
+  `notes/review/conflicts/`, and the editor's conflict message says where the
+  copy is. On other disks the Source tab says once that a write at the instant
+  of saving can still be lost.
+- When the preview cannot rebuild for an unexpected reason (a file it cannot
+  read, a tables command whose output it cannot decode), it now says so on the
+  page instead of claiming "Build OK" or staying on "building..." forever, and
+  it rebuilds by itself once the cause is fixed, edits made meanwhile included.
+  A table output re-saved in another encoding is flagged as edited by hand and
+  rebuilt by the next table render (`trazo table check` no longer crashes on
+  it), and closing the headless Chrome no longer leaves it or its temporary
+  folder behind.
+- A preview, table editor or diagram editor page whose script or stylesheet
+  failed to load (seen now and then on Windows) reloads itself once instead of
+  staying half started or unstyled; if the file fails again, the page says to
+  reload it.
+- Nothing trazo runs can hang forever any more, and what it stops leaves
+  nothing behind. A build whose Pandoc stalls stops after 10 minutes, a
+  metadata read after 1 minute, `uv sync` after 30 minutes and your own build
+  steps and commands after 1 hour (`[build] timeout` in trazo.toml), each with
+  an error that says what stopped and keeps the earlier Word file. The
+  preview's tables command stops after 20 minutes and says so on the page; a
+  build running elsewhere no longer freezes the preview (it catches up as soon
+  as that build ends), and a table save during one fails after 20 seconds
+  instead of waiting. Pandoc that could not finish a page is retried by itself. A build
+  whose script leaves a helper program running is no longer reported as
+  timed out after 20 minutes, nor stuck "running" in the preview. Stopping
+  the preview, Ctrl+C or a cancelled agent call also ends the programs they
+  started. `TRAZO_PANDOC_TIMEOUT`, `TRAZO_UV_TIMEOUT` and
+  `PREVIEW_TABLES_TIMEOUT` set other limits in seconds.
+- A save, build or paper update that is killed (a crash, a forced quit) no
+  longer leaves its temporary files behind for good: the next save of the same
+  file, or the next Word build, removes them once they are 10 minutes old, and
+  new papers' `.gitignore` hides them from git meanwhile. A failed save at the
+  undo limit (200 table or diagram changes, 50 manuscript saves) no longer
+  drops the oldest undo, and after a failed manuscript save Undo save works at
+  once instead of first reporting a changed file. A damaged table or diagram
+  undo history is set aside in a separate file, as the manuscript's already
+  is, instead of blocking every save. Saves now reach the disk before trazo
+  reports them (on a Mac, past the drive's cache for the files you write), and
+  a paper update killed midway leaves `scripts/trazo` executable.
+- The word counts no longer fail on a manuscript whose `::: abstract` block
+  holds a raw HTML `<header>`; clearing a table note whose closing `:::` line
+  ends in a stray carriage return or non-breaking space removes it instead of
+  answering "server error"; and a comment change sent without a comment id is
+  refused as an invalid request instead of "no comment with id None".
 - After a save from the preview, the page reloads once, when its build has
   the save. It could reload first to an older build, without the words you
   had just written, and then again.
+
+### Upgrade notes
+
+- `trazo update` adds the lines that hide trazo's temporary files to
+  `.gitignore`; if you changed that file, merge `.gitignore.new` into it.
 
 ### Removed
 

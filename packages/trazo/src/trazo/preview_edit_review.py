@@ -35,7 +35,8 @@ from typing import Any, cast
 
 from . import edit_diff, preview_blocks
 from .local_server import RequestError
-from .review_storage import StoreError, read_list, review_lock, write_atomic, write_json
+from .review_storage import StoreError, review_lock, write_json
+from .source_publish import publish
 
 MAX_ITEMS = 10_000
 
@@ -75,7 +76,7 @@ def load() -> dict[str, Any] | None:
 
 def save(store: dict[str, Any]) -> None:
     from . import preview
-    write_json(preview.EDITS_PATH, store)
+    write_json(preview.EDITS_PATH, store, durable=True)
 
 
 def ensure() -> dict[str, Any]:
@@ -139,7 +140,7 @@ def reader() -> tuple[Callable[[Path], str] | None, Callable[[], None]]:
 def page_files(doc: str) -> list[str]:
     """The tracked files a document's page is built from, in page order."""
     from . import preview
-    from .build_graph import expand_includes
+    from .build_inputs import expand_includes
     names = {path.resolve(): name for name, path in tracked().items()}
     found = (names.get(path.resolve()) for path in expand_includes(preview.PROJECT.document_files(doc)))
     return list(dict.fromkeys(name for name in found if name))
@@ -179,13 +180,14 @@ def _items(request: Any) -> tuple[str, dict[str, list[str]]]:
 
 def change_edits(request: Any) -> dict[str, Any]:
     """Accept or reject edits; those that changed since the page was built
-    are left as they are and listed as missed ({file, id})."""
-    from . import preview
-    from .preview_sources import read_source, save_file_history, sha256_of, source_path
+    are left as they are and listed as missed ({file, id}), as are those of
+    a file another program wrote while their rejection was being published
+    (source_publish keeps that version and the rejected text)."""
+    from .preview_sources import read_file_history, read_source, save_file_history, sha256_of, source_path
     op, by_file = _items(request)
     paths = {name: source_path(name) for name in by_file}  # validates every name first
     ensure()
-    done, missed = 0, []
+    done, missed, warnings = 0, [], []
     with review_lock():
         store = load()
         if store is None:
@@ -204,31 +206,55 @@ def change_edits(request: Any) -> dict[str, Any]:
                 store["files"][name] = edit_diff.accept(store["files"].get(name, ""), chosen)
                 continue
             new = edit_diff.reject(text, chosen).encode("utf-8")
-            history = read_list(preview.FILE_HISTORY_PATH) if history is None else history
+            # Recorded before publishing, as a save is: a damaged history stops the
+            # rejection first, and the text it replaces is in history if trazo dies.
+            history = read_file_history() if history is None else history
             history.append({"time": time.strftime("%Y-%m-%d %H:%M:%S"), "at": time.time_ns(), "file": name, "kind": "reject",
-                            "before_text": text, "before_sha": sha256_of(data), "after_sha": sha256_of(new)})
-            write_atomic(path, new)
-        if history is not None:
+                            "before_text": text, "before_sha": sha256_of(data), "after_sha": sha256_of(new),
+                            "pending": True})
             save_file_history(history)
+            result = publish(path, new, data, name)
+            warnings += [result.warning] if result.warning else []
+            if not result.published:
+                history.pop()
+                save_file_history(history)
+                done -= len(chosen)
+                missed += [{"file": asked, "id": e.id} for e in chosen]
         if op == "accept" and done:
             save(store)
     if op == "accept" and done:
-        names = {paths[asked][1] for asked in by_file}
-        rebuild = {doc for doc in preview.DOCS if names & set(page_files(doc))}
-        with preview.LOCK:
-            cast(set[str], preview.WATCHER["rebuild"]).update(rebuild)
-    return {"done": done, "missing": len(missed), "missed": missed}
+        _rebuild_pages({paths[asked][1] for asked in by_file})
+    return {"done": done, "missing": len(missed), "missed": missed,
+            **({"warning": " ".join(warnings)} if warnings else {})}
 
 
 def absorb(name: str, before: str, after: str) -> None:
     """Accept the author's own change of a file from `before` to `after`,
     leaving the pending edits it did not touch pending. The caller holds
-    review_lock."""
+    review_lock and has published `after`, so a page built since then may
+    mark the change as pending: its documents are rebuilt."""
     store = load()
     if store is None:
         return  # the first baseline is taken from the files as they are
-    store["files"][name] = edit_diff.merge(before, store["files"].get(name, ""), after)
+    baseline = store["files"].get(name, "")
+    merged = edit_diff.merge(before, baseline, after)
+    if merged == baseline:
+        return  # the marks stay what any build of the file shows
+    store["files"][name] = merged
     save(store)
+    _rebuild_pages({name})  # the file does not change again, so no pass would rebuild its pages
+
+
+def _rebuild_pages(names: set[str]) -> None:
+    """Have the watcher rebuild the pages built from the files `names`,
+    whose baseline changed although the files did not."""
+    from . import preview
+    try:
+        rebuild = {doc for doc in preview.DOCS if names & set(page_files(doc))}
+    except (OSError, ValueError):  # an unreadable file: its page shows the error, and a published save goes on
+        rebuild = set(preview.DOCS)
+    with preview.LOCK:
+        cast(set[str], preview.WATCHER["rebuild"]).update(rebuild)
 
 
 def check_outputs() -> None:
@@ -239,15 +265,17 @@ def check_outputs() -> None:
     The status shows them as `outputs`."""
     from . import preview, table
     from .preview_watch import own_tables_stage
+    from .review_storage import holds_text
     notes = []
     if not own_tables_stage(preview.PROJECT):
         for label in table.all_labels():
             try:
-                rendered = table.build(label)
-            except Exception:  # a broken spec is the table editor's to report
+                rendered = table.build(label)  # an invalid spec or data: in rendered.errors
+            except OSError:  # unreadable: the page build (spec) or the next table render (data) reports it
                 continue
             path = table.output_path(label)
-            if rendered.markdown is not None and path.is_file() and path.read_text(encoding="utf-8") != rendered.markdown:
+            # A hand edit re-saved in another encoding counts as edited by hand too.
+            if rendered.markdown is not None and path.is_file() and not holds_text(path, rendered.markdown):
                 notes.append(path.relative_to(preview.ROOT).as_posix())
     with preview.LOCK:
         preview.WATCHER["outputs"] = notes

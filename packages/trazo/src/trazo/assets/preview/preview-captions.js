@@ -130,13 +130,13 @@
         const r = op === "load" || op === "reload" ? await ed.load() : await ed.send(op, state.sha);
         if (r.status === 409) { $(".pv-tf-conflict", box).hidden = false; msg(r.payload.error); }
         else if (!r.ok) msg(r.payload.error || `Could not ${op}.`);
-        else if (op === "save") { state.busy = false; remove(); toast(ed.saved); return; }
+        else if (op === "save") { state.busy = false; remove(); toast(r.payload.warning || ed.saved); return; }
         else {
           state.sha = r.payload.sha256; state.canUndo = r.payload.can_undo;
           $(".pv-tf-head code", box).textContent = r.payload.file;
           $(".pv-tf-conflict", box).hidden = true;
           ed.accept(r.payload);
-          msg(op === "undo" ? ed.restored : "");
+          msg(r.payload.warning || (op === "undo" ? ed.restored : ""));
         }
       } catch (e) { msg(`Could not ${op}: ${e.message}`); }
       state.busy = false; refresh();

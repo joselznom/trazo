@@ -14,11 +14,11 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+import _browser_trace as trace
 import _support  # noqa: F401  (sets TRAZO_ROOT before trazo loads)
 
 from trazo import diagram, preview
 from trazo.browser import BrowserError
-from trazo.local_server import LocalServer
 
 
 @unittest.skipUnless(diagram.CHROME and Path(diagram.CHROME).exists(), "needs Chrome")
@@ -27,8 +27,12 @@ class PreviewBrowserTestCase(unittest.TestCase):
     def setUpClass(cls):
         cls.chrome = diagram.Chrome()
         cls.addClassCleanup(cls.chrome.close)
+        # 6 of the 9 Windows label timeouts were in the first two tests of a class, the
+        # first pages this Chrome opens: record each page's place in its Chrome's life.
+        cls.chrome_started, cls.pages = trace.record(event="chrome", cls=cls.__name__)["t"], 0
 
     def setUp(self):
+        self.trace_start = trace.record(event="test", id=self.id().split(".", 1)[-1])["t"]
         folder = tempfile.TemporaryDirectory(prefix="trazo-viewer-")
         self.addCleanup(folder.cleanup)
         root = Path(folder.name)
@@ -62,7 +66,7 @@ class PreviewBrowserTestCase(unittest.TestCase):
                 + "".join(f'<script src="/__assets/preview/{script}"></script>' for script in preview.VIEWER_SCRIPTS)
                 + '</body></html>',
                 encoding="utf-8")
-        server = self.server = LocalServer(("127.0.0.1", 0), preview.Handler)
+        server = self.server = trace.TracedServer(("127.0.0.1", 0), trace.TracedHandler)
         server.daemon_threads = False  # server_close waits for the requests in flight
         self.addCleanup(server.server_close)
         thread = threading.Thread(target=server.serve_forever, daemon=True)
@@ -81,6 +85,17 @@ class PreviewBrowserTestCase(unittest.TestCase):
         # transitions and smooth scrolling. Tests of reduced motion emulate it themselves.
         self.chrome.call("Emulation.setEmulatedMedia", {"features": [
             {"name": "prefers-reduced-motion", "value": "no-preference"}]}, self.session)
+        # Chrome's pipe client discards events, so retain page errors before navigation
+        # for the failure report, including errors that prevent the viewer from starting.
+        self.chrome.call("Page.enable", None, self.session)
+        self.chrome.call("Page.addScriptToEvaluateOnNewDocument", {"source": """
+          window.__trazoTestErrors = [];
+          addEventListener('error', e => window.__trazoTestErrors.push({
+            kind: 'error', message: e.message, file: e.filename, line: e.lineno,
+            stack: e.error?.stack, resource: e.target?.src || e.target?.href}), true);
+          addEventListener('unhandledrejection', e => window.__trazoTestErrors.push({
+            kind: 'rejection', message: String(e.reason), stack: e.reason?.stack}));
+        """ + trace.PAGE_SCRIPT}, self.session)
 
     def evaluate(self, expression, session=None):
         reply = self.chrome.call("Runtime.evaluate", {
@@ -105,28 +120,41 @@ class PreviewBrowserTestCase(unittest.TestCase):
                 if "navigated or closed" not in str(exc):
                     raise
                 continue  # the next check belongs to the destination document
-            self.assertTrue(ready, expression)
+            if not ready:
+                self.fail(f"{expression}\n{self.what_the_page_waits_for(session)}")
             return
-        self.fail(expression)
+        self.fail(f"{expression}\n{self.what_the_page_waits_for(session)}")
 
     def open(self, query=""):
+        type(self).pages += 1
+        trace.record(event="navigate", url=self.url + query, page_of_chrome=self.pages,
+                     chrome_age=round(trace.now() - self.chrome_started, 3))
         self.chrome.call("Page.navigate", {"url": self.url + query}, self.session)
-        try:
-            self.wait_for("document.querySelector('.pv-bs-label')?.textContent.length > 0")
-        except AssertionError as exc:
-            raise AssertionError(f"{exc}\n{self.what_the_page_waits_for()}") from None
+        self.wait_for("document.querySelector('.pv-bs-label')?.textContent.length > 0")
         self.wait_for("document.readyState === 'complete'")
         # On load the page restores its reading position in the first frame
         # after document.fonts.ready; wait for that frame (callbacks run in
         # order) so it cannot undo a test's own scrolling.
         self.evaluate("document.fonts.ready.then(() => new Promise(requestAnimationFrame))")
 
-    def what_the_page_waits_for(self):
-        """The page's state and the requests still running. Opening takes well under a
-        second, so one that times out is stuck, and the failure is the only trace of why."""
-        page = self.evaluate("""({url: location.href, ready: document.readyState,
-          shell: !!document.querySelector('.pv-build'),
-          finished: performance.getEntriesByType('resource').map(e => new URL(e.name).pathname)})""")
+    def what_the_page_waits_for(self, session=None):
+        """Capture page errors and state at a failed wait, before cleanup closes the tab."""
+        try:
+            page = self.evaluate("""({url: location.href, ready: document.readyState,
+              shell: !!document.querySelector('.pv-build'),
+              status: document.querySelector('.pv-bs-label')?.textContent,
+              active: document.activeElement?.outerHTML.slice(0, 1000),
+              errors: window.__trazoTestErrors ?? 'not recorded in this tab',
+              finished: performance.getEntriesByType('resource').map(e => new URL(e.name).pathname)})""", session)
+        except (BrowserError, AssertionError) as exc:
+            page = f"unavailable: {exc}"
+        try:
+            traced = self.evaluate(trace.PAGE_STATE, session)
+        except (BrowserError, AssertionError) as exc:
+            traced = f"unavailable: {exc}"
+        server_log = trace.report(self.trace_start)
+        page = (f"{page}\ntraced page: {json.dumps(traced)}\nserver probe: {trace.probe(self.server.server_port)}"
+                f"\nat {trace.now()} s; server log since the test started:\n{server_log}")
         frames = sys._current_frames()
         running = ["".join(traceback.format_stack(frames[t.ident])) for t in threading.enumerate()
                    if "process_request_thread" in t.name and t.ident in frames]

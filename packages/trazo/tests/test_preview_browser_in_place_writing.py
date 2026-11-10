@@ -130,6 +130,28 @@ class WritingInPlaceTests(UndoCase):
         self.wait_for("window.samePage === undefined")
         self.wait_for("!!document.querySelector('.pv-page')?.textContent.includes('very')")
 
+    def test_a_build_fetched_while_a_save_lands_waits_for_the_build_of_that_save(self):
+        self.build()
+        # The page's fetch of the new build waits in the browser until released.
+        self.evaluate("""(() => { const fetch = window.fetch; window.fetch = async (url, options) => {
+          if (String(url).startsWith('/manuscript.html')) { window.heldBuild = true;
+            while (!window.released) await new Promise((resolve) => setTimeout(resolve, 25)); }
+          return fetch(url, options); }; })()""")
+        self.new_value("121")  # the paragraph about to be written changes in that build
+        self.built_again(TEXT)
+        self.wait_for("window.heldBuild === true")
+        self.write_in("quick")
+        self.caret_after("quick ")
+        self.type("very ")
+        self.leave()
+        self.saved_now()  # the watcher has not built it: that build lacks it
+        self.evaluate("window.released = true")
+        self.evaluate("new Promise((resolve) => setTimeout(resolve, 2500))")  # two polls
+        self.assertIn("quick very brown", self.evaluate(PAGE_TEXT))
+        version = self.built_again(self.source())  # the build of that save
+        self.wait_for(f"loaded?.manuscript === {version}")
+        self.assertIn("quick very brown", self.evaluate(PAGE_TEXT))
+        self.assertIn("121 fields", self.evaluate(PAGE_TEXT))
 
 if __name__ == "__main__":
     unittest.main()

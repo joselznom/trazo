@@ -79,21 +79,28 @@
     return true;
   }
 
+  // Writes answered so far: a status asked for before the last of them may
+  // not know of it yet (its `building`), so a page does not show that build.
+  let writes = 0;
   async function api(url, body, method) {
     const verb = method || (body === undefined ? "GET" : "POST");
     const response = await fetch(url, { method: verb,
       cache: "no-store", headers: body === undefined ? {} : { "Content-Type": "application/json" },
       body: body === undefined ? undefined : JSON.stringify(body) });
     const data = await response.json().catch(() => ({ error: `HTTP ${response.status}` }));
-    if (verb !== "GET") pollSoon();  // a save starts a build: learn of it now, not at the next poll
+    if (verb !== "GET") { writes++; pollSoon(); }  // a save starts a build: learn of it now, not at the next poll
     return { ok: response.ok, status: response.status, data };
   }
 
-  // One non-overlapping status request per page; consumers share the result.
-  // While a file written from the page is building, it polls often, so the
-  // page learns of the build within a tenth of a second.
-  const listeners = new Set();
-  let timer = null, polling = false, again = false, latest = null;
+  // One request at a time. Between workspace scans a preview page asks for document
+  // state, and the server holds that request until the state changes or the next scan
+  // is due (trazo.preview_status); catalogs and input fingerprints keep their one-second
+  // cadence. Host tool calls and document names colliding with status metadata use workspace only.
+  const listeners = new Map();
+  let timer = null, polling = false, again = false, latest = null, workspaceAt = 0, digest = "", leaving = false;
+  // Leaving the page aborts the held request: that is no lost server.
+  addEventListener("pagehide", () => { leaving = true; });
+  addEventListener("pageshow", () => { leaving = false; });
   function pollSoon() {
     if (polling) { again = true; return; }  // that answer may predate the request
     if (!listeners.size) return;
@@ -104,22 +111,41 @@
     if (polling || !listeners.size) return;
     clearTimeout(timer);
     polling = true;
+    const fast = !window.TRAZO_VIEW && [...listeners.values()].some(Boolean)
+      && !["comments", "docx", "synced", "building", "digest", "server"].some(name => Object.hasOwn(latest?.documents || {}, name));
+    let failed = false;
+    const asked = writes;
     try {
-      const result = await api("/__workspace");
+      const due = workspaceAt + 1000 - performance.now();
+      const workspace = !fast || !latest || due <= 0;
+      const result = await api(workspace ? "/__workspace"
+        : `/__status?since=${encodeURIComponent(digest)}&wait=${Math.ceil(due) / 1000}`);
       if (!result.ok) throw new Error(result.data.error || "Workspace unavailable");
-      latest = result.data;
-      await Promise.allSettled([...listeners].map(fn => fn(latest, null)));
+      if (workspace) {
+        latest = { ...result.data, writes: asked };
+        workspaceAt = performance.now();
+      } else {
+        digest = result.data.digest;
+        latest = { ...latest,
+          documents: Object.fromEntries(Object.keys(latest.documents).map(name => [name, result.data[name]])),
+          comments: result.data.comments, docx: result.data.docx, building: result.data.building, writes: asked };
+      }
+      await Promise.allSettled([...listeners.keys()].map(fn => fn(latest, null)));
     } catch (error) {
-      await Promise.allSettled([...listeners].map(fn => fn(null, error)));
+      failed = true;
+      if (!leaving) await Promise.allSettled([...listeners.keys()].map(fn => fn(null, error)));
     } finally {
       polling = false;
-      const wait = again ? 0 : document.hidden ? 5000 : latest?.building ? 100 : 1000;
+      // The server paces held requests; a failed one waits, as before they were held.
+      // A page without them polls often while a file written from it builds, so it
+      // learns of the build within a tenth of a second.
+      const wait = again ? 0 : document.hidden ? 5000 : fast ? (failed ? 250 : 0) : latest?.building ? 100 : 1000;
       again = false;
       if (listeners.size) timer = setTimeout(poll, wait);
     }
   }
-  function watch(fn) {
-    listeners.add(fn);
+  function watch(fn, { preview = false } = {}) {
+    listeners.set(fn, preview);
     if (latest) Promise.resolve().then(() => fn(latest, null));
     if (!polling) { clearTimeout(timer); timer = setTimeout(poll, 0); }
     return () => { listeners.delete(fn); if (!listeners.size) clearTimeout(timer); };
@@ -314,5 +340,5 @@
     load: (scope, name) => api(`/__review?scope=${scope}${name == null ? "" : "&name=" + encodeURIComponent(name)}`),
     change: (scope, body) => api("/__review", { ...body, scope }),
   };
-  window.Trazo = { api, watch, el, commentDeletion, plainClick, readPrefs, savePrefs, theme, mountTheme, editorLink, returnUrl, review, reveal, reload, reloading: () => reloadPending, path: pagePath, search: pageSearch, replaceHash, applyTheme };
+  window.Trazo = { api, watch, el, commentDeletion, plainClick, readPrefs, savePrefs, theme, mountTheme, editorLink, returnUrl, review, reveal, reload, reloading: () => reloadPending, writes: () => writes, path: pagePath, search: pageSearch, replaceHash, applyTheme };
 })();

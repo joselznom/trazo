@@ -92,7 +92,7 @@ def text_field(request: dict[str, Any], key: str, required: bool = False) -> str
 def ids_field(request: dict[str, Any]) -> list[str]:
     """The comment ids of a request: {id} or, for delete and purge, {ids: [...]}."""
     if "ids" not in request:
-        return [request.get("id")]
+        return [text_field(request, "id", required=True)]
     ids = request["ids"]
     if request.get("op") not in ("delete", "purge"):
         raise RequestError("only delete and purge accept ids")
@@ -140,7 +140,7 @@ class CommentStore:
 
     def save(self, comments: list[Comment]) -> None:
         write_atomic(self.path, (json.dumps(comments, ensure_ascii=False, indent=2) + "\n")
-                     .encode("utf-8"))
+                     .encode("utf-8"), durable=True)
 
     def history_of(self, history: list[dict[str, Any]], name: str | None) -> list[int]:
         """Indexes of the comment entries of one scope (all with None); an

@@ -11,7 +11,8 @@ waits (Ctrl+C or killing the process stops it). With $TRAZO_BUILD_LOCK_WAIT
 command exits with BUSY: the MCP preview_start (trazo.preview_inputs) sets
 it on its build, since an app ends a tool call that waits too long. The
 process removes it from its environment, so the commands it runs do not
-inherit it.
+inherit it. A thread that must not wait passes `wait` instead: the preview's
+watcher does not wait at all (it retries later) and its table saves wait 20 s.
 
 The lock file is in the project's .cache/trazo/ (git-ignored by every
 paper since v0.1.0), named after the build folder: outside the build folder,
@@ -60,6 +61,10 @@ class LockError(OSError):
     """A build lock that cannot be made (an OSError: callers report those already)."""
 
 
+class Busy(TimeoutError):
+    """Another build held the lock for longer than this caller would wait."""
+
+
 def lock_path(project: Project = PROJECT) -> Path:
     """The lock file of a project's build folder (resolved: the marker names it)."""
     build = project.path("build").resolve()
@@ -80,11 +85,13 @@ def child_env(env: Mapping[str, str] | None = None) -> dict[str, str]:
 
 @contextmanager
 def build_lock(project: Project = PROJECT,
-               log: Callable[[str], None] = lambda text: print(text, flush=True)) -> Iterator[None]:
+               log: Callable[[str], None] = lambda text: print(text, flush=True),
+               wait: float | None = None) -> Iterator[None]:
     """Hold the project's build lock; reentrant in one thread and for the
     processes the holder starts (see the module docstring). A wait bounded by
-    $TRAZO_BUILD_LOCK_WAIT that runs out raises TimeoutError."""
-    wait = _bounded_wait()
+    `wait` seconds (0: none), else $TRAZO_BUILD_LOCK_WAIT, that runs out raises Busy."""
+    limit = _bounded_wait()
+    wait = limit if wait is None else wait
     path = lock_path(project) if project.found else None  # outside a project: nothing to share
     if path is None or getattr(_HELD, "path", None) == path:
         yield
@@ -102,9 +109,11 @@ def build_lock(project: Project = PROJECT,
                 _HELD.path, _HELD.marker = path, os.environ[LOCK_ENV]
                 yield
                 return
+            if wait == 0:
+                raise Busy("another build of this project is running")
             log(WAITING)
             if not lock(handle, wait):  # Ctrl+C interrupts the wait
-                raise TimeoutError(f"another build of this project was still running after {wait:g} s")
+                raise Busy(f"another build of this project was still running after {wait:g} s")
         handle.seek(0)
         handle.truncate()
         handle.write(str(os.getpid()))
@@ -154,7 +163,7 @@ def locked[**P](main: Callable[P, int]) -> Callable[P, int]:
         with ExitStack() as stack:
             try:
                 stack.enter_context(build_lock())
-            except TimeoutError as exc:
+            except Busy as exc:
                 print(f"trazo: {exc}", file=sys.stderr)
                 return BUSY
             except OSError as exc:

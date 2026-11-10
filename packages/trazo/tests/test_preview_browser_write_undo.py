@@ -7,6 +7,7 @@ saves are still on their way: test_preview_browser_write_undo_waiting.py.
 
 import time
 import unittest
+from unittest.mock import patch
 
 from _preview_undo import PARAGRAPHS, TEXT, UndoCase
 
@@ -182,6 +183,18 @@ class WriteUndoTests(UndoCase):
         self.wait_for("document.querySelector('.pv-toast')?.textContent.startsWith('Not undone')")
         self.assertEqual(self.source(), changed)
         self.assertIn("Two sentences here.", self.paragraphs())
+
+    def test_trouble_after_an_undo_or_redo_was_written_is_shown(self):
+        self.broken()
+        toast = "document.querySelector('.pv-toast')?.textContent.includes('Kept beside the file.')"
+        for route, again in (("change_source", self.undo), ("change_block", self.redo)):
+            real = getattr(preview, route)
+            with patch.object(preview, route, lambda request, real=real: {**real(request), "warning": "Kept beside the file."}):
+                again()
+                self.wait_for(toast)
+                self.settled()
+            self.evaluate("document.querySelector('.pv-toast').remove()")
+        self.assertEqual(self.source(), "One sentence.\n\nTwo sentences here.\n\nNext paragraph.\n")
 
 
 class ReloadAfterSavesTests(UndoCase):

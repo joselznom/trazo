@@ -47,7 +47,7 @@ def change_figure_text(request):
     doc, identifier = request.get("doc"), request.get("id")
     state = get_figure_text(doc, identifier)
     if request.get("op") == "undo":
-        change_source({"op": "undo", "file": state["file"]})
+        saved = change_source({"op": "undo", "file": state["file"]})
     else:
         caption = text_field(request, "caption")
         if "\n\n" in caption or "\r" in caption:
@@ -57,9 +57,9 @@ def change_figure_text(request):
             raise CommentError("escape unmatched brackets in the caption")
         start, end = next(preview_edits.image_captions(state["text"], identifier))
         text = state["text"][:start] + caption + state["text"][end:]
-        change_source({"file": state["file"], "text": text,
-                       "base_sha256": request.get("base_sha256")})
-    return get_figure_text(doc, identifier)
+        saved = change_source({"file": state["file"], "text": text,
+                               "base_sha256": request.get("base_sha256")})
+    return {**get_figure_text(doc, identifier), **({"warning": saved["warning"]} if saved.get("warning") else {})}
 
 
 def get_table_caption(doc, identifier):
@@ -85,8 +85,8 @@ def get_table_caption(doc, identifier):
         if len(spans) != 1:
             raise Conflict("the table changed on disk; reload its caption")
         start, end = spans[0]
-        located = preview_edits.table_note(state["text"], identifier)
-        note = located[0] if located else None
+        located = preview_edits.locate_table(state["text"], identifier)
+        note = located["note"] if located else None
         state = {"kind": "markdown", "file": file, "sha256": state["sha256"],
             "can_undo": state["can_undo"], "fields": [
                 {"key": "caption", "segments": [{"text": state["text"][start:end]}], "values": []},
@@ -99,17 +99,16 @@ def with_table_note(text, identifier, note):
     table and caption when missing, removed when empty)."""
     if not isinstance(note, str) or "\r" in note or re.search(r"(?m)^ {0,3}:{3,}", note):
         raise CommentError("the note must be Markdown paragraphs without ::: fences")
-    located = preview_edits.table_note(text, identifier)
+    located = preview_edits.locate_table(text, identifier)
     if located is None:
         raise Conflict("the table changed on disk; reload its caption")
-    span, end = located
+    span, end = located["note"], located["end"]
     body = "\n\n".join(" ".join(p.split()) for p in re.split(r"\n\s*\n", note) if p.strip())
     if span:
         if body:
             return text[:span[0]] + body + text[span[1]:]
         # Remove the whole block: its blank line, fences and text.
-        close = re.compile(r"(?m)^ {0,3}:{3,}[ \t]*$").search(text, span[1])
-        return text[:end] + text[close.end():]
+        return text[:end] + text[located["stop"]:]
     if not body:
         return text
     return text[:end] + f"\n\n{table.NOTE_OPEN}\n{body}\n:::" + text[end:]
@@ -126,15 +125,16 @@ def change_table_caption(request):
     if not undo and (not isinstance(changes, dict) or not changes or
                     set(changes) - {field["key"] for field in state["fields"]}):
         raise CommentError("changes must contain only this table's caption fields")
+    saved = {}
     if state["kind"] == "spec":
         if undo:
-            table_editor.undo_table({"label": label})
+            saved = table_editor.undo_table({"label": label})
         else:
-            table_editor.save_table({"label": label, "base_sha256": request.get("base_sha256"),
+            saved = table_editor.save_table({"label": label, "base_sha256": request.get("base_sha256"),
                 "ops": [{"op": "set", "path": key, "value": None if key == "note" and not str(value).strip() else value}
                         for key, value in changes.items()]})
     elif undo:
-        change_source({"op": "undo", "file": state["file"]})
+        saved = change_source({"op": "undo", "file": state["file"]})
     else:
         source = get_source(state["file"])
         text = source["text"]
@@ -151,5 +151,5 @@ def change_table_caption(request):
                 raise CommentError("the caption must preserve its Markdown table identifier")
         if "note" in changes:
             text = with_table_note(text, identifier, changes["note"])
-        change_source({"file": state["file"], "text": text, "base_sha256": request.get("base_sha256")})
-    return get_table_caption(doc, identifier)
+        saved = change_source({"file": state["file"], "text": text, "base_sha256": request.get("base_sha256")})
+    return {**get_table_caption(doc, identifier), **({"warning": saved["warning"]} if saved.get("warning") else {})}

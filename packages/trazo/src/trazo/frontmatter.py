@@ -2,34 +2,56 @@
 
 import json
 import re
-import subprocess
 import tempfile
+import time
 from functools import lru_cache
 from pathlib import Path
 
-from .portable import no_window
+from . import processes
 from .project import PROJECT
+
+TIMEOUT = 60  # seconds for Pandoc to read the metadata file: it takes well under one
+# Reads that ran out of time: (until when, the error). Within one build several
+# readers ask; for TIMEOUT seconds they get the error at once instead of waiting.
+_STOPPED: dict[tuple, tuple[float, str]] = {}
 
 
 class MetadataError(ValueError):
     """The project's manuscript metadata cannot be read or resolved."""
 
 
+class MetadataUnavailable(MetadataError):
+    """Pandoc could not run or ran out of time reading it: not the file's fault
+    (the preview builds the page again later, trazo.preview_render)."""
+
+
 @lru_cache(maxsize=8)
 def _read(path, mtime_ns, size, command):
+    key = (path, mtime_ns, size, command)
+    if time.monotonic() < _STOPPED.get(key, (0.0, ""))[0]:  # callers that fall back would wait again
+        raise MetadataUnavailable(_STOPPED[key][1])
     with tempfile.TemporaryDirectory(prefix="trazo-metadata-") as folder:
         template = Path(folder) / "metadata.template"
         template.write_text("$meta-json$", encoding="utf-8")
         try:
             # An empty document on stdin: Windows has no /dev/null.
-            result = subprocess.run(
+            result = processes.run(
                 [*command, "-f", "markdown", f"--metadata-file={path}",
                  "-t", "markdown", f"--template={template}"],
-                input="", capture_output=True, encoding="utf-8", check=True, **no_window())
+                input="\n", text=True, timeout=TIMEOUT)
+        except OSError as exc:  # processes.Timeout included
+            message = f"cannot read metadata {path}: {exc}"
+            if isinstance(exc, processes.Timeout):
+                _STOPPED[key] = (time.monotonic() + TIMEOUT, message)
+            raise MetadataUnavailable(message) from exc
+        if result.returncode < 0:  # a signal (POSIX), not the file
+            raise MetadataUnavailable(f"cannot read metadata {path}: pandoc was stopped by signal {-result.returncode}")
+        if result.returncode:
+            raise MetadataError(f"cannot read metadata {path}: {result.stderr.strip()}")
+        try:
             return json.loads(result.stdout)
-        except (OSError, subprocess.CalledProcessError, ValueError) as exc:
-            detail = exc.stderr if isinstance(exc, subprocess.CalledProcessError) else str(exc)
-            raise MetadataError(f"cannot read metadata {path}: {detail.strip()}") from exc
+        except ValueError as exc:
+            raise MetadataError(f"cannot read metadata {path}: {exc}") from exc
 
 
 def read_metadata():

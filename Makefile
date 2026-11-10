@@ -18,7 +18,7 @@ CHANGED_FROM ?=
 ACCEPTANCE_ARGS ?=
 ACCEPTANCE_FILTER = $(if $(CHANGED_FROM),--changed-from $(CHANGED_FROM)) $(ACCEPTANCE_ARGS)
 
-.PHONY: hooks lint typecheck test test-package test-template test-update test-linux test-acceptance acceptance acceptance-auto template-agents template-diagrams template-reference template-variants clean help
+.PHONY: hooks lint typecheck typecheck-strict test test-package test-template test-update test-linux test-acceptance acceptance acceptance-auto template-agents template-diagrams template-reference template-variants clean help
 
 test: test-package test-template
 
@@ -28,9 +28,13 @@ lint:
 	cd "$(TRAZO_DIR)" && uv run --quiet ruff check
 	cd "$(TRAZO_DIR)" && uv run --quiet ruff check --config pyproject.toml "$(CURDIR)/scripts/acceptance"
 
-# mypy on trazo; reports only, nothing runs it automatically yet (see pyproject.toml).
+# mypy on trazo; reports only. typecheck-strict (run by CI) fails on errors in the modules of
+# the strict override in pyproject.toml.
 typecheck:
 	cd "$(TRAZO_DIR)" && uv run --quiet mypy
+
+typecheck-strict:
+	$(TRAZO_PYTHON) scripts/typecheck-strict.py
 
 test-package:
 	cd "$(TRAZO_DIR)" && uv run --quiet python -m unittest discover -s tests
@@ -142,6 +146,7 @@ help:
 	@echo "make hooks           test every pushed commit first (.githooks/pre-push)"
 	@echo "make lint            ruff check on trazo and scripts/acceptance"
 	@echo "make typecheck       mypy on trazo (reports only)"
+	@echo "make typecheck-strict  fail on mypy errors in the strict modules (CI runs it)"
 	@echo "make test-package    trazo unit tests"
 	@echo "make test-template   render the template (with and without the example), verify builds"
 	@echo "make test-update     update a v0.6.0 trazo new paper to HEAD, verify; trazo update between tags"

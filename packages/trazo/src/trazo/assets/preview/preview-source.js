@@ -106,6 +106,9 @@
     `<span class="pv-src-state" role="status"></span></div>` +
     `<div class="pv-src-conflict" hidden><span>The file changed on disk.</span> ` +
     `<button type="button" data-op="reload">Reload from disk</button> <button type="button" data-op="diff">View diff</button> <button type="button" data-op="overwrite">Overwrite</button></div>` +
+    `<div class="pv-src-note" data-note="copies" role="status" hidden><span></span> <button type="button" data-op="hide-copies">Hide</button></div>` +
+    `<div class="pv-src-note" data-note="inexact" role="status" hidden><span>This disk cannot swap files atomically. trazo checks for other programs' writes just before saving, ` +
+    `but a write at that exact instant can still be lost. Avoid saving while an agent edits the same file.</span> <button type="button" data-op="hide-inexact">OK</button></div>` +
     `<div class="pv-src-body"></div>` +
     `<div class="pv-src-bar"><button type="button" class="pv-btn primary sm" data-op="save" title="Save (⌘S / Ctrl+S)">Save</button>` +
     `<button type="button" class="pv-btn sm" data-op="undo-save" title="Restore the content before the last save, if the file is unchanged since">Undo save</button>` +
@@ -114,6 +117,7 @@
   const srcState = $(".pv-src-state", srcBox);
   const srcMsg = $(".pv-src-msg", srcBox);
   const srcConflict = $(".pv-src-conflict", srcBox);
+  const copiesNote = $('[data-note="copies"]', srcBox), inexactNote = $('[data-note="inexact"]', srcBox);
   const srcBody = $(".pv-src-body", srcBox);
   const saveBtn = $('[data-op="save"]', srcBox);
   const undoBtn = $('[data-op="undo-save"]', srcBox);
@@ -144,6 +148,22 @@
   };
   unsavedChecks.push(() => sourceBusy.size > 0 || [...buffers.values()].some(isDirty));
   const fileMsg = (file, text) => { if (cur === file) setMsg(text); };
+  // What the server says about other programs' writes (trazo.source_publish):
+  // the copies it kept of a file, and whether this disk can lose a write made
+  // at the instant of a save. Hidden notes stay hidden for this tab's session.
+  const copies = new Map();
+  let inexact = false;
+  function noteState(file, st) {
+    if (Array.isArray(st.conflicts)) copies.set(file, st.conflicts);
+    if (st.exact === false) inexact = true;
+  }
+  function hideNote(op) {
+    if (op === "hide-copies") sset("preview-src-copies:" + cur, (copies.get(cur) || []).join("\n"));
+    else sset("preview-src-inexact", "seen");
+    updateSourceUi();
+  }
+  // Notes are live regions: rewriting the same text on every keystroke could re-announce them.
+  const setText = (el, text) => { if (el.textContent !== text) el.textContent = text; };
 
   async function sourceOperation(file, action) {
     if (!file || sourceBusy.has(file)) return;
@@ -168,6 +188,7 @@
     const res = await fetch(`/__source?file=${encodeURIComponent(file)}`, { cache: "no-store" });
     const payload = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(payload.error || res.status);
+    noteState(file, payload);
     return payload;
   }
   async function postJson(path, body) {
@@ -184,6 +205,15 @@
     saveBtn.disabled = !b || busy || !isDirty(b);
     undoBtn.disabled = !b || busy || !b.canUndo;
     srcConflict.hidden = !(b && b.conflict);
+    const kept = b && b.conflict ? b.conflict.kept : [];
+    setText($("span", srcConflict), kept.length
+      ? `Another program changed this file while it was being saved. Its version is on disk; your text is still here, and a copy is at ${kept.join(", ")}.`
+      : "The file changed on disk.");
+    const copied = (cur && copies.get(cur)) || [];
+    copiesNote.hidden = !copied.length || sget("preview-src-copies:" + cur) === copied.join("\n");
+    setText($("span", copiesNote), `trazo kept ${copied.length === 1 ? "a copy" : copied.length + " copies"} of text written ` +
+      `while another program wrote this file too: ${copied.join(", ")}. trazo never deletes them.`);
+    inexactNote.hidden = !inexact || sget("preview-src-inexact") === "seen";
     $(".dirty", rtabs).hidden = ![...buffers.values()].some(isDirty);
   }
 
@@ -268,11 +298,12 @@
     const sent = b.text;
     fileMsg(file, "Saving…");
     const { status, ok, payload } = await postJson("/__source", { file, text: toDisk(b), base_sha256: b.sha });
-    if (status === 409) { b.conflict = { sha: payload.sha256 }; fileMsg(file, ""); }
+    if (status === 409) { b.conflict = { sha: payload.sha256, kept: payload.kept || [] }; noteState(file, payload); fileMsg(file, ""); }
     else if (!ok) fileMsg(file, "Save failed: " + (payload.error || status));
     else {
       b.base = sent; b.sha = payload.sha256; b.canUndo = payload.can_undo;
-      fileMsg(file, "Saved. The preview rebuilds and reloads.");
+      noteState(file, payload);
+      fileMsg(file, payload.warning || "Saved. The preview rebuilds and reloads.");
     }
   }
 
@@ -297,10 +328,11 @@
     if (isDirty(b) && !confirm("Discard your unsaved edits and undo the last save?")) return;
     await sourceOperation(file, async () => {
       const { ok, payload } = await postJson("/__source", { op: "undo", file });
+      noteState(file, payload);
       if (!ok) { b.canUndo = false; fileMsg(file, payload.error || "Could not undo"); }
       else {
         acceptSource(file, payload);
-        fileMsg(file, "Last save undone.");
+        fileMsg(file, payload.warning || "Last save undone.");
       }
     });
   }

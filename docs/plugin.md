@@ -55,6 +55,18 @@ Claude app does not update third-party marketplaces by itself. The next
 chat loads the new plugin; there the hook asks for setup, which reinstalls
 trazo, and `setup_status` says `"next": "paper"` until `paper_update` runs.
 
+MCP subprocess tools (build, check, doctor, paper creation/update and preview input
+preparation) have a 1200-second deadline. Set `TRAZO_MCP_TIMEOUT` to a positive,
+finite number of seconds in the MCP server's environment for a different limit.
+On expiry the server stops the call's process group (on Windows its job object,
+which also holds what nested calls start), returns a tool error with the
+available command output and remains available for the next request. A call
+whose descendant keeps the output open after it exits returns its real result
+after five seconds, with a warning, instead of waiting for the deadline.
+Deliberately detached processes are outside the call's group and keep their own
+lifetime. Standalone CLI builds and the preview have deadlines of their own
+(`docs/measurement-boundaries.md`, "Scope of the deadlines").
+
 ## Checks by hand
 
 These checks are covered fully or partly by the

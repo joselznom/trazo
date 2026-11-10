@@ -50,8 +50,8 @@ class ShellTests(PreviewBrowserTestCase):
                         release.wait(15)
                     get(handler)
 
-                def decorate_for_browser(page, counts=None, stamp=False):
-                    rendered = decorate(page, counts, stamp)
+                def decorate_for_browser(page, counts=None, stamp=False, **served):
+                    rendered = decorate(page, counts, stamp, **served)
                     return rendered if native else rendered.replace(b'rel="expect"', b'rel="unsupported-expect"')
 
                 # Without rel=expect, layout and rendering still run in the
@@ -203,6 +203,65 @@ class ShellTests(PreviewBrowserTestCase):
         self.assertEqual(self.evaluate("""({visibility: getComputedStyle(document.body).visibility,
             opacity: getComputedStyle(document.body).opacity, animations: document.body.getAnimations().length})"""),
             {"visibility": "visible", "opacity": "1", "animations": 0})
+
+    def test_document_named_comments_stays_stable_until_a_real_edit(self) -> None:
+        titles = json.dumps(preview.PROJECT.titles)
+        documents = {**preview.PROJECT.config["documents"],
+                     "comments": {**preview.PROJECT.config["documents"]["supplementary"], "title": "Comments"}}
+        with patch.dict(preview.PROJECT.config, documents=documents), \
+                patch.dict(preview.DOCS, comments=preview.DOCS["supplementary"]), \
+                patch.dict(preview.STATE, comments=dict(preview.STATE["supplementary"])):
+            for state in preview.STATE.values():
+                state.update(ok=True, error="", warnings=[], version=1)
+            page = preview.OUT_DIR / "manuscript.html"
+            for file in preview.OUT_DIR.glob("*.html"):
+                file.write_text(file.read_text().replace(titles, json.dumps(preview.PROJECT.titles)))
+            (preview.OUT_DIR / "comments.html").write_text(page.read_text().replace(
+                'window.PREVIEW_DOC = "manuscript"', 'window.PREVIEW_DOC = "comments"'))
+            for query in ("", "?view=figures"):
+                with self.subTest(view=query or "document"):
+                    self.open(query)
+                    self.wait_for("document.querySelector('[data-view=figures] .pv-badge')?.textContent === '6'")
+                    # The first workspace reply may refresh documents prefetched before it.
+                    self.wait_for("performance.getEntriesByType('resource')"
+                        ".filter(e => new URL(e.name).pathname === '/__workspace').length >= 2")
+                    origin = self.evaluate("performance.timeOrigin")
+                    self.evaluate("performance.clearResourceTimings()")
+                    # Observe more than one workspace cycle: a false version change refetches
+                    # the other documents or reloads the Figures & Tables view while idle.
+                    self.evaluate("new Promise(resolve => setTimeout(resolve, 2500))")
+                    self.assertEqual(self.evaluate("performance.timeOrigin"), origin)
+                    self.assertEqual(self.evaluate("performance.getEntriesByType('resource')"
+                        ".filter(e => new URL(e.name).pathname.endsWith('.html')).length"), 0)
+                    self.assertEqual(self.evaluate("document.querySelector('.pv-bs-label').textContent"), "Build OK")
+            with preview.LOCK:
+                preview.STATE["comments"]["version"] += 1
+            self.wait_for(f"performance.timeOrigin !== {origin} && document.readyState === 'complete'")
+
+    def test_a_build_between_serving_the_page_and_its_first_status_still_reaches_it(self):
+        page = preview.OUT_DIR / "manuscript.html"
+        # The page's status requests wait in the browser until released, so
+        # the next build lands after it was served and before it polls.
+        hold = self.chrome.call("Page.addScriptToEvaluateOnNewDocument", {"source": """
+          (() => {
+            const fetch = window.fetch;
+            window.fetch = async (url, options) => {
+              while (/^\\/__(workspace|status)/.test(String(url)) && !window.released)
+                await new Promise(resolve => setTimeout(resolve, 25));
+              return fetch(url, options);
+            };
+          })();"""}, self.session)["identifier"]
+        try:
+            self.chrome.call("Page.navigate", {"url": self.url}, self.session)
+            self.wait_for("document.readyState === 'complete' && document.body?.innerText.includes('Another paragraph.')")
+            page.write_text(page.read_text().replace("Another paragraph.", "Next build."))
+            with preview.LOCK:
+                preview.STATE["manuscript"]["version"] += 1
+                version = preview.STATE["manuscript"]["version"]
+            self.evaluate("window.released = true")
+            self.wait_for(f"document.body?.innerText.includes('Next build.') && loaded?.manuscript === {version}")
+        finally:
+            self.chrome.call("Page.removeScriptToEvaluateOnNewDocument", {"identifier": hold}, self.session)
 
     def test_reload_shows_the_last_build_status_and_figures_count_at_once(self):
         self.open()

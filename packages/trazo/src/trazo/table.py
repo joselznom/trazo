@@ -106,7 +106,7 @@ from .local_server import NotFound, RequestError
 from .project import PROJECT
 from .review_comments import CommentStore
 from .review_history import History, rel
-from .review_storage import REVIEW_DIR, review_lock, write_atomic
+from .review_storage import REVIEW_DIR, holds_text, review_lock, write_atomic
 
 ROOT = PROJECT.root
 SPEC_DIR = PROJECT.path("table_specs")
@@ -1058,7 +1058,7 @@ def stale_output(table: Table) -> list[Issue]:
         return []
     if not path.is_file():
         state = "missing"
-    elif path.read_text(encoding="utf-8") != table.markdown:
+    elif not holds_text(path, table.markdown):
         state = "out of date"
     else:
         return []
@@ -1229,7 +1229,7 @@ def render_one(label: str) -> Table:
     table = build(label)
     if table.markdown is not None:
         path = output_path(label)
-        if not path.is_file() or path.read_text(encoding="utf-8") != table.markdown:
+        if not path.is_file() or not holds_text(path, table.markdown):
             write_atomic(path, table.markdown.encode("utf-8"))
     return table
 
@@ -1262,8 +1262,7 @@ def patch(label: str, ops: Any, base_sha256: str | None = None) -> list[str]:
         data = dump_spec(spec)
         if data == before:
             return []
-        write_atomic(path, data)
-        HISTORY.record(HISTORY.file_entry(path, before, data,
+        HISTORY.publish(path, data, HISTORY.file_entry(path, before, data,
                                           f"patch {label}: {'; '.join(summary)}"[:300]))
     render_one(label)
     return summary
@@ -1305,12 +1304,11 @@ def patch_shared(ops: Any, base_sha256: str | None = None,
         data = dump_spec(shared)
         if data == before:
             return []
-        write_atomic(SHARED_PATH, data)
         entry = HISTORY.file_entry(SHARED_PATH, before, data,
                                    f"patch shared: {'; '.join(summary)}"[:300])
         if label:
             entry["table"] = label
-        HISTORY.record(entry)
+        HISTORY.publish(SHARED_PATH, data, entry)
     render_all()
     return summary
 

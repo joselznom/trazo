@@ -118,11 +118,12 @@ import subprocess  # noqa: F401  (tests patch preview.subprocess.run)
 import sys
 import threading
 import time
+from typing import cast
 
 from . import preview_export
 from .background import CommandJob
 from .expand import VALUES_PATH
-from .local_server import Conflict, Download, NotFound  # noqa: F401  (callers catch preview.NotFound)
+from .local_server import CHANGES, Conflict, Download, NotFound, seconds  # noqa: F401  (callers catch preview.NotFound)
 from .local_server import RequestError as CommentError
 from .preview_block_format import change_format
 from .preview_block_save import change_block
@@ -172,6 +173,7 @@ from .preview_sources import (  # noqa: F401
     source_path,
     source_state,
 )
+from .preview_status import status
 from .preview_watch import (  # noqa: F401
     Signal,
     build_and_watch,
@@ -234,7 +236,8 @@ STATE = {name: {"version": 0, "ok": False, "error": "", "warnings": [], "built":
          for name in DOCS}
 LOCK = threading.Lock()
 # The time.time() of the watcher's last check that found every watched file as
-# the pages were built from (preview_watch); /__status reports it as `synced`.
+# the pages were built from, or whose pass then built every page from them
+# (preview_watch); /__status reports it as `synced`.
 # It advances whether those builds succeeded or not: each page's `error`
 # (STATE, also set when a build raised) says whether it shows them or keeps
 # its last good version. `rebuild`: pages to build again although no source
@@ -268,17 +271,16 @@ def build(name):
                      built=time.strftime("%H:%M:%S"))
         if not error:  # a failed build keeps the last good page and version
             state["version"] += 1
+    CHANGES.notify()  # a held /__status answers (trazo.preview_status)
     status = "error" if error else f"{len(warnings)} warning(s)" if warnings else "ok"
     print(f"[preview] {name}: {status}", flush=True)
     return not error
 
 
-def status():
-    with LOCK:
-        docs = {name: dict(state) for name, state in STATE.items()}
-    # "server" lets trazo mcp tell its own preview from another one on the port.
-    return {**docs, "comments": comments_stamp(), "docx": docx_status(), "synced": WATCHER["synced"],
-            "server": {"pid": os.getpid(), "project": str(PROJECT.root)}}
+def building():
+    """Whether a file written from the preview is not built yet: a page holds
+    its reload meanwhile. The caller holds LOCK."""
+    return cast(float, WATCHER.get("written", 0.0)) > cast(float, WATCHER["synced"])
 
 
 def export_indexes(options):
@@ -327,29 +329,17 @@ def submission_report(fields=True, fresh=None):
     return preview_submission.report(fields, manuscript_counts, states, ROOT, (REVIEW_DIR, OUT_DIR), fresh)
 
 
-def fresh_seconds(value):
-    if value is None:
-        return None
-    try:
-        seconds = float(value)
-    except ValueError:
-        raise CommentError("fresh must be a number of seconds") from None
-    if not 0 <= seconds < float("inf"):
-        raise CommentError("fresh must be a number of seconds")
-    return seconds
-
-
 def get_route(path, query):
     first = lambda key: query.get(key, [None])[0]
     routes = {
-        "/__status": status, "/__comments": lambda: comments_payload(first("doc")),
+        "/__status": lambda: status(first("since"), first("wait")), "/__comments": lambda: comments_payload(first("doc")),
         "/__edits": lambda: edits_payload(first("doc")), "/__values": values_info,
         "/__source": lambda: get_source(first("file")), "/__references": references,
         "/__undo": lambda: latest_change(first("doc")),
         "/__figure-text": lambda: get_figure_text(first("doc"), first("id")),
         "/__table-caption": lambda: get_table_caption(first("doc"), first("id")),
         "/__export": lambda: export_request(query),
-        "/__submission": lambda: submission_report(first("fields") != "0", fresh_seconds(first("fresh"))),
+        "/__submission": lambda: submission_report(first("fields") != "0", seconds(first("fresh"), "fresh")),
         "/__export-formats": lambda: {"formats": ["docx", "png", "pdf", *(
             ["svg"] if preview_export.vector_path(preview_export.image_path(first("src") or "")) else [])]},
     }

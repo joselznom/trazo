@@ -310,5 +310,6 @@ def change_block(request: Any) -> dict[str, Any]:
     parts = [b.key for b in editable(changed) if start <= b.at < start + len(written)]
     if BREAK in new and len(parts) != new.count(BREAK) + 1:
         return {"refused": "a paragraph cannot start there", "file": file, "markdown": source}
-    wrote = change_source({"file": file, "text": changed, "base_sha256": state["sha256"]})
-    return {"saved": True, "file": file, "markdown": written, "parts": parts, "save_id": wrote.get("save_id")}
+    saved = change_source({"file": file, "text": changed, "base_sha256": state["sha256"]})
+    return {"saved": True, "file": file, "markdown": written, "parts": parts, "save_id": saved.get("save_id"),
+            **({"warning": saved["warning"]} if saved.get("warning") else {})}

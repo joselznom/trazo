@@ -1342,8 +1342,7 @@ def cmd_patch(name: str, ops_file: str) -> int:
         if data == before:
             print("no change")
             return 0
-        write_atomic(path, data)
-        HISTORY.record(HISTORY.file_entry(
+        HISTORY.publish(path, data, HISTORY.file_entry(
             path, before, data, f"patch {path.stem}: {'; '.join(summary)}"[:300]))
     print(f"patched {rel(path)}: {'; '.join(summary)}")
     print(f"next: trazo diagram check {name}")
