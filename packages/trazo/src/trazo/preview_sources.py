@@ -16,12 +16,12 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
-from . import preview_edit_review, preview_locate
+from . import preview_edit_review, preview_locate, source_publish
 from .expand import Values, load_entries, resolve_include
 from .local_server import Conflict, NotFound
 from .local_server import RequestError as CommentError
-from .portable import replace
-from .review_storage import StoreError, read_list, review_lock, write_atomic, write_json
+from .portable import can_exchange, replace
+from .review_storage import StoreError, read_list, review_lock, write_json
 
 
 def sha256_of(data):
@@ -93,10 +93,31 @@ def read_file_history() -> list[dict[str, Any]]:
 
 
 def source_state(file, path, data, text):
+    """The Source tab's view of a file. It also keeps what other programs'
+    writes and killed saves left behind (source_publish.sweep): `conflicts`
+    lists the copies kept; `exact` is false where a save cannot rule out
+    losing a write made at the instant it publishes."""
     sha = sha256_of(data)
     entries = [e for e in read_file_history() if e.get("file") == file]
+    # Only bytes the history stores count: an after_sha names text kept nowhere else.
+    source_publish.sweep(path, file, lambda: {sha} | {
+        e.get("before_sha") or sha256_of(e["before_text"].encode("utf-8")) for e in entries})
     return {"file": file, "text": text, "sha256": sha,
-            "can_undo": bool(entries) and entries[-1].get("after_sha") == sha}
+            "can_undo": bool(entries) and entries[-1].get("after_sha") == sha,
+            "conflicts": source_publish.conflicts(file), "exact": can_exchange(path.parent)}
+
+
+def collided(file, path, result):
+    """The 409 of a save or undo that met another program's write after its
+    locked read: that version stays on disk, trazo's text is in `kept`."""
+    try:
+        current = sha256_of(path.read_bytes())
+    except OSError:
+        current = ""
+    kept = [source_publish.shown(p) for p in result.kept]
+    return Conflict("another program changed the file while it was being saved: its version is on disk, "
+                    "and the text that was not saved is kept at " + ", ".join(kept),
+                    sha256=current, kept=kept, conflicts=source_publish.conflicts(file), exact=result.exact)
 
 
 def save_file_history(entries):
@@ -124,6 +145,11 @@ def change_source(request):
     content goes to file_history.json. undo: {op: "undo", file} restores it,
     only if the file is still exactly what that save wrote. Undoing a
     rejection of edits (kind "reject") makes those edits pending again.
+    Either is published by source_publish.publish: a write by another program
+    after the locked read answers 409 with `kept`, and records no undo. A
+    save answers the sha256 of the bytes it wrote, so a write landing just
+    after it makes the next save a 409; `warning` reports trouble after
+    publishing.
     """
     if not isinstance(request, dict):
         raise CommentError("request body must be a JSON object")
@@ -145,11 +171,17 @@ def change_source(request):
                 save_file_history(entries)
                 raise Conflict("undo discarded: the file changed since that save",
                                sha256=current)
-            write_atomic(path, entry["before_text"].encode("utf-8"))
+            result = source_publish.publish(path, entry["before_text"].encode("utf-8"), data, file)
+            if not result.published:
+                del entries[mine[-1]]
+                save_file_history(entries)
+                raise collided(file, path, result)
             if entry.get("kind") != "reject":
                 preview_edit_review.absorb(file, old, entry["before_text"])
             del entries[mine[-1]]
             save_file_history(entries)
+            data, text = read_source(path)
+            return {**source_state(file, path, data, text), "warning": result.warning}
         else:
             text = request.get("text")
             if not isinstance(text, str):
@@ -158,13 +190,22 @@ def change_source(request):
                 raise Conflict("the file changed on disk since it was loaded",
                                sha256=current)
             new = text.encode("utf-8")
+            reply: dict[str, Any] = {}
             if new != data:
                 entries.append({"time": time.strftime("%Y-%m-%d %H:%M:%S"), "at": time.time_ns(), "file": file,
                                 "before_text": old, "before_sha": current,
                                 "after_sha": sha256_of(new)})
                 save_file_history(entries)
-                write_atomic(path, new)
+                result = source_publish.publish(path, new, data, file)
+                if not result.published:
+                    entries.pop()
+                    save_file_history(entries)
+                    raise collided(file, path, result)
+                reply = {"exact": result.exact, "warning": result.warning}
                 preview_edit_review.absorb(file, old, text)
+            # What this save wrote, not a re-read: the browser keeps this sha256 as
+            # its base, so a write landing after the rename must make its next save a 409.
+            return {**source_state(file, path, new, text), **reply}
         data, text = read_source(path)
         return source_state(file, path, data, text)
 

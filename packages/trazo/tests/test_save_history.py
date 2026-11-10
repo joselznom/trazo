@@ -16,7 +16,7 @@ from unittest.mock import patch
 import _support  # noqa: F401  # selects the disposable paper before importing trazo
 from test_table import Restore
 
-from trazo import diagram, preview, table
+from trazo import diagram, preview, source_publish, table
 from trazo.local_server import LocalServer
 from trazo.review_history import History
 
@@ -58,15 +58,24 @@ class SaveHistoryTests(Restore):
         finally:
             conn.close()
 
-    def refuse_replace(self, destination: Path, error: int) -> Any:
-        replace = os.replace
+    @contextmanager
+    def refuse_replace(self, destination: Path, error: int) -> Iterator[None]:
+        """The system refuses to publish `destination`: its rename, or the atomic
+        exchange that publishes an existing file where the filesystem has one."""
+        replace, exchange = os.replace, source_publish.exchange
 
         def refuse(source: Any, target: Any, *args: Any, **kwargs: Any) -> None:
             if Path(target) == destination:
                 raise OSError(error, os.strerror(error), str(target))
             replace(source, target, *args, **kwargs)
 
-        return patch("os.replace", side_effect=refuse)
+        def refuse_exchange(source: Any, target: Any) -> None:
+            if Path(target) == destination:
+                raise OSError(error, os.strerror(error), str(target))
+            exchange(source, target)
+
+        with patch("os.replace", side_effect=refuse), patch.object(source_publish, "exchange", refuse_exchange):
+            yield
 
     def test_history_failure_does_not_publish_table_or_diagram_text(self) -> None:
         for kind in ("table", "shared", "diagram"):
