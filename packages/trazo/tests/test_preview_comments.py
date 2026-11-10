@@ -78,27 +78,27 @@ class CommentTests(unittest.TestCase):
         added = preview.change_comments({"op": "add", "doc": "manuscript", "quote": " \n ", "comment": "General"})
         self.assertEqual(added["comments"][0]["quote"], "")
 
-    def test_resolved_time_and_removing_several_underlines_in_one_undo(self):
+    def test_resolved_time_and_removing_several_highlights_in_one_undo(self):
         cid = preview.change_comments({"op": "add", "doc": "manuscript", "comment": "One"})["comments"][-1]["id"]
         preview.change_comments({"op": "update", "id": cid, "status": "done"})
         self.assertTrue(preview.load_comments()[0]["resolved"])
         # Reopening clears the time.
         reopened = preview.change_comments({"op": "update", "id": cid, "status": "open"})["comments"][0]
         self.assertNotIn("resolved", reopened)
-        ids = [preview.change_comments({"op": "add", "doc": doc, "kind": "underline", "comment": "Underline"})
+        ids = [preview.change_comments({"op": "add", "doc": doc, "kind": "highlight", "comment": "Highlight"})
                ["comments"][-1]["id"] for doc in ("manuscript", "supplementary")]
         state = preview.change_comments({"op": "delete", "ids": ids})
-        self.assertEqual(state["undo"], "remove 2 underlines")
+        self.assertEqual(state["undo"], "remove 2 highlights")
         # Both documents' views see the step as their next undo.
         for doc in ("manuscript", "supplementary"):
             payload = preview.comments_payload(doc)
-            self.assertEqual((payload["undo"], payload["undo_id"]), ("remove 2 underlines", state["undo_id"]))
+            self.assertEqual((payload["undo"], payload["undo_id"]), ("remove 2 highlights", state["undo_id"]))
         # An undo meant for another entry is refused and keeps this one.
         with self.assertRaises(preview.Conflict):
             preview.change_comments({"op": "undo", "doc": "manuscript", "expect": "other"})
         undone = preview.change_comments({"op": "undo", "doc": "manuscript", "expect": state["undo_id"]})
         self.assertEqual([c["status"] for c in undone["comments"]], ["open", "open", "open"])
-        # A missing id changes nothing; delete only removes underlines (comments are purged).
+        # A missing id changes nothing; delete only removes highlights (comments are purged).
         with self.assertRaises(preview.NotFound):
             preview.change_comments({"op": "delete", "ids": [ids[1], "missing"]})
         for bad in ({"op": "delete", "ids": []}, {"op": "delete", "ids": [ids[0], ids[0]]},
@@ -129,7 +129,7 @@ class CommentTests(unittest.TestCase):
         self.assertEqual(preview.change_comments({"op": "purge", "id": kept})["comments"], [])
         self.assertIsNone(preview.comments_payload("manuscript")["undo"])
 
-    def test_comments_left_in_the_old_trash_read_as_resolved(self):
+    def test_comments_left_in_the_old_trash_read_as_resolved_and_old_underlines_as_highlights(self):
         store = preview.PreviewComments()
         store.save([{"id": "old", "doc": "manuscript", "comment": "Trashed", "status": "deleted",
                      "deleted_from": "open", "replies": []},
@@ -137,17 +137,23 @@ class CommentTests(unittest.TestCase):
                      "status": "deleted", "deleted_from": "open", "replies": []}])
         old, mark = preview.comments_payload("manuscript")["comments"]
         self.assertEqual((old["status"], "deleted_from" in old), ("done", False))
-        self.assertEqual(mark["status"], "deleted")  # a removed underline stays removed
+        self.assertEqual(mark["status"], "deleted")  # a removed highlight stays removed
+        self.assertEqual(mark["kind"], "highlight")  # older versions called it an underline
         out = io.StringIO()
         with contextlib.redirect_stdout(out):
             preview.print_comments(True)
         self.assertIn("[old] done", out.getvalue())
         self.assertEqual(preview.change_comments({"op": "purge", "ids": ["old"]})["comments"][0]["id"], "mark")
+        # An old underline still in the text is removed as a highlight.
+        store.save([{"id": "kept", "doc": "manuscript", "kind": "underline", "comment": "Underline",
+                     "status": "open", "replies": []}])
+        removed = preview.change_comments({"op": "delete", "id": "kept"})
+        self.assertEqual((removed["comments"][0]["status"], removed["undo"]), ("deleted", "remove highlight (kept)"))
 
-    def test_underlines_are_marks_in_history_and_hidden_from_listings(self):
+    def test_highlights_are_marks_in_history_and_hidden_from_listings(self):
         mark = preview.change_comments({"op": "add", "doc": "manuscript", "para": "Methods ¶1",
-                                        "kind": "underline", "comment": "Underline"})
-        self.assertEqual(mark["undo"], "underline (Methods ¶1)")
+                                        "kind": "highlight", "comment": "Highlight"})
+        self.assertEqual(mark["undo"], "highlight (Methods ¶1)")
         preview.change_comments({"op": "add", "doc": "manuscript", "para": "Methods ¶2", "comment": "Fix"})
         out = io.StringIO()
         with contextlib.redirect_stdout(out):
@@ -155,9 +161,9 @@ class CommentTests(unittest.TestCase):
         self.assertNotIn("Methods ¶1", out.getvalue())
         self.assertIn("Methods ¶2", out.getvalue())
         other = preview.change_comments({"op": "add", "doc": "manuscript", "para": "Methods ¶3",
-                                         "kind": "underline", "comment": "Underline"})["comments"][-1]["id"]
+                                         "kind": "highlight", "comment": "Highlight"})["comments"][-1]["id"]
         removed = preview.change_comments({"op": "delete", "ids": [mark["comments"][0]["id"], other]})
-        self.assertEqual(removed["undo"], "remove 2 underlines")
+        self.assertEqual(removed["undo"], "remove 2 highlights")
 
     def test_a_change_without_a_string_id_is_a_bad_request(self):
         preview.change_comments({"op": "add", "doc": "manuscript", "comment": "Fix"})

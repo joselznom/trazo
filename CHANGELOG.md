@@ -27,7 +27,9 @@ Internal changes (tests, CI, refactoring) stay out.
   formulas, code and images stay locked. Enter breaks a paragraph or opens a
   new one, Backspace at its start joins the one before, and blank lines in a
   paste make paragraphs. Select text and press ⌘B or ⌘I, or B or I in the
-  selection bar, to toggle bold and italic. `@` opens a list of your references,
+  selection bar, to toggle bold and italic. While you write, ⌘Z takes back
+  your typing and then Enter, Backspace and styles, one at a time, and
+  ⌘⇧Z does them again. `@` opens a list of your references,
   figures, tables and values. If trazo cannot place a change exactly in the
   Markdown, it saves nothing, keeps your text and asks what to do (#20,
   #21, #22, #23, #24, #25).
@@ -49,6 +51,13 @@ Internal changes (tests, CI, refactoring) stay out.
 ### Changed
 
 - Saved changes appear sooner in a visible preview, especially in longer papers.
+- The preview's selection bar tells apart what reaches Word from what does
+  not. **Underline**, the reading mark, is now **Highlight** and paints the
+  text violet; it still stays out of Word and out of the agent's list, and
+  your existing marks show as highlights. While you write, a separator is
+  followed by **B**, **I** and the new **U** (⌘U), a real underline that
+  reaches Word; each one shows pressed when the selected text already has
+  that style.
 - ⌘Z in the preview, outside the text, undoes your latest change in the
   document, a comment or a saved paragraph, where before it undid only
   comments (#25).
@@ -134,6 +143,9 @@ Internal changes (tests, CI, refactoring) stay out.
   ends in a stray carriage return or non-breaking space removes it instead of
   answering "server error"; and a comment change sent without a comment id is
   refused as an invalid request instead of "no comment with id None".
+- After a save from the preview, the page reloads once, when its build has
+  the save. It could reload first to an older build, without the words you
+  had just written, and then again.
 
 ### Upgrade notes
 

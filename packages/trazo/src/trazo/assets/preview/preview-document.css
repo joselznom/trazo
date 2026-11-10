@@ -1,4 +1,4 @@
-/* The document page: paragraphs, comments and underlines in the text, figures and tables. */
+/* The document page: paragraphs, comments and highlights in the text, figures and tables. */
 /* ---------- document page ---------- */
 .pv-doc-wrap { padding: 28px 24px 72px; width: max(100%, calc(var(--pv-page-width, 860px) * var(--pv-zoom, 1) + 48px)); }
 .pv-page {
@@ -84,11 +84,18 @@ html.pv-edits-off .pv-edit-new::after, html.pv-edits-off .pv-edit-changed::after
 /* A resolved comment is never painted; "Show in text" lights its text for a moment, in green. */
 ::highlight(pv-done-flash) { background-color: color-mix(in srgb, var(--pv-ok) 40%, transparent); text-decoration: underline 1.5px var(--pv-ok); text-underline-offset: 3px; }
 /* A comment whose text is gone has no highlight: strips in the margin of its
-   paragraph, one per state (open, to check, underline; set by the viewer). */
+   paragraph, one per state (open, to check, highlight; set by the viewer). */
 .pv-lost { box-shadow: var(--pv-lost); }
 .pv-tscroll .pv-lost { box-shadow: var(--pv-lost-in); }
-/* Underlines: the author's reading marks. */
-::highlight(pv-underline) { text-decoration: underline 1.5px color-mix(in srgb, var(--pv-warn-dot) 85%, transparent); text-underline-offset: 3px; }
+/* Highlights: the author's reading marks, never in Word. Violet, because yellow,
+   blue, green and red already mean comments and the agent's edits (theme.css is
+   at its size limit, so the colour lives here). */
+:root { --pv-hl-mark: rgba(192, 38, 211, 0.2); --pv-hl-mark-edge: #c026d3; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) { --pv-hl-mark: rgba(232, 121, 249, 0.3); --pv-hl-mark-edge: #e879f9; }
+}
+:root[data-theme="dark"] { --pv-hl-mark: rgba(232, 121, 249, 0.3); --pv-hl-mark-edge: #e879f9; }
+::highlight(pv-mark) { background-color: var(--pv-hl-mark); }
 .pv-flash { animation: pv-flash 1.7s ease-out; }
 @keyframes pv-flash { from { background: color-mix(in srgb, var(--pv-flash) 50%, transparent); } to { background: transparent; } }
 

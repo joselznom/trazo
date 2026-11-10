@@ -1,11 +1,13 @@
-// Preview viewer: writing a new comment or underline on selected text.
+// Preview viewer: writing a new comment or highlight on selected text.
 // The parts of the viewer are classic scripts loaded in the order of
 // trazo.preview.VIEWER_SCRIPTS; their top-level names are shared globals.
   if (!window.PreviewModel) throw new Error("preview-model.js did not load");  // see preview-page.js
   // ---------------------------------------------------------------- new comments
-  // Selected text offers Comment (then a small editor) and Underline, a
-  // reading mark; over an underline it offers Remove underline instead, as
-  // does a click on underlined text.
+  // Selected text offers Comment (then a small editor) and Highlight, a
+  // reading mark that never reaches Word; over a highlight it offers Remove
+  // highlight instead, as does a click on highlighted text. While writing,
+  // Bold, Italic and Underline follow (preview-format.js): they change the
+  // Markdown, so they reach Word.
   const fab = h("div", { class: "pv-fab", hidden: true, role: "toolbar", "aria-label": "Selected text" });
   document.body.append(fab);
   const fabButton = (select, icon, label, title) => {
@@ -20,7 +22,7 @@
     fab.style.top = `${Math.max(8, Math.min(box.bottom + 6, window.innerHeight - fab.offsetHeight - 8))}px`;
     fab.style.left = `${Math.max(8, Math.min(box.left, window.innerWidth - fab.offsetWidth - 8))}px`;
   }
-  const unmarkButton = () => fabButton("unmark", "underline", "Remove underline", "Remove this reading mark");
+  const unmarkButton = () => fabButton("unmark", "unhighlight", "Remove highlight", "Remove this reading mark");
   const editor = h("div", { class: "pv-editor", hidden: true, role: "dialog", "aria-label": "Add comment" });
   editor.innerHTML = `<button type="button" class="pv-editor-move" aria-label="Move comment editor" title="Drag to move, or focus and use arrow keys (Shift for larger steps)"><span class="pv-where"></span><span aria-hidden="true">⠿</span></button><blockquote></blockquote>` +
     `<textarea rows="4" placeholder="What should Claude change? (⌘↵ to save, Esc to cancel)"></textarea>` +
@@ -71,7 +73,7 @@
       const sel = window.getSelection();
       pendingMarks = [];
       if (view !== "doc") { fab.hidden = true; return; }
-      if (!sel || sel.isCollapsed) {  // a click: on an underline, offer to remove it
+      if (!sel || sel.isCollapsed) {  // a click: on a highlight, offer to remove it
         const at = onText ? caretAt(x, y) : null;
         pendingMarks = at ? marksAt(at) : [];
         if (!pendingMarks.length) { fab.hidden = true; return; }
@@ -90,8 +92,9 @@
       pendingMarks = inText.filter((x) => isMark(x.c) && x.hit.range && overlaps(x.hit.range, range));
       showFab(range.getBoundingClientRect(), [fabButton("comment", "comment", "Comment", "Comment for Claude"),
         pendingMarks.length ? unmarkButton()
-          : fabButton("underline", "underline", "Underline", "A reading mark for you: not a comment, and Claude does not see it"),
+          : fabButton("highlight", "highlight", "Highlight", "A reading mark for you: not in Word, and Claude does not see it"),
         ...formatButtons()]);
+      pressFormatButtons();
     }, 0);
   });
   fab.addEventListener("mousedown", (e) => e.preventDefault());
@@ -99,20 +102,20 @@
     const button = event.target.closest("[data-select]");
     const action = button && button.dataset.select;
     if (!action) return;
-    if (action === "strong" || action === "em") { toggleStyle(action); return; }
+    if (action in FORMAT_TAG) { toggleStyle(action); return; }
     fab.hidden = true;
     if (action === "unmark") {
       const ids = pendingMarks.map((x) => x.c.id);
       pendingMarks = [];
-      if (ids.length && await send(ids.length === 1 ? { op: "delete", id: ids[0] } : { op: "delete", ids }, "Underline removed")) {
+      if (ids.length && await send(ids.length === 1 ? { op: "delete", id: ids[0] } : { op: "delete", ids }, "Highlight removed")) {
         pending = null; window.getSelection().removeAllRanges();
       }
       return;
     }
     if (!pending) return;
-    if (action === "underline") {
+    if (action === "highlight") {
       const anchor = pending;
-      if (await send({ op: "add", ...anchor, kind: "underline", comment: "Underline" }, "Underlined")) {
+      if (await send({ op: "add", ...anchor, kind: "highlight", comment: "Highlight" }, "Highlighted")) {
         pending = null; window.getSelection().removeAllRanges();
       }
       return;

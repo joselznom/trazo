@@ -155,13 +155,20 @@ def change_source(request):
     save: {file, text, base_sha256} writes only if the file on disk still has
     the loaded sha256 (409 with the current sha otherwise). The previous
     content goes to file_history.json. undo: {op: "undo", file} restores it,
-    only if the file is still exactly what that save wrote. Undoing a
-    rejection of edits (kind "reject") makes those edits pending again.
+    only if the file is still exactly what that save wrote; with {expect:
+    save_id} only if that save is still the file's latest (409 otherwise,
+    and the save stays undoable). Undoing a rejection of edits (kind
+    "reject") makes those edits pending again. A save that wrote answers
+    with its `save_id`, what `expect` names.
+
     Either is published by source_publish.publish: a write by another program
     after the locked read answers 409 with `kept`, and records no undo. A
     save answers the sha256 of the bytes it wrote, so a write landing just
     after it makes the next save a 409; `warning` reports trouble after
     publishing.
+
+    Every write sets WATCHER["written"] (trazo.preview), so a page holds its
+    reload until the watcher has built it.
     """
     if not isinstance(request, dict):
         raise CommentError("request body must be a JSON object")
@@ -178,6 +185,8 @@ def change_source(request):
             if not mine:
                 raise CommentError("nothing to undo")
             entry = entries[mine[-1]]
+            if "expect" in request and str(entry.get("at")) != str(request["expect"]):
+                raise Conflict("the file has a newer save", sha256=current)
             if entry.get("after_sha") != current:
                 del entries[mine[-1]]
                 save_file_history(entries)
@@ -192,6 +201,7 @@ def change_source(request):
                 preview_edit_review.absorb(file, old, entry["before_text"])
             del entries[mine[-1]]
             save_file_history(entries)
+            mark_written()
             data, text = read_source(path)
             return {**source_state(file, path, data, text), "warning": result.warning}
         else:
@@ -204,7 +214,8 @@ def change_source(request):
             new = text.encode("utf-8")
             reply: dict[str, Any] = {}
             if new != data:
-                entries.append({"time": time.strftime("%Y-%m-%d %H:%M:%S"), "at": time.time_ns(), "file": file,
+                at = time.time_ns()
+                entries.append({"time": time.strftime("%Y-%m-%d %H:%M:%S"), "at": at, "file": file,
                                 "before_text": old, "before_sha": current,
                                 "after_sha": sha256_of(new), "pending": True})
                 save_file_history(entries)
@@ -213,13 +224,23 @@ def change_source(request):
                     entries.pop()
                     save_file_history(entries)
                     raise collided(file, path, result)
-                reply = {"exact": result.exact, "warning": result.warning}
+                # A JavaScript number would round a time in nanoseconds.
+                reply = {"exact": result.exact, "warning": result.warning, "save_id": str(at)}
                 preview_edit_review.absorb(file, old, text)
+                mark_written()
             # What this save wrote, not a re-read: the browser keeps this sha256 as
             # its base, so a write landing after the rename must make its next save a 409.
             return {**source_state(file, path, new, text), **reply}
         data, text = read_source(path)
         return source_state(file, path, data, text)
+
+
+def mark_written():
+    """A manuscript file was just written: pages hold their reload until the
+    watcher's `synced` is later (both in /__workspace)."""
+    from . import preview
+    with preview.LOCK:
+        preview.WATCHER["written"] = time.time()
 
 
 def latest_change(doc):

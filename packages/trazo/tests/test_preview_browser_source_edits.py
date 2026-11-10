@@ -1,6 +1,7 @@
 """Viewer regressions in Chrome: caption and Source tab edits saved to the Markdown sources."""
 
 import json
+import time
 import unittest
 from unittest.mock import patch
 
@@ -216,8 +217,9 @@ class SourceEditTests(PreviewBrowserTestCase):
                 self.wait_for("document.querySelector('.pv-src-msg').textContent.startsWith('Saved')")
                 self.assertEqual(source.read_text(), original.replace(long_text, replacement))
                 page.write_text(current_html.replace('<p>' + long_text + '</p>', rendered))
-                with preview.LOCK:
+                with preview.LOCK:  # as the watcher does once it has built the save
                     preview.STATE["manuscript"]["version"] += 1
+                    preview.WATCHER["synced"] = time.time()
                 self.wait_for(f"performance.timeOrigin !== {before['origin']} && document.readyState === 'complete' && "
                               "document.querySelector('.pv-src-text')?.value.includes('Reading paragraph 44')")
                 if shortening:

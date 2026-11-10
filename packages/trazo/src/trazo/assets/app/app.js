@@ -93,7 +93,7 @@
     clearTimeout(timer);
     polling = true;
     const fast = !window.TRAZO_VIEW && [...listeners.values()].some(Boolean)
-      && !["comments", "docx", "synced", "server"].some(name => Object.hasOwn(latest?.documents || {}, name));
+      && !["comments", "docx", "synced", "building", "server"].some(name => Object.hasOwn(latest?.documents || {}, name));
     try {
       const workspace = !fast || !latest || performance.now() - workspaceAt >= 1000;
       const result = await api(workspace ? "/__workspace" : "/__status");
@@ -104,7 +104,7 @@
       } else {
         latest = { ...latest,
           documents: Object.fromEntries(Object.keys(latest.documents).map(name => [name, result.data[name]])),
-          comments: result.data.comments, docx: result.data.docx };
+          comments: result.data.comments, docx: result.data.docx, building: result.data.building };
       }
       await Promise.allSettled([...listeners.keys()].map(fn => fn(latest, null)));
     } catch (error) {

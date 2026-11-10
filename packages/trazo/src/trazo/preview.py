@@ -118,6 +118,7 @@ import subprocess  # noqa: F401  (tests patch preview.subprocess.run)
 import sys
 import threading
 import time
+from typing import cast
 
 from . import preview_export
 from .background import CommandJob
@@ -209,7 +210,7 @@ VIEWER_SCRIPTS = (
     "preview-source.js", "preview-diff.js", "preview-edits.js", "preview-build.js", "preview-new-comments.js",
     "preview-captions.js", "preview-caption-editors.js", "preview-export.js", "preview-export-picker.js",
     "preview-figures.js", "preview-lightbox.js", "preview-submission.js", "preview-writing.js", "preview-paragraphs.js",
-    "preview-format.js", "preview-mentions.js", "preview.js",
+    "preview-format.js", "preview-mentions.js", "preview-history.js", "preview.js",
 )
 WATCHED = tuple(PROJECT.config["preview"]["watch"])
 PANDOC_FLAGS = [
@@ -238,8 +239,10 @@ LOCK = threading.Lock()
 # (STATE, also set when a build raised) says whether it shows them or keeps
 # its last good version. `rebuild`: pages to build again although no source
 # changed (after edits were accepted); `outputs`: spec tables whose Markdown
-# is not what their spec makes (preview_edit_review.check_outputs).
-WATCHER = {"synced": 0.0, "rebuild": set(), "outputs": []}
+# is not what their spec makes (preview_edit_review.check_outputs);
+# `written`: the time.time() of the latest manuscript write from the preview
+# (preview_sources.mark_written), not yet built while later than `synced`.
+WATCHER = {"synced": 0.0, "written": 0.0, "rebuild": set(), "outputs": []}
 
 LOCATE_LOW = 0.45  # below this a match is not trusted
 DIAGRAM_NAME = re.compile(r"^[a-z0-9][a-z0-9_-]*$")
@@ -269,12 +272,20 @@ def build(name):
     return not error
 
 
+def building():
+    """Whether a file written from the preview is not built yet: a page holds
+    its reload meanwhile. The caller holds LOCK."""
+    return cast(float, WATCHER.get("written", 0.0)) > cast(float, WATCHER["synced"])
+
+
 def status():
     with LOCK:
         docs = {name: dict(state) for name, state in STATE.items()}
+        # Pages poll this between /__workspace scans, so it must not lag a save.
+        unbuilt = building()
     # "server" lets trazo mcp tell its own preview from another one on the port.
     return {**docs, "comments": comments_stamp(), "docx": docx_status(), "synced": WATCHER["synced"],
-            "server": {"pid": os.getpid(), "project": str(PROJECT.root)}}
+            "building": unbuilt, "server": {"pid": os.getpid(), "project": str(PROJECT.root)}}
 
 
 def export_indexes(options):

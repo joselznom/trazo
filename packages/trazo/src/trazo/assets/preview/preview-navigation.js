@@ -87,7 +87,7 @@
       return at;
     };
     for (const { c, hit } of lastLocated) {
-      if (c.kind === "underline" || (c.status !== "open" && c.status !== "review")) continue;
+      if (c.kind === "highlight" || (c.status !== "open" && c.status !== "review")) continue;
       let at = -1;
       if (hit) at = indexOfEl(hit.el);
       else {

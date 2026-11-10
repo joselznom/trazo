@@ -121,8 +121,9 @@ def status():
                                if not p.is_relative_to(ASSETS_DIR)}, sort_keys=True).encode())
     with preview.LOCK:
         outputs = list(preview.WATCHER["outputs"])
+        building = preview.building()
     return {"documents": docs, "comments": preview.comments_stamp(), "docx": preview.docx_status(),
-            "outputs": outputs,
+            "outputs": outputs, "building": building,
             "diagrams": diagrams, "tables": tables, "catalog": revision, "inputs": inputs,
             "review": review.revision(),
             "assets": fingerprint(p for p in ASSETS_DIR.rglob("*") if p.is_file())}

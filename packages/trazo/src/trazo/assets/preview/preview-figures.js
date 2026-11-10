@@ -35,7 +35,7 @@
       App.api("/__review").then(result => {
         if (!result.ok) return;
         reviewCounts = {};
-        for (const c of result.data.comments) if (c.status === "open" && c.kind !== "underline") {
+        for (const c of result.data.comments) if (c.status === "open" && c.kind !== "highlight") {
           const key = `${c.scope}:${c.name}`;
           reviewCounts[key] = (reviewCounts[key] || 0) + 1;
         }

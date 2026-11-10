@@ -117,38 +117,56 @@
 
   const refusal = (payload) => payload.refused || payload.error || "the server refused";
 
+  // A request of the save queue; a server that does not answer refuses it.
+  async function postQueued(path, body) {
+    try {
+      return await postJson(path, body);
+    } catch (e) {
+      return { ok: false, status: 0, payload: { error: "the preview server did not answer" } };
+    }
+  }
+
+  // Keys wait while a join or an undo waits for its answer: what is typed meanwhile would be lost.
+  function holdKeys(ed, on) {
+    ed.joining = on;
+    ed.el.contentEditable = on ? "false" : "plaintext-only";
+    if (!on) ed.el.focus({ preventScroll: true });
+  }
+
   // One at a time and in order: a save may need the key the one before it got.
   // `group` are the paragraphs the block becomes, the first being the one sent.
+  // `step`: the action's step of the history (preview-history.js), undoable once this save is done.
   let saveQueue = Promise.resolve();
-  function sendBlock(ed, body, { path = "/__block", group = [ed], block = group[0], refused = showFailure, done = null, when = null } = {}) {
+  function sendBlock(ed, body, { path = "/__block", group = [ed], block = group[0], refused = showFailure, done = null, when = null, step = null } = {}) {
     saves++;
     showSaveState("Saving…");
     saveQueue = saveQueue.then(async () => {
       // A paragraph a refused break folded back has nothing left to save.
-      if (!ed.el.isConnected || (when && !when())) { saves--; return; }
+      if (!ed.el.isConnected || (when && !when())) { saves--; if (step) dropStep(step); return; }
       if (!block.el.isConnected) {  // a new paragraph after one that was folded back: its text stays, flagged
         saves--;
+        if (step) dropStep(step);
         refused(ed, 0, { error: "the paragraph before it was not saved" });
         return;
       }
       const { file, h: key } = block.mark.dataset;
       const sent = typeof body === "function" ? body() : body;
-      let result;
-      try {
-        result = await postJson(path, { file, h: key, ...sent });
-      } catch (e) {
-        result = { ok: false, status: 0, payload: { error: "the preview server did not answer" } };
-      }
+      if (step) stepSent(step, { path, body: { file, h: key, ...sent } });
+      const result = await postQueued(path, { file, h: key, ...sent });
       saves--;
       if (!result.ok || !result.payload.saved) {
         showSaveState("", false);
+        if (step) dropStep(step);
         refused(ed, result.status, result.payload);
-      } else if (done) {
+        return;
+      }
+      if (done) {
         showSaveState("Saved", true);
         done(result.payload);
         if (result.payload.warning) toast(result.payload.warning);
       }
       else blockSaved(ed, result.payload, group, sent);
+      if (step) stepSaved(step, result.payload, sent);
     });
   }
 
@@ -304,12 +322,16 @@
   page.addEventListener("focusout", (e) => {
     // Another window taking the focus leaves the paragraph the active element, and that is not leaving it.
     if (writing && !writing.joining && e.target === writing.el && document.activeElement !== e.target
-        && !(e.relatedTarget && writing.el.contains(e.relatedTarget))) saveBlock(stopWriting());
+        && !(e.relatedTarget && writing.el.contains(e.relatedTarget))) {
+      endHistory();
+      saveBlock(stopWriting());
+    }
   });
   page.addEventListener("input", () => { if (writing) fab.hidden = true; });
   document.addEventListener("keydown", (e) => {
     if (writing && !writing.joining && e.key === "Escape") {
       e.preventDefault();
+      endHistory();
       discardWriting(stopWriting());
       getSelection().removeAllRanges();
     }

@@ -49,6 +49,10 @@
 .pv-fab button { display: inline-flex; align-items: center; gap: 5px; padding: 4px 9px; border-radius: 6px; }
 .pv-fab button:hover { background: var(--pv-hover); }
 .pv-fab svg { width: 15px; height: 15px; color: var(--pv-ink-2); }
+/* Bold, italic and underline, after a separator: they reach Word, the rest does not. */
+.pv-fab-sep { align-self: center; width: 1px; height: 18px; margin: 0 3px; background: var(--pv-line); }
+.pv-fab .pv-fmt { justify-content: center; width: 26px; padding: 4px 0; font: 14px var(--pv-serif); }
+.pv-fab .pv-fmt[aria-pressed="true"] { background: var(--pv-accent-soft); color: var(--pv-accent); }
 /* The selected edit's bar (preview-edits.js): accept, reject, and what a changed block was. */
 .pv-edit-bar {
   position: fixed; z-index: 60; display: flex; flex-wrap: wrap; gap: 1px; max-width: min(360px, calc(100vw - 16px)); padding: 2px;
