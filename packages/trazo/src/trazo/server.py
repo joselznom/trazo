@@ -86,20 +86,24 @@ def page_stamp(page: str) -> str:
 
 # A page load opens about 45 connections to this server, and on Windows one of
 # them now and then fails inside the browser without reaching it: that script
-# never runs and the page stays half-started. A trazo script that fails while
-# the page is still parsing shows the viewer's reload note and reloads the page,
-# once per tab (sessionStorage; no storage, no reload), so it cannot loop; a page
-# that then loads clears the count. Nothing the user typed can be lost: until
-# parsing ends the page shows nothing (rel=expect below) and the viewer and
-# editors are not built yet. Later failures change nothing. It must come before
-# every script of the page.
-SCRIPT_GUARD = """<script>(() => {
+# never runs, or that stylesheet (a <link>, or an @import in it, which fails its
+# <link>) never applies, and the page stays half-started. A trazo script or
+# stylesheet that fails while the page is still parsing shows the viewer's reload
+# note and reloads the page, once per tab (sessionStorage; no storage, no reload),
+# so it cannot loop; a page that then loads clears the count. Nothing the user
+# typed can be lost: until parsing ends the page shows nothing (rel=expect below)
+# and the viewer and editors are not built yet; the head's stylesheets block the
+# body's scripts, so they fail while it parses. Later failures change nothing, and
+# so do fonts and images: text falls back to another face, a figure shows empty.
+# decorate_page puts it first in head, before every script and stylesheet.
+LOAD_GUARD = """<script>(() => {
   const key = "trazo-script-reload";
   let failed = false;
   addEventListener("error", (event) => {
-    const script = event.target;
-    if (failed || document.readyState !== "loading" || !(script instanceof HTMLScriptElement)
-        || !script.src.startsWith(location.origin + "/__assets/")) return;
+    const file = event.target;
+    if (failed || document.readyState !== "loading" || !(file instanceof Element)
+        || !file.matches("script[src], link[rel~=stylesheet]")
+        || !(file.src || file.href).startsWith(location.origin + "/__assets/")) return;
     failed = true;
     let reload = false;
     try { if (!sessionStorage.getItem(key)) { sessionStorage.setItem(key, "1"); reload = true; } } catch (e) { /* no storage */ }
@@ -112,7 +116,7 @@ SCRIPT_GUARD = """<script>(() => {
       document.body.prepend(p);
     };
     if (document.body) note(); else addEventListener("DOMContentLoaded", note);
-    if (reload) { stop(); location.reload(); }  // never in an MCP view: its page inlines every script
+    if (reload) { stop(); location.reload(); }  // never in an MCP view: its page inlines every script and stylesheet
   }, true);
   addEventListener("load", () => {
     if (!failed) try { sessionStorage.removeItem(key); } catch (e) { /* no storage */ }
@@ -153,7 +157,7 @@ def decorate_page(page, counts=None, stamp=False, version=None):
     # The first paint, and the snapshot a page change fades into, waits until
     # the page scripts at the end of body have built the shell, and fetches
     # the fonts early so text does not reflow when they arrive.
-    shared = (SCRIPT_GUARD + f'<script>window.TRAZO_CONFIG = {config};'
+    shared = (f'<script>window.TRAZO_CONFIG = {config};'
               'window.PREVIEW_TITLES = window.TRAZO_CONFIG.titles;'
               'window.PREVIEW_NUMBER_PREFIXES = window.TRAZO_CONFIG.number_prefixes;'
               + (f'window.PREVIEW_COUNTS = {json.dumps(counts).replace("</", "<" + chr(92) + "/")};'
@@ -169,6 +173,7 @@ def decorate_page(page, counts=None, stamp=False, version=None):
     if end:
         page = head + '<span id="pk-shell-ready" hidden></span>' + end + rest
     page = page.replace("</head>", shared + "</head>", 1)
+    page = re.sub(r"<head\b[^>]*>", lambda tag: tag[0] + LOAD_GUARD, page, count=1)
     if stamp:
         page = page.replace("</head>", f'<meta name="trazo-page" content="{page_stamp(page)}">'
                             f'<meta name="trazo-images" content="{image_stamp(page)}"></head>', 1)

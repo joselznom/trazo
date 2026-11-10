@@ -117,14 +117,19 @@ Evidence is macOS; Windows runs the runner and lifecycle tests in
 A served page (document, table editor, diagram editor) loads about 45 files
 over separate HTTP/1.0 connections. On Windows CI about one test in 600 lost
 one script: the request failed inside Chrome (status 0) without reaching the
-server, and the page stayed half-started. That network layer is not
-identified. A trazo script that fails while the page is still parsing now
-shows "Viewer scripts did not load; reload the page." and reloads the page
-once per tab; if it fails again the note stays and nothing reloads. A failure
-after the page has started never reloads it, so typed text is not lost.
-Checked on macOS by resetting one script's connection in Chrome; the Windows
-rate after the fix is not measured. A failed wait in the browser tests now
-prints the failed resources with their status and the server's request log.
+server, and the page stayed half-started. After the script fix, a CI run lost
+`preview-shell.css` (an `@import` of `preview.css`) the same way. That network
+layer is not identified. A trazo script or stylesheet that fails while the
+page is still parsing now shows "Viewer scripts did not load; reload the
+page." and reloads the page once per tab; if it fails again the note stays
+and nothing reloads. The guard comes first in the page's head, before the
+page's own stylesheets. A failure after the page has
+started never reloads it, so typed text is not lost. Fonts and images are left
+out: a lost font falls back to another face and a lost figure shows empty,
+and no CI trace showed either. Checked on macOS by resetting one file's
+connection in Chrome; the Windows rate after the fix is not measured. A failed
+wait in the browser tests now prints the failed resources with their status
+and the server's request log.
 
 A document page carries the version it was served at
 (`<meta name="trazo-version">`, read before the file), and the viewer
