@@ -166,16 +166,18 @@
         catalogStamp = catalogVersion;
         loadAll().then(() => { if (view === "figures" && !hasUnsaved()) renderFigs(); });
       }
-      const stale = (view !== "doc" ? docNames : [doc]).some((n) => versions[n] !== loaded[n]);
+      // A build with blocks held for the author is taken again once they leave the text.
+      const stale = (view !== "doc" ? docNames : [doc]).some((n) => versions[n] !== loaded[n]) || (blocksHeld && !writing);
       // A newer build may still lack the last save: a reload to it would take
       // back what the author left on the page until the next one.
-      // In the document view the page changes in place when it can (preview-update.js).
-      if (stale && !busy && !all.building) {
+      // In the document view the page changes in place when it can (preview-update.js),
+      // also while the author writes; a reload waits for them.
+      if (stale && !all.building) {
         const how = view === "doc" ? await updatePage() : "reload";
-        if (how === "done") loaded[doc] = versions[doc];
-        else if (how === "reload" && await App.reload(() => !hasUnsaved())) return;
+        if (how === "done" || how === "partial") { loaded[doc] = versions[doc]; blocksHeld = how === "partial"; }
+        else if (how === "reload" && !busy && await App.reload(() => !hasUnsaved())) return;
       }
-      hold.hidden = !(busy && stale);
+      hold.hidden = !(busy && (versions[doc] !== loaded[doc] || blocksHeld || (view !== "doc" && stale)));
       if (view === "doc") for (const n of docNames) if (n !== doc) loaded[n] = versions[n];  // not shown here
       // Refresh copies fetched at another version, or before the first
       // status answered (a failed first poll leaves their version unknown).
@@ -212,5 +214,5 @@
     // A hidden tab polls slowly; it catches up as soon as it is shown again.
 
   }
-  let polling = false, commentStamp = null, docxFinished = null;
+  let polling = false, commentStamp = null, docxFinished = null, blocksHeld = false;
   App.watch(poll);
