@@ -262,16 +262,17 @@ class Chrome:
         self._closed = True
         try:
             if self.proc is not None:
-                if self.proc.poll() is None:
-                    try:
-                        self.call("Browser.close", timeout=min(self.timeout, _CLOSE_TIMEOUT))
-                    except BrowserError:
-                        pass
                 try:
-                    self.proc.wait(timeout=_CLOSE_TIMEOUT)
-                except subprocess.TimeoutExpired:
-                    self.proc.kill()
-                    self.proc.wait()  # Reap before deleting the profile or returning.
+                    if self.proc.poll() is None:
+                        self.call("Browser.close", timeout=min(self.timeout, _CLOSE_TIMEOUT))
+                except BrowserError:
+                    pass
+                finally:  # whatever the reply was (a malformed one raises): Chrome must not outlive its profile
+                    try:
+                        self.proc.wait(timeout=_CLOSE_TIMEOUT)
+                    except subprocess.TimeoutExpired:
+                        self.proc.kill()
+                        self.proc.wait()  # Reap before deleting the profile or returning.
         finally:
             self._stderr_stop.set()
             if self._stderr_thread is not None and self._stderr_thread.ident is not None:
@@ -290,6 +291,14 @@ class Chrome:
                 self.reader = None
             if self.profile:
                 shutil.rmtree(self.profile, ignore_errors=True)
+
+    def discard(self) -> None:
+        """close() for an owner with nobody waiting on the result: Chrome is
+        reaped and its profile removed all the same, and a failure is printed."""
+        try:
+            self.close()
+        except Exception as exc:
+            print(f"[chrome] closing headless Chrome failed: {exc!r}", flush=True)
 
     def __enter__(self) -> Chrome:
         return self

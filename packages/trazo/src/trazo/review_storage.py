@@ -54,6 +54,13 @@ def write_atomic(path: Path, data: bytes, default_mode: int = 0o644) -> None:
         raise
 
 
+def holds_text(path: Path, text: str) -> bool:
+    """Whether the file at `path` reads as `text` (UTF-8, newlines as Python
+    reads them). Bytes that are not UTF-8, such as a file re-saved by hand in
+    another encoding, never do: the file differs instead of raising."""
+    return path.read_text(encoding="utf-8", errors="surrogateescape") == text
+
+
 def write_json(path: Path, data: Any, **dump: Any) -> None:
     write_atomic(path, (json.dumps(data, ensure_ascii=False, **dump) + "\n").encode("utf-8"))
 

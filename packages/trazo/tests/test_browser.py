@@ -1,5 +1,7 @@
 """Browser transport failures, using a real pipe peer instead of crashing Chrome."""
 
+import contextlib
+import io
 import os
 import shutil
 import subprocess
@@ -11,7 +13,7 @@ from unittest.mock import patch
 
 import _support  # noqa: F401  (sets TRAZO_ROOT before trazo loads)
 
-from trazo import browser, diagram
+from trazo import browser, diagram, diagram_editor
 
 PEER = r'''
 import json, os, sys, time
@@ -51,6 +53,9 @@ while True:
         elif method == 'Target.closeTarget' and MODE == 'render-error':
             sys.stderr.write('cleanup failed\n')
             sys.exit(7)
+        if method == 'Browser.close' and MODE == 'garbage-close':
+            os.write(OUT, b'not json\0')
+            time.sleep(600)  # like a browser that does not exit on pipe EOF
         os.write(OUT, json.dumps({'id': request['id'], 'result': result}).encode() + b'\0')
         if method == 'Browser.close':
             if MODE == 'hang-close':
@@ -131,6 +136,20 @@ class BrowserTests(unittest.TestCase):
         self.assertIsNotNone(chrome.proc.returncode, "close returned before reaping Chrome")
         self.assertFalse(Path(chrome.profile).exists())
         chrome.close()
+
+    def test_a_malformed_close_reply_still_reaps_chrome_before_removing_its_profile(self):
+        self.peer("garbage-close")
+        checker = diagram_editor.SharedChrome()
+        checker.chrome = chrome = browser.Chrome(timeout=2)
+        self.addCleanup(chrome.proc.wait, 5)
+        self.addCleanup(chrome.proc.kill)  # runs first; a no-op once Chrome was reaped
+        log = io.StringIO()
+        with contextlib.redirect_stdout(log):
+            checker.drop()
+        self.assertIsNone(checker.chrome)
+        self.assertIsNotNone(chrome.proc.returncode, "Chrome kept running after its profile was removed")
+        self.assertFalse(Path(chrome.profile).exists(), "the profile outlived close()")
+        self.assertIn("closing headless Chrome failed", log.getvalue(), "the failure left no trace in the log")
 
     @unittest.skipUnless(sys.platform == "darwin" and shutil.which("sandbox-exec"),
                          "needs the macOS sandbox")

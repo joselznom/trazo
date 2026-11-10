@@ -246,10 +246,7 @@ class SharedChrome:
 
     def drop(self) -> None:
         if self.chrome is not None:
-            try:
-                self.chrome.close()
-            except Exception:
-                pass
+            self.chrome.discard()
             self.chrome = None
 
     def check(self, name: str, exports: bool) -> dict[str, Any]:
