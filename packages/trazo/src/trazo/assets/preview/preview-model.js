@@ -205,6 +205,31 @@
     }
   }
 
+  // The body as blocks, for an in-place update (preview-update.js): its
+  // sections, each nested only in sections, and for the body and each section
+  // the elements between them (headings, paragraphs, lists, figures, ...).
+  function blocks(root) {
+    const sections = [];
+    const walk = (parent) => {
+      for (const el of parent.children) if (el.tagName === "SECTION") { sections.push(el); walk(el); }
+    };
+    walk(root);
+    const groups = [root, ...sections].map((parent) =>
+      [...parent.children].filter((el) => el.tagName !== "SECTION" && el.tagName !== "SCRIPT"));
+    return { sections, groups };
+  }
+  // What a block reads as, to compare builds: an MCP App view has its images
+  // inlined and their paths in data-trazo-src.
+  function blockKey(el) {
+    if (!el.querySelector("[data-trazo-src]")) return el.outerHTML;
+    const copy = el.cloneNode(true);
+    for (const img of copy.querySelectorAll("[data-trazo-src]")) {
+      img.setAttribute(img.localName === "img" ? "src" : "href", img.dataset.trazoSrc);
+      img.removeAttribute("data-trazo-src");
+    }
+    return copy.outerHTML;
+  }
+
   // Everything the viewer needs to know about one document body.
   function analyse(root, doc) {
     const entries = label(root);
@@ -218,5 +243,5 @@
     return analyse(new DOMParser().parseFromString(html, "text/html").body, doc);
   }
 
-  window.PreviewModel = { squash, label, sections, titleOf, outline, items, citations, crossCitations, analyse, parse, diagramOf, srcOf };
+  window.PreviewModel = { squash, label, sections, titleOf, outline, items, citations, crossCitations, analyse, parse, diagramOf, srcOf, blocks, blockKey };
 })();

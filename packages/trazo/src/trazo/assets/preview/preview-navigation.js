@@ -6,11 +6,12 @@
   // Counts as journals do: main-text words (without the abstract,
   // declarations, ...), figures, tables and references. The server makes
   // them (trazo's counts.py, with trazo.toml [counts] and the [limits]
-  // of the first document); a page served without them shows none.
-  const COUNTS = window.PREVIEW_COUNTS || null;
-  const outlineHeads = Model.outline(page, COUNTS);
-  const tally = COUNTS || {};
-  const limits = (COUNTS && COUNTS.limits) || {};
+  // of the first document); a page served without them shows none. An
+  // in-place update brings the new page's (setCounts).
+  let COUNTS = window.PREVIEW_COUNTS || null;
+  let outlineHeads = Model.outline(page, COUNTS);
+  let tally = COUNTS || {};
+  let limits = (COUNTS && COUNTS.limits) || {};
   const hasLimit = (key) => limits[key] > 0;
   const missing = (key) => tally[key] == null;
   const overLimit = (key) => hasLimit(key) && !missing(key) && tally[key] > limits[key];
@@ -23,19 +24,21 @@
     const d = limits[key] - tally[key];
     return d < 0 ? `${fmt(-d)} over the limit` : d === 0 ? "At the limit" : `${fmt(d)} left`;
   };
-  const COUNT_ROWS = COUNTS?.total ? [["words", "Total", "words"]] : [["words", "Main text", "words"], ["abstract", "Abstract", "words"],
+  const rowsOf = (counts) => counts?.total ? [["words", "Total", "words"]] : [["words", "Main text", "words"], ["abstract", "Abstract", "words"],
     ["figures", "Figures"], ["tables", "Tables"], ["references", "References"]];
+  let COUNT_ROWS = rowsOf(COUNTS);
   const countText = (key) => (missing(key) ? "—" : fmt(tally[key])) + (hasLimit(key) ? ` / ${fmt(limits[key])}` : "");
-  const countsTitle = !COUNTS ? "" : [
+  const titleOfCounts = () => !COUNTS ? "" : [
     ...COUNT_ROWS.filter(([key]) => !missing(key) || hasLimit(key)).map(([key, name, unit]) =>
       `${name}: ${countText(key)}${unit ? ` ${unit}` : ""}${hasLimit(key) ? ` (${leftText(key).toLowerCase()})` : ""}`),
     COUNTS.left_out.length
       ? `Not in the main text: ${COUNTS.left_out.map(([text, n]) => `${text} (${fmt(n)})`).join(", ")}` : "",
   ].filter(Boolean).join("\n");
+  let countsTitle = titleOfCounts();
   // Words as meters (a bar only with a limit), figures, tables and references
-  // as tiles. Without a limit a count is just the number. Built once: the
-  // counts change only with a new page.
-  const countsBox = (() => {
+  // as tiles. Without a limit a count is just the number. Built again only
+  // with new counts.
+  const buildCountsBox = () => {
     if (!COUNTS) return null;
     const box = h("section", { class: "pv-counts", "aria-label": "Counts", title: countsTitle });
     for (const [key, name, unit] of COUNT_ROWS.slice(0, 2)) {
@@ -70,8 +73,18 @@
       box.append(h("p", { class: "pv-counts-hint", text: "No journal limits set. Add them under [limits] in trazo.toml." }));
     }
     return box;
-  })();
-  const wordsOf = () => (view === "figures" || !COUNTS ? "" : `${countText("words")} words`);
+  };
+  let countsBox = buildCountsBox();
+  function setCounts(counts) {
+    COUNTS = counts;
+    tally = COUNTS || {};
+    limits = (COUNTS && COUNTS.limits) || {};
+    COUNT_ROWS = rowsOf(COUNTS);
+    countsTitle = titleOfCounts();
+    countsBox = buildCountsBox();
+    outlineHeads = Model.outline(page, COUNTS);
+  }
+  const wordsOf =() => (view === "figures" || !COUNTS ? "" : `${countText("words")} words`);
   let activeHead = -1, ixButtons = [], lastLocated = [];
   const collapsed = new Set();
   const badgeOf = (c) => c.status === "open" ? "open" : "review";

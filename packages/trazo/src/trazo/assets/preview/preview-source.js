@@ -224,6 +224,24 @@
     return true;
   }
 
+  // After an in-place update the files may be newer than their copies here:
+  // those without unsaved edits are read again, the one shown in its place.
+  async function refreshCleanSources() {
+    for (const [file, b] of [...buffers]) if (file !== cur && !isDirty(b) && !sourceBusy.has(file)) buffers.delete(file);
+    const file = cur, b = file && buffers.get(file);
+    if (!b || isDirty(b) || sourceBusy.has(file)) return;
+    const state = await fetchSource(file).catch(() => null);
+    if (!state || cur !== file || buffers.get(file) !== b || isDirty(b) || state.sha256 === b.sha) return;
+    const fresh = fromState(state);
+    fresh.sel = editor2.getSelection();
+    fresh.scroll = editor2.getScroll();
+    buffers.set(file, fresh);
+    editor2.setValue(fresh.text);
+    editor2.setSelection(fresh.sel[0], fresh.sel[1]);
+    editor2.setScroll(fresh.scroll);
+    updateSourceUi();
+  }
+
   // The Source tab follows the section in view while it has no unsaved edits
   // (an explicit pick in the file list stays until the reader moves to
   // another file's section).

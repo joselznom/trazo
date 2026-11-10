@@ -179,7 +179,7 @@
     if (st) st.range = sel.getRangeAt(0).cloneRange();
   });
 
-  for (const table of $$("table", page)) {
+  setUpBlocks((root) => { for (const table of within(root, "table")) {
     const label = table.id.startsWith("tbl:") ? table.id.slice(4) : "";
     const host = table.querySelector("caption");
     if (!host) continue;
@@ -200,7 +200,7 @@
       convert.addEventListener("click", () => makeEditable(doc, `tbl:${label}`, host));
       host.append(convert);
     }
-  }
+  } });
   // Reopen after live reload or a gallery action in another document.
   {
     const saved = sget(tableOpenKey(doc));

@@ -99,7 +99,8 @@
   let zoom = typeof prefs.zoom === "number" && Number.isFinite(prefs.zoom) ? clamp(prefs.zoom, 0.5, 2) : "fit";
   let fontSize = typeof prefs.fontSize === "number" && Number.isFinite(prefs.fontSize) ? clamp(Math.round(prefs.fontSize), 10, 22) : 14;
   let pageScale = 1, pageWidth = 0;
-  const zoomAnchors = $$("h1, h2, h3, h4, h5, h6, p, figure, table", page);
+  let zoomAnchors = $$("h1, h2, h3, h4, h5, h6, p, figure, table", page);
+  pageRefreshes.push(() => { zoomAnchors = $$("h1, h2, h3, h4, h5, h6, p, figure, table", page); });
   const readingKey = "preview-anchor:" + Trazo.path();
   function saveReadingAnchor() {
     if (view !== "doc") return;
