@@ -118,6 +118,7 @@ import subprocess  # noqa: F401  (tests patch preview.subprocess.run)
 import sys
 import threading
 import time
+from typing import cast
 
 from . import preview_export
 from .background import CommandJob
@@ -271,12 +272,20 @@ def build(name):
     return not error
 
 
+def building():
+    """Whether a file written from the preview is not built yet: a page holds
+    its reload meanwhile. The caller holds LOCK."""
+    return cast(float, WATCHER.get("written", 0.0)) > cast(float, WATCHER["synced"])
+
+
 def status():
     with LOCK:
         docs = {name: dict(state) for name, state in STATE.items()}
+        # Pages poll this between /__workspace scans, so it must not lag a save.
+        unbuilt = building()
     # "server" lets trazo mcp tell its own preview from another one on the port.
     return {**docs, "comments": comments_stamp(), "docx": docx_status(), "synced": WATCHER["synced"],
-            "server": {"pid": os.getpid(), "project": str(PROJECT.root)}}
+            "building": unbuilt, "server": {"pid": os.getpid(), "project": str(PROJECT.root)}}
 
 
 def export_indexes(options):
