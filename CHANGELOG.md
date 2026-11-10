@@ -80,6 +80,14 @@ Internal changes (tests, CI, refactoring) stay out.
 - A failed table or diagram save keeps the last saved text and its undo history,
   including when a diagram autosave is interrupted.
 - The table editor no longer shows "null" under a table without a note (#15).
+- When the preview cannot rebuild for an unexpected reason (a file it cannot
+  read, a tables command whose output it cannot decode), it now says so on the
+  page instead of claiming "Build OK" or staying on "building..." forever, and
+  it rebuilds by itself once the cause is fixed, edits made meanwhile included.
+  A table output re-saved in another encoding is flagged as edited by hand and
+  rebuilt by the next table render (`trazo table check` no longer crashes on
+  it), and closing the headless Chrome no longer leaves it or its temporary
+  folder behind.
 
 ### Removed
 
