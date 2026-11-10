@@ -92,6 +92,27 @@ class PreviewDeadlineTests(PreviewCase):
         self.assertLess(time.monotonic() - released, 3, "the tables waited for a backoff after the lock was released")
         self.assertTrue(status(port)["manuscript"]["ok"], status(port))
 
+    def test_a_tables_command_that_fails_after_a_lock_wait_runs_once(self) -> None:
+        runs = self.root.parent / "tables.runs"
+        flag = self.root.parent / "fail-tables"
+        script = ("import pathlib, sys\n"
+                  f"if pathlib.Path({str(flag)!r}).exists():\n"
+                  f"    open({str(runs)!r}, 'a').write('run\\n')\n"
+                  "    sys.exit('the tables command failed')\n")
+        _hang.set_command(self.root, "tables", [sys.executable, "-c", script])
+        port = self.start_with({})
+        self.assertTrue(wait_until(lambda: status(port)["manuscript"]["ok"]))
+        flag.touch()
+        spec = self.root / "tables/specs/results.json"
+        log = lambda: (self.root / ".build/preview.log").read_text(encoding="utf-8")  # noqa: E731
+        with build_lock(Project(self.root, DEFAULTS, True), lambda text: None):
+            spec.write_text(spec.read_text() + " ")
+            self.assertTrue(wait_until(lambda: "tables: waiting for another build" in log()), log())
+        self.assertTrue(wait_until(lambda: "the tables command failed" in status(port)["manuscript"]["error"]),
+                        status(port))
+        time.sleep(3)  # several ticks: a table error waits for the next spec change
+        self.assertEqual(runs.read_text().count("run"), 1, "the failing tables command ran on every tick")
+
     def test_a_table_save_waits_for_another_build_only_so_long(self) -> None:
         port = self.start_with({})
         self.assertTrue(wait_until(lambda: status(port)["manuscript"]["ok"]))

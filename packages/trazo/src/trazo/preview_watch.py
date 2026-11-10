@@ -244,8 +244,8 @@ def watch(interval=0.5, stop_event=None, previous=None, numbers=None, failure=""
             rendered, regenerated, busy = False, False, False
             if render_pending and not tables_pending:
                 if (done := stage(preview.render_spec_tables)) is False:
-                    # The table error replaces the watcher's, and its recovery rebuilds every page.
-                    failure, failures, again = "", 0, []
+                    # The table error replaces the watcher's (and a lock wait), and its recovery rebuilds every page.
+                    failure, failures, again, waiting = "", 0, [], False
                     continue  # unrelated prose edits must not hide the table error
                 if done:
                     render_pending, rendered = False, True
@@ -256,7 +256,7 @@ def watch(interval=0.5, stop_event=None, previous=None, numbers=None, failure=""
                 busy = done is None
             if tables_pending:
                 if (done := stage(preview.regenerate_tables)) is False:
-                    failure, failures, again = "", 0, []  # as for a failed render above
+                    failure, failures, again, waiting = "", 0, [], False  # as for a failed render above
                     continue  # keep the error visible until the text is fixed
                 if done:
                     tables_pending = render_pending = False
