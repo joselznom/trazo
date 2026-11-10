@@ -114,6 +114,7 @@
     else if (op === "reload") reloadFromDisk();
     else if (op === "diff") viewDiff();
     else if (op === "overwrite") overwrite();
+    else if (op === "hide-copies" || op === "hide-inexact") hideNote(op);
   });
   document.addEventListener("keydown", (e) => {
     if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === "s"

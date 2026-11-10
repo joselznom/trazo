@@ -166,6 +166,7 @@ def change_format(request: Any) -> dict[str, Any]:
     if new is None:
         return {"refused": why, "file": file}
     changed = text[:block.at] + new + text[block.end:]
-    change_source({"file": file, "text": changed, "base_sha256": state["sha256"]})
+    saved = change_source({"file": file, "text": changed, "base_sha256": state["sha256"]})
     parts = [b.key for b in editable(changed) if b.at == block.at]
-    return {"saved": True, "file": file, "on": on, "parts": parts}
+    return {"saved": True, "file": file, "on": on, "parts": parts,
+            **({"warning": saved["warning"]} if saved.get("warning") else {})}

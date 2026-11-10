@@ -17,6 +17,7 @@ import functools
 import os
 import signal
 import subprocess
+import sys
 import time
 from typing import IO, Any
 
@@ -44,6 +45,89 @@ def replace(source: str | os.PathLike[str], target: str | os.PathLike[str]) -> N
         except PermissionError:
             time.sleep(0.05)
     os.replace(source, target)
+
+
+# Filesystems whose atomic exchange trazo uses: macOS APFS (renamex_np with
+# RENAME_SWAP) and, on Linux, ext4, XFS, Btrfs and tmpfs (renameat2 with
+# RENAME_EXCHANGE). Others are never tried, not even to catch ENOTSUP: on a
+# FAT volume renamex_np left the calling process stuck in the kernel.
+EXCHANGE_FILESYSTEMS = frozenset({"apfs", "ext4", "xfs", "btrfs", "tmpfs"})
+_LINUX_FILESYSTEMS = {0xEF53: "ext4", 0x58465342: "xfs", 0x9123683E: "btrfs", 0x01021994: "tmpfs"}
+
+
+class ExchangeUnsupported(OSError):
+    """This platform or filesystem cannot swap two names atomically."""
+
+
+@functools.cache
+def _libc() -> Any:
+    """The C library, with errno, on macOS and Linux; None elsewhere."""
+    if sys.platform != "darwin" and not sys.platform.startswith("linux"):
+        return None
+    import ctypes
+    return ctypes.CDLL(None, use_errno=True)
+
+
+@functools.cache
+def _statfs() -> Any:
+    import ctypes
+    libc = _libc()
+    if libc is None:
+        return None
+    # Intel Macs name the 64-bit-inode struct statfs$INODE64; Apple silicon has only that one.
+    statfs = getattr(libc, "statfs$INODE64", None) if sys.platform == "darwin" else None
+    statfs = statfs or libc.statfs
+    statfs.argtypes = [ctypes.c_char_p, ctypes.c_char_p]
+    return statfs
+
+
+def filesystem_type(folder: str | os.PathLike[str]) -> str:
+    """The type of the filesystem `folder` is on ("apfs", "ext4"...); "" when unknown."""
+    import ctypes
+    statfs = _statfs()
+    buffer = ctypes.create_string_buffer(4096)  # larger than struct statfs on either system
+    if statfs is None or statfs(os.fsencode(folder), buffer) != 0:
+        return ""
+    if sys.platform == "darwin":
+        return buffer.raw[72:88].split(b"\0", 1)[0].decode("ascii", "replace")  # f_fstypename
+    magic = ctypes.c_long.from_buffer(buffer).value & 0xFFFFFFFF  # f_type comes first
+    return _LINUX_FILESYSTEMS.get(magic, f"{magic:#x}")
+
+
+@functools.cache
+def _exchange_call() -> Any:
+    """The native swap of two paths, or None where the C library has none."""
+    import ctypes
+    libc = _libc()
+    if libc is None:
+        return None
+    if sys.platform == "darwin":
+        renamex_np = libc.renamex_np
+        renamex_np.argtypes = [ctypes.c_char_p, ctypes.c_char_p, ctypes.c_uint]
+        return lambda a, b: renamex_np(a, b, 0x2)  # RENAME_SWAP
+    renameat2 = getattr(libc, "renameat2", None)  # glibc 2.28 and later
+    if renameat2 is None:
+        return None
+    renameat2.argtypes = [ctypes.c_int, ctypes.c_char_p, ctypes.c_int, ctypes.c_char_p, ctypes.c_uint]
+    return lambda a, b: renameat2(-100, a, -100, b, 0x2)  # AT_FDCWD, RENAME_EXCHANGE
+
+
+def can_exchange(folder: str | os.PathLike[str]) -> bool:
+    """Whether exchange() works for two names in `folder`."""
+    return filesystem_type(folder) in EXCHANGE_FILESYSTEMS and _exchange_call() is not None
+
+
+def exchange(a: str | os.PathLike[str], b: str | os.PathLike[str]) -> None:
+    """Swap the files named `a` and `b` (in one folder) in one step. Raises
+    ExchangeUnsupported, without trying, where can_exchange() is false, and
+    when the system refuses the call; OSError for any other failure."""
+    import ctypes
+    if not can_exchange(os.path.dirname(os.fspath(b)) or "."):
+        raise ExchangeUnsupported(errno.ENOTSUP, "this filesystem cannot swap files atomically", os.fspath(b))
+    if _exchange_call()(os.fsencode(a), os.fsencode(b)) != 0:
+        code = ctypes.get_errno()
+        error = ExchangeUnsupported if code in (errno.ENOTSUP, errno.EINVAL, errno.ENOSYS) else OSError
+        raise error(code, os.strerror(code), os.fspath(b))
 
 
 def no_window() -> dict[str, Any]:

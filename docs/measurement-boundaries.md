@@ -103,11 +103,15 @@ source edit. The failing operation reports the backup and retry advice; the next
 normal operation works. This preserves damaged bytes, not a promise to reconstruct
 old undo entries from them. Keyboard undo now shows the same error.
 
-Independent writers that ignore `review_lock` remain able to overwrite, or be
-overwritten by, a concurrent browser save. Both in-place and atomic variants stay
-failing in the harness. The [design disposition](measurement-writer-limits.md)
-explains why no incomplete hard-link or platform-specific exchange protocol is
-presented as a general solution.
+Independent writers that ignore `review_lock` no longer lose text to a
+concurrent source, table or diagram save on filesystems with atomic exchange (APFS; Linux ext4,
+XFS, Btrfs and tmpfs): the save swaps its file in, compares what it displaced
+and, on a difference, swaps back and answers 409 with the browser text kept in
+`notes/review/conflicts/`. Both harness scenarios pass on APFS. Elsewhere the
+check runs just before `os.replace` and replies say `exact: false`. The
+[contract and its limits](measurement-writer-limits.md) name what is still lost:
+a late write through a file held open past 600 seconds, a write at the instant
+of the rename without exchange, and a writer's own read-modify-write.
 
 A Word build snapshots its watched inputs (content hash, mtime, size, inode)
 before reading them and again just before publishing; on any difference it

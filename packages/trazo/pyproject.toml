@@ -56,6 +56,7 @@ module = [
     "trazo.resources",
     "trazo.review_history",
     "trazo.review_storage",
+    "trazo.source_publish",
     "trazo.svg_export",
     "trazo.updates",
     "trazo.uv_sync",
