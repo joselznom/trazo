@@ -86,6 +86,14 @@ Internal changes (tests, CI, refactoring) stay out.
   the earlier Word file. A step or diagram export whose inputs change while it
   runs fails too, and the next build runs it again, instead of reporting
   "up to date" with stale output. Undoing such an edit now rebuilds the file.
+- When the preview cannot rebuild for an unexpected reason (a file it cannot
+  read, a tables command whose output it cannot decode), it now says so on the
+  page instead of claiming "Build OK" or staying on "building..." forever, and
+  it rebuilds by itself once the cause is fixed, edits made meanwhile included.
+  A table output re-saved in another encoding is flagged as edited by hand and
+  rebuilt by the next table render (`trazo table check` no longer crashes on
+  it), and closing the headless Chrome no longer leaves it or its temporary
+  folder behind.
 
 ### Removed
 

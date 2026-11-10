@@ -16,26 +16,28 @@ combined product. Owners remain useful when line numbers move.
 | `background.py:79`, `CommandJob.run` | The owning job records an error and terminates the child. Its cleanup `wait()` still has no local timeout; the universal bounded-process invariant remains open. |
 | `browser.py:141`, `Chrome.__init__` | Cleans up and re-raises; does not suppress the original failure. |
 | `browser.py:249`, `Chrome.target` | Cleans up and re-raises. |
+| `browser.py:300`, `Chrome.discard` | Prints a failed close to the server log, never to the page status; `Chrome.close` reaps Chrome before it removes the profile whatever the close reply was, so the failure leaks neither the process nor the profile. Corrected in the silent-errors PR. |
 | `build_graph.py:280`, `Builder.guarded` | Removes outputs changed by the failed step and re-raises. SIGKILL cannot run this cleanup; the build records and next operation are checked separately. |
-| `diagram_editor.py:335`, `SharedChrome.drop` | Silently suppresses a Chrome cleanup error. Open audit finding: a resource failure may be hidden even though the initiating error is surfaced elsewhere. |
+| `diagram_editor.py:331`, `SharedChrome.drop` | Closes the shared Chrome through `Chrome.discard` (above): one log line, no status noise, the next check starts a new Chrome. Corrected in the silent-errors PR. |
 | `diagram_editor.py:359`, `SharedChrome.check` | Drops the broken browser and re-raises; HTTP reports the failure. |
 | `local_server.py:175`, `GuardedHandler.reply` | HTTP 500 JSON with the error; the server stays alive. |
 | `mcp.py:216`, `Server.call_tool` | MCP `isError` reply; the session stays alive. |
 | `mcp.py:285`, `Server.run` | JSON-RPC internal-error reply; the session stays alive. |
 | `new.py:74`, `create` | Removes staging and re-raises. |
-| `preview_edit_review.py:247`, `check_outputs` | Silently omits an invalid table from drift checks. Open audit finding; the table endpoint's error does not make this omission visible in the drift check. |
+| `preview_edit_review.py:247`, `check_outputs` | Skips only a table whose spec or data cannot be read (`OSError`): the page build reports an unreadable spec and the next table render an unreadable data file. An output that is not UTF-8 (a hand edit re-saved in another encoding) counts as edited by hand, as it does for `trazo table check --outputs` and the table editor's status, and the next table render rewrites it (`review_storage.holds_text`), after which the note clears; any other exception reaches the watcher boundary below. Limit: unreadable data with no source change is reported only at the next table render. Corrected in the silent-errors PR. |
 | `preview_locate.py:30`, `lookup` | Optional matching degrades to a space. No source write; a programming error could be hidden. Retained, explicitly limited fallback. |
 | `preview_sources.py:215`, `locate_source` | Optional generated-value matching degrades to an empty mapping. No source write; retained fallback. |
 | `preview_watch.py:22`, `render_spec_tables` | Now marks every document unsuccessful with an actionable table error and retains the last good page. Retry remains pending. Corrected in the table-error PR. |
 | `preview_watch.py:43`, `regenerate_tables` | Captures generator failure as a table error and exposes it in preview state. |
-| `preview_watch.py:103`, `build_all` | Sets the failed document's error, preserves its last good version and continues watching. |
-| `preview_watch.py:197`, `watch` | Outer watcher exceptions still only print to the server log. Open audit finding; the table/render paths above cover specific failures, not every exception here. |
+| `preview_watch.py:116`, `build_all` | Sets the failed document's error and preserves its last good version. The pass then counts as failed (`PageFailed`): the error stays on that page only, is printed once, and only that page is retried with the watcher's backoff below, so fixing a permission alone brings it back. Corrected in the silent-errors PR. |
+| `preview_watch.py:159`, `build_and_watch`, and `:269`, `watch` | An unexpected failure of the first builds or of a watcher pass sets every page's `error` (last good page kept, as for table errors), prints one log line per distinct error and leaves the watcher running. It is retried at once on a new change (table outputs and data a failed generator wrote do not count), otherwise after 1, 2, 4 ... 30 s; table work that failed stays pending, requested rebuilds are put back, and the first complete pass rebuilds every page, reruns the drift check and clears the error, so no change made before or during the failure is skipped. Corrected in the silent-errors PR. |
 | `review_storage.py:52`, `write_atomic` | Removes its temporary file on an ordinary exception and re-raises. Atomic rename is not a multi-file transaction or power-loss durability. SIGKILL may leave an unused temporary file. |
 | `table_editor.py:276`, `publish` | Rolls back a newly created table and re-raises. A rollback failure could mask the initiating error; this was not reproduced in the bounded campaign. |
 
-The three remaining silent-error findings are the outer watcher, table drift
-checking and browser cleanup. The two optional matching fallbacks are separate
-from those failures and do not acknowledge a source save.
+The three silent-error findings (outer watcher, table drift checking and
+browser cleanup) are corrected in the silent-errors PR. The two optional
+matching fallbacks are separate from those failures and do not acknowledge a
+source save.
 
 ## Scope of the new deadline
 
