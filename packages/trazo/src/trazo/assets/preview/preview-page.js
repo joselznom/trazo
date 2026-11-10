@@ -52,14 +52,28 @@
   // Pandoc's body moves into the page; everything else is built around it.
   const page = h("div", { class: "pv-page", lang: document.documentElement.lang || false });
   page.append(...[...document.body.childNodes].filter((n) => !(n.nodeType === 1 && n.tagName === "SCRIPT")));
+  // The blocks as built, before the viewer adds to them (labels included):
+  // what an in-place update compares a new build with (preview-update.js).
+  const built = Model.blocks(page);
+  let shownBlocks = { sections: built.sections, groups: built.groups.map((group) => group.map((el) => ({ el, key: Model.blockKey(el) }))) };
   // Labels, units, figures and citations of this document (see preview-model.js).
   const model = Model.analyse(page, doc);
   const { units, topSections, refsSection } = model;
   const analyses = { [doc]: model };  // the other documents are added by loadAll()
+  // What the parts of the viewer add to the page's blocks (wrappers, buttons,
+  // listeners): each runs on the page at load and on the blocks an in-place
+  // update brings. `within` includes the root itself.
+  const blockSetups = [];
+  const setUpBlocks = (fn) => { blockSetups.push(fn); fn(page); };
+  const within = (root, selector) => [...(root.matches(selector) ? [root] : []), ...$$(selector, root)];
+  // What depends on the whole page, read again after an in-place update, in this order.
+  const pageRefreshes = [];
   // A table can stop short of the text width (Pandoc's inline width) or grow
   // past its inline width when its content needs the room: its note is as
   // wide as the visible table (at most its scroll box), so the edges line up.
   // The returned observer keeps it right when the page, text size or zoom change.
+  // A note follows one table: an in-place update may bring either alone.
+  const noteObservers = new WeakMap();
   const alignNote = (note, table, box) => {
     const fit = () => {  // computed widths: exact, and not scaled by the page zoom
       const width = (el) => parseFloat(getComputedStyle(el).width) || 0;
@@ -70,49 +84,65 @@
     const observer = new ResizeObserver(fit);
     observer.observe(table);
     observer.observe(box);
+    noteObservers.get(note)?.disconnect();
+    noteObservers.set(note, observer);
     return observer;
   };
-  for (const table of $$("table", page)) {  // wide tables scroll sideways
-    const wrap = h("div", { class: "pv-tscroll" });
-    table.before(wrap);
-    wrap.append(table);
-    const note = wrap.nextElementSibling;
-    if (note && note.matches("div.table-note")) alignNote(note, table, wrap);
-  }
+  setUpBlocks((root) => {
+    for (const table of within(root, "table")) {  // wide tables scroll sideways
+      const wrap = h("div", { class: "pv-tscroll" });
+      table.before(wrap);
+      wrap.append(table);
+      const note = wrap.nextElementSibling;
+      if (note && note.matches("div.table-note")) alignNote(note, table, wrap);
+    }
+    for (const note of within(root, "div.table-note")) {
+      const wrap = note.previousElementSibling;
+      if (wrap && wrap.matches(".pv-tscroll") && !root.contains(wrap)) alignNote(note, $("table", wrap), wrap);
+    }
+  });
 
   // Paragraph markers (¶n) open the source; lists get a small pencil instead.
   // Captions and tables have Edit caption / Edit table. Labels were set by
-  // Model.label().
+  // Model.label(); an in-place update numbers the paragraphs again.
   const addSrcMark = (el, host) => {
-    if (!host) return;
+    if (!host || $(":scope > .pv-src-mark", host)) return;
     const mark = h("button", { type: "button", class: "pv-src-mark", text: "✎", title: "Open the Markdown source here" });
     mark.addEventListener("click", (e) => { e.preventDefault(); openSourceAt(el); });
     host.prepend(mark);
   };
-  for (const entry of model.entries) {
-    const { el } = entry;
-    if (entry.kind === "list") {
-      // Loose list items wrap their text in <p>: the pencil goes inside it,
-      // or it would sit alone on the number's line.
-      const first = el.firstElementChild;
-      addSrcMark(el, first && first.tagName === "P" ? first : entry.host);
-      continue;
-    }
-    if (entry.kind !== "para") continue;
-    const text = `¶${entry.n}`;
-    const mark = h("button", { type: "button", class: "pv-para", text,
-      title: `${entry.label}: click to open the source here, ⌥-click to copy the label`,
-      "aria-label": `${entry.label}: open the source` });
+  function paraMark(el) {
+    const mark = h("button", { type: "button", class: "pv-para" });
     mark.addEventListener("click", (e) => {
       if (!e.altKey) { openSourceAt(el); return; }
-      try { navigator.clipboard.writeText(entry.label); } catch (err) { /* ignore */ }
+      const label = el.dataset.label;
+      try { navigator.clipboard.writeText(label); } catch (err) { /* ignore */ }
       mark.classList.add("copied");
-      toast(`Copied label “${entry.label}”`);
+      toast(`Copied label “${label}”`);
       setTimeout(() => mark.classList.remove("copied"), 900);
     });
     el.classList.add("pv-p");
     el.prepend(mark);
+    return mark;
   }
+  function markParagraphs() {
+    for (const entry of model.entries) {
+      const { el } = entry;
+      if (entry.kind === "list") {
+        // Loose list items wrap their text in <p>: the pencil goes inside it,
+        // or it would sit alone on the number's line.
+        const first = el.firstElementChild;
+        addSrcMark(el, first && first.tagName === "P" ? first : entry.host);
+        continue;
+      }
+      if (entry.kind !== "para") continue;
+      const mark = $(":scope > .pv-para", el) || paraMark(el);
+      mark.textContent = `¶${entry.n}`;
+      mark.title = `${entry.label}: click to open the source here, ⌥-click to copy the label`;
+      mark.setAttribute("aria-label", `${entry.label}: open the source`);
+    }
+  }
+  markParagraphs();
 
   // "Edit diagram" under figures exported from figures/diagrams/<name>.json.
   const DIAGRAMS = window.PREVIEW_DIAGRAMS || { names: [] };

@@ -5,6 +5,7 @@ there when it runs (preview.NAME), so patching them on trazo.preview reaches it.
 """
 
 import subprocess
+import threading
 import time
 
 from . import dependencies, labels, preview_edit_review, table
@@ -103,6 +104,37 @@ def build_all(names):
             print(f"[preview] {name}: error {exc!r}", flush=True)
 
 
+class Signal:
+    """The watcher's stop event, which a write from the preview can also wake
+    (`wake`, through WATCHER["wake"]): the watcher then checks the sources at
+    once instead of at the end of its interval. wait() returns True once
+    stopped, as threading.Event.wait does."""
+
+    def __init__(self):
+        self._cond = threading.Condition()
+        self._stopped = self._woken = False
+
+    def set(self):
+        with self._cond:
+            self._stopped = True
+            self._cond.notify_all()
+
+    def is_set(self):
+        return self._stopped
+
+    def wake(self):
+        with self._cond:
+            self._woken = True
+            self._cond.notify_all()
+
+    def wait(self, timeout=None):
+        with self._cond:
+            if not (self._stopped or self._woken):
+                self._cond.wait(timeout)
+            self._woken = False
+            return self._stopped
+
+
 def build_and_watch(stop_event):
     """Build every page, then watch them: `trazo preview serve` runs it
     while it serves."""
@@ -130,11 +162,17 @@ def watch(interval=0.5, stop_event=None, previous=None, numbers=None):
     tables_pending, shown = False, numbered() if numbers is None else numbers
     if snapshot() != previous:
         shown = None
+    if isinstance(stop_event, Signal):
+        preview.WATCHER["wake"] = stop_event.wake
+    # After a build the next pass comes at once: a page waits for the clean
+    # pass that sets `synced` (trazo.workspace's `building`).
+    recheck = False
     while True:
         if stop_event is None:
-            time.sleep(interval)
-        elif stop_event.wait(interval):
+            time.sleep(0 if recheck else interval)
+        elif stop_event.wait(0 if recheck else interval):
             return
+        recheck = False
         try:
             checked = time.time()
             current = snapshot()
@@ -181,6 +219,7 @@ def watch(interval=0.5, stop_event=None, previous=None, numbers=None):
                 if (now := numbered()) != shown:
                     build_all([name for name in preview.DOCS if name not in targets])
             shown = now
+            recheck = True
             # A spec or data change re-rendered the outputs above; only an output changed by itself may differ.
             if any(p.is_relative_to(table.OUTPUT_DIR) for p in changed):
                 preview_edit_review.check_outputs()

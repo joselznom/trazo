@@ -145,7 +145,23 @@
     if (parent) parent.kids.push(section);
     exportSections.push(section);
   }
-  const branch = (section) => exportSections.filter((x) => x === section || section.el.contains(x.el));
+  // An in-place update keeps the sections but may bring new headings: their
+  // text, id and words (the picker's rows show them).
+  pageRefreshes.push(() => {
+    const words = new Map(outlineHeads.map((x) => [x.el, x]));
+    for (const section of exportSections) {
+      const heading = $(":scope > :is(h1, h2, h3, h4, h5, h6)", section.el) || section.heading;
+      const counted = words.get(heading);
+      Object.assign(section, { heading, id: heading.id || section.el.id, text: heading.textContent.trim(),
+        words: counted ? counted.words : 0, total: counted ? counted.total : 0 });
+      if (!section.row) continue;
+      section.row.dataset.id = section.id;
+      $(".pv-xlabel", section.row).textContent = section.text;
+      $(".pv-xwords", section.row).textContent = section.total ? fmt(section.total) : "";
+    }
+    if (!exportPanel.hidden) renderExport();  // its pills and totals
+  });
+  const branch =(section) => exportSections.filter((x) => x === section || section.el.contains(x.el));
   const selected = new Set(), folded = new Set();
   let includeRefs = prefs.exportRefs !== false, exporting = false;
   unsavedChecks.push(() => exporting);

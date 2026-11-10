@@ -50,6 +50,14 @@ Internal changes (tests, CI, refactoring) stay out.
 
 ### Changed
 
+- The preview shows what you saved sooner: leaving a paragraph brings its new
+  build in about 0.7 s instead of about 2 s.
+- The preview no longer reloads after a save: only the paragraphs that
+  changed are replaced, with the paragraph numbers, citations and counts after
+  them, so your place, caret and open panels stay. This goes on while you
+  write: only the paragraph you are in waits until you leave it. A new
+  section or a rebuilt image still reloads the page, and if you were writing
+  with nothing unsaved, the caret comes back where it was.
 - The preview's selection bar tells apart what reaches Word from what does
   not. **Underline**, the reading mark, is now **Highlight** and paints the
   text violet; it still stays out of Word and out of the agent's list, and

@@ -270,12 +270,13 @@
     return row;
   }
   // Exports live on the Figures & Tables cards, not in the page.
-  for (const it of model.items) {
-    const cap = it.kind === "figure" && it.el.querySelector(":scope > figcaption");
+  // An in-place update brings new items: the button finds its own when clicked.
+  setUpBlocks((root) => { for (const it of model.items) {
+    const cap = it.kind === "figure" && (root === it.el || root.contains(it.el)) && it.el.querySelector(":scope > figcaption");
     if (!cap) continue;
     const button = h("button", { type: "button", class: "pv-tbl-edit", text: it.composite ? "Edit source" : "Edit caption" });
-    button.addEventListener("click", () => editFigureCaption(it)); cap.append(button);
-  }
+    button.addEventListener("click", () => editFigureCaption(model.items.find((x) => x.el === it.el) || it)); cap.append(button);
+  } });
   // Reopen after live reload or a gallery action in another document.
   {
     const id = sget(figureOpenKey(doc)), item = id && model.items.find((it) => it.id === id && !it.composite);

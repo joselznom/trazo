@@ -68,24 +68,38 @@
     }).catch(() => {});
   }
   window.addEventListener("pageshow", () => { reloadPending = false; });
+  // An MCP App view reloads once the new page's bundle came, and not at all if the
+  // author declines to leave unsaved work meanwhile: this page may stay.
   function reload(canReload = () => true) {
     if (reloadPending || !canReload()) return false;
     reloadPending = true;
-    (window.TRAZO_VIEW || location).reload();
+    Promise.resolve((window.TRAZO_VIEW || location).reload()).finally(() => {
+      if (window.TRAZO_VIEW) reloadPending = false;
+    });
     return true;
   }
 
   async function api(url, body, method) {
-    const response = await fetch(url, { method: method || (body === undefined ? "GET" : "POST"),
+    const verb = method || (body === undefined ? "GET" : "POST");
+    const response = await fetch(url, { method: verb,
       cache: "no-store", headers: body === undefined ? {} : { "Content-Type": "application/json" },
       body: body === undefined ? undefined : JSON.stringify(body) });
     const data = await response.json().catch(() => ({ error: `HTTP ${response.status}` }));
+    if (verb !== "GET") pollSoon();  // a save starts a build: learn of it now, not at the next poll
     return { ok: response.ok, status: response.status, data };
   }
 
   // One non-overlapping status request per page; consumers share the result.
+  // While a file written from the page is building, it polls often, so the
+  // page learns of the build within a tenth of a second.
   const listeners = new Set();
-  let timer = null, polling = false, latest = null;
+  let timer = null, polling = false, again = false, latest = null;
+  function pollSoon() {
+    if (polling) { again = true; return; }  // that answer may predate the request
+    if (!listeners.size) return;
+    clearTimeout(timer);
+    timer = setTimeout(poll, 0);
+  }
   async function poll() {
     if (polling || !listeners.size) return;
     clearTimeout(timer);
@@ -99,7 +113,9 @@
       await Promise.allSettled([...listeners].map(fn => fn(null, error)));
     } finally {
       polling = false;
-      if (listeners.size) timer = setTimeout(poll, document.hidden ? 5000 : 1000);
+      const wait = again ? 0 : document.hidden ? 5000 : latest?.building ? 100 : 1000;
+      again = false;
+      if (listeners.size) timer = setTimeout(poll, wait);
     }
   }
   function watch(fn) {
@@ -298,5 +314,5 @@
     load: (scope, name) => api(`/__review?scope=${scope}${name == null ? "" : "&name=" + encodeURIComponent(name)}`),
     change: (scope, body) => api("/__review", { ...body, scope }),
   };
-  window.Trazo = { api, watch, el, commentDeletion, plainClick, readPrefs, savePrefs, theme, mountTheme, editorLink, returnUrl, review, reveal, reload, path: pagePath, search: pageSearch, replaceHash, applyTheme };
+  window.Trazo = { api, watch, el, commentDeletion, plainClick, readPrefs, savePrefs, theme, mountTheme, editorLink, returnUrl, review, reveal, reload, reloading: () => reloadPending, path: pagePath, search: pageSearch, replaceHash, applyTheme };
 })();

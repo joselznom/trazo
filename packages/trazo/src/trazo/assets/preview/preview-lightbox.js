@@ -72,15 +72,19 @@
     }
   });
 
-  const documentFigures = model.items.filter((it) => it.kind === "figure");
-  for (const it of documentFigures) for (const image of $$("img", it.el)) {
-    if (image.closest("a")) continue;
+  // The figures as they are when an image is clicked: an in-place update may have changed them.
+  const documentFigures = () => model.items.filter((it) => it.kind === "figure");
+  setUpBlocks((root) => { for (const it of documentFigures()) for (const image of $$("img", it.el)) {
+    if (image.closest("a") || !(root === it.el || root.contains(it.el))) continue;
     image.tabIndex = 0;
     image.setAttribute("role", "button");
     image.setAttribute("aria-label", `Enlarge ${it.num}: ${it.caption}`);
-    const enlarge = () => openLb(documentFigures.indexOf(it), image, documentFigures);
+    const enlarge = () => {
+      const figures = documentFigures();
+      openLb(figures.findIndex((x) => x.el.contains(image)), image, figures);
+    };
     image.addEventListener("click", enlarge);
     image.addEventListener("keydown", (e) => {
       if (e.key === "Enter" || e.key === " ") { e.preventDefault(); enlarge(); }
     });
-  }
+  } });

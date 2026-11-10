@@ -187,20 +187,20 @@ class WriteUndoTests(UndoCase):
 class ReloadAfterSavesTests(UndoCase):
     def test_the_page_waits_for_the_build_of_its_last_save(self):
         self.build(TEXT)
-        self.evaluate("window.samePage = true")
+        shown = preview.STATE["manuscript"]["version"]
         self.write_in("Next")
         self.type("Edited ")
         with preview.LOCK:  # a build of an earlier save finished while the caret was in the text
             preview.STATE["manuscript"]["version"] += 1
         self.leave()
         self.saved_now()
-        # The watcher has not caught up with this save: that build lacks it, so no reload yet.
+        # The watcher has not caught up with this save: that build lacks it, so the page keeps its own.
         time.sleep(2.5)  # two polls of the page's status
-        self.assertTrue(self.evaluate("window.samePage === true"))
+        self.assertEqual(self.evaluate("loaded?.manuscript"), shown)
         with preview.LOCK:
             preview.STATE["manuscript"]["version"] += 1
             preview.WATCHER["synced"] = time.time()
-        self.wait_for("window.samePage === undefined")
+        self.wait_for(f"loaded?.manuscript === {shown + 2}")
 
 
 if __name__ == "__main__":
