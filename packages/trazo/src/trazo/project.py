@@ -39,8 +39,8 @@ overrides the defaults below; unknown keys are errors so typos show up.
     submission = []              # separate submission Word files
 
     [build]
-    timeout = 3600  # seconds a step or command may run; 0: no limit
-    [build.env]   # given to every step, part of every hash
+    timeout = 3600  # seconds per step or command
+    [build.env]   # for every step; part of every hash
     RESULTS_MODE = "canonical"    # trazo build --env K=V overrides one
 
     [[build.steps]]               # a project rule, run by trazo build
@@ -175,7 +175,7 @@ DEFAULTS: dict[str, Any] = {
         "pandoc": ["pandoc"],
         "submission": [],
     },
-    "build": {"env": {}, "steps": [], "timeout": 3600},
+    "build": {"env": {}, "steps": [], "timeout": 3600},  # timeout 0: no limit
     "preview": {
         "watch": [
             "manuscript/**/*.md",

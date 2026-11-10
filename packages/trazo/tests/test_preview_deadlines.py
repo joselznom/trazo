@@ -72,16 +72,24 @@ class PreviewDeadlineTests(PreviewCase):
         self.assertTrue(wait_until(lambda: status(port)["manuscript"]["ok"]
                                    and b"WrittenAfterTheHang" in get(port, "/manuscript.html")), status(port))
 
-    def test_another_builds_lock_does_not_block_the_watcher(self) -> None:
+    def test_another_build_holding_the_lock_is_waited_out_quietly(self) -> None:
         port = self.start_with({})
         self.assertTrue(wait_until(lambda: status(port)["manuscript"]["ok"]))
         spec = self.root / "tables/specs/results.json"
+        section = self.root / "manuscript/main/01_introduction.md"
         with build_lock(Project(self.root, DEFAULTS, True), lambda text: None):
             spec.write_text(spec.read_text() + " ")
-            self.assertTrue(wait_until(lambda: "another build of this project is running"
-                                       in status(port)["manuscript"]["error"]), status(port))
-        # Released: the retry (1, 2, 4 ... s) runs the tables stage and rebuilds the page.
-        self.assertTrue(wait_until(lambda: status(port)["manuscript"]["ok"], timeout=30), status(port))
+            section.write_text(section.read_text() + "\nWrittenDuringAnotherBuild.\n")
+            # Long enough for the old backoff to reach 4 s retries; no page may show an error meanwhile.
+            held_until = time.monotonic() + 8
+            while time.monotonic() < held_until:
+                state = status(port)["manuscript"]
+                self.assertEqual(state["error"], "", "another build's lock was shown as a failure")
+                time.sleep(0.25)
+        released = time.monotonic()
+        self.assertTrue(wait_until(lambda: b"WrittenDuringAnotherBuild" in get(port, "/manuscript.html"), timeout=30))
+        self.assertLess(time.monotonic() - released, 3, "the edit waited for a backoff after the lock was released")
+        self.assertTrue(status(port)["manuscript"]["ok"], status(port))
 
     def test_a_table_save_waits_for_another_build_only_so_long(self) -> None:
         port = self.start_with({})

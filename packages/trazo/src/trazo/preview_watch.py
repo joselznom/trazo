@@ -4,7 +4,7 @@ The preview's paths and state stay in trazo.preview, and this code reads them fr
 there when it runs (preview.NAME), so patching them on trazo.preview reaches it.
 
 The tables stages take the build lock without waiting: while another build holds
-it, the pass fails with build_lock.Busy and is retried like any failure. The
+it (build_lock.Busy), the pass runs again on the next tick, with no page error. The
 project's tables command has 1200 seconds, or $PREVIEW_TABLES_TIMEOUT's (as
 PREVIEW_DOCX_TIMEOUT for the Word job that runs the same generator).
 """
@@ -14,7 +14,7 @@ import time
 from typing import cast
 
 from . import dependencies, labels, preview_edit_review, processes, table
-from .build_lock import Busy, build_lock, child_env
+from .build_lock import WAITING, Busy, build_lock, child_env
 
 
 def render_spec_tables() -> bool:
@@ -184,7 +184,8 @@ def watch(interval=0.5, stop_event=None, previous=None, numbers=None, failure=""
     outputs or data a generator writes), otherwise after 1, 2, 4 ... 30 s,
     and once it completes every page it could not show is rebuilt (only
     those that raised, after a PageFailed), so no change made before or
-    during the failure is skipped."""
+    during the failure is skipped. Another build holding the lock is no
+    failure: the pass runs again on the next tick, its changes kept."""
     from . import preview
     previous = snapshot() if previous is None else previous
     # The numbers the pages used; unknown when sources changed during the
@@ -196,6 +197,7 @@ def watch(interval=0.5, stop_event=None, previous=None, numbers=None, failure=""
     if snapshot() != previous:
         shown = None
     failures, retry_at, failed_on = 0, 0.0, None
+    waiting = False  # another build holds the lock: said once, not a failure
     again = list(preview.DOCS) if failure else []  # pages a retry rebuilds
     outputs = [preview.ROOT / preview.PROJECT.relative(key) for key in ("table_output", "table_data")]
 
@@ -211,7 +213,7 @@ def watch(interval=0.5, stop_event=None, previous=None, numbers=None, failure=""
         elif stop_event.wait(interval):
             return
         requested: set[str] = set()
-        current, checked = None, time.time()
+        current, checked, before = None, time.time(), previous
         try:
             current = snapshot()
             if failure and sources(current) == failed_on and time.monotonic() < retry_at:
@@ -275,7 +277,14 @@ def watch(interval=0.5, stop_event=None, previous=None, numbers=None, failure=""
                 raise PageFailed(failed)
             if failure:
                 print("[preview] watcher recovered", flush=True)
-            failure, failures, again = "", 0, []
+            failure, failures, again, waiting = "", 0, [], False
+        except Busy:  # another build holds the lock: the next tick runs this pass again, with no page error
+            previous = before
+            with preview.LOCK:
+                cast(set[str], preview.WATCHER["rebuild"]).update(requested)
+            if not waiting:
+                print(f"[preview] {WAITING}", flush=True)
+            waiting = True
         except Exception as exc:  # keep watching; every page says why it is old
             # Nothing of this pass is lost: table work that failed stays pending, and
             # the retry rebuilds the pages that failed (every page after a watcher failure).

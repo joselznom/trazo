@@ -23,8 +23,11 @@ PY = sys.executable
 # Starts a child that sleeps a minute with the pipes it inherited, prints its pid and exits 0.
 HOLD = ("import subprocess, sys; p = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(60)']{0}); "
         "print('done', p.pid, flush=True)")
-DETACHED = (", creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP"
-            if os.name == "nt" else ", start_new_session=True")
+# Detached, holding the output: Windows gives a DETACHED_PROCESS child no standard handles
+# unless they are passed (it has no console to take them from).
+DETACHED = (", stdout=sys.stdout, stderr=sys.stderr, "
+            + ("creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP"
+               if os.name == "nt" else "start_new_session=True"))
 
 
 class RunTests(unittest.TestCase):

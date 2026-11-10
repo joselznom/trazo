@@ -100,8 +100,10 @@ class CommandTests(unittest.TestCase):
         self.assertIn("kept its output open", state["tail"][-1])
 
     def test_a_detached_child_holding_the_log_does_not_keep_the_job_running(self):
-        detached = (", creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP"
-                    if os.name == "nt" else ", start_new_session=True")
+        # The log passed on: Windows gives a DETACHED_PROCESS child no standard handles otherwise.
+        detached = (", stdout=sys.stdout, stderr=sys.stderr, "
+                    + ("creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP"
+                       if os.name == "nt" else "start_new_session=True"))
         state = self.held(detached)
         self.assertEqual((state["state"], state["exit_code"]), ("ok", 0), state)
 
