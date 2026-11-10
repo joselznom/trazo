@@ -101,9 +101,9 @@ LOAD_GUARD = """<script>(() => {
   let failed = false;
   addEventListener("error", (event) => {
     const file = event.target;
-    const url = file instanceof HTMLScriptElement ? file.src
-      : file instanceof HTMLLinkElement && file.relList.contains("stylesheet") ? file.href : "";
-    if (failed || document.readyState !== "loading" || !url.startsWith(location.origin + "/__assets/")) return;
+    if (failed || document.readyState !== "loading" || !(file instanceof Element)
+        || !file.matches("script[src], link[rel~=stylesheet]")
+        || !(file.src || file.href).startsWith(location.origin + "/__assets/")) return;
     failed = true;
     let reload = false;
     try { if (!sessionStorage.getItem(key)) { sessionStorage.setItem(key, "1"); reload = true; } } catch (e) { /* no storage */ }
@@ -116,7 +116,7 @@ LOAD_GUARD = """<script>(() => {
       document.body.prepend(p);
     };
     if (document.body) note(); else addEventListener("DOMContentLoaded", note);
-    if (reload) { stop(); location.reload(); }  // never in an MCP view: its page inlines every script
+    if (reload) { stop(); location.reload(); }  // never in an MCP view: its page inlines every script and stylesheet
   }, true);
   addEventListener("load", () => {
     if (!failed) try { sessionStorage.removeItem(key); } catch (e) { /* no storage */ }
@@ -173,7 +173,7 @@ def decorate_page(page, counts=None, stamp=False, version=None):
     if end:
         page = head + '<span id="pk-shell-ready" hidden></span>' + end + rest
     page = page.replace("</head>", shared + "</head>", 1)
-    page = re.sub(r"<head\b[^>]*>", lambda head: head[0] + LOAD_GUARD, page, count=1)
+    page = re.sub(r"<head\b[^>]*>", lambda tag: tag[0] + LOAD_GUARD, page, count=1)
     if stamp:
         page = page.replace("</head>", f'<meta name="trazo-page" content="{page_stamp(page)}">'
                             f'<meta name="trazo-images" content="{image_stamp(page)}"></head>', 1)

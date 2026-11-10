@@ -18,14 +18,13 @@ from _preview_writing import WritingCase
 from trazo import preview
 
 NOTE = "Viewer scripts did not load; reload the page."
-# A trazo script and a trazo stylesheet added once the page is in use: path, element.
-LATE_FILES = (("/__assets/preview/preview-build.js?late", "script", {}),
-              ("/__assets/preview/preview-views.css?late", "link", {"rel": "stylesheet"}))
-LATE_FILE = """((path, tag, props) => new Promise(resolve => document.head.append(Object.assign(
-  document.createElement(tag), props, {[tag === 'script' ? 'src' : 'href']: path,
-    onload: () => resolve('loaded'), onerror: () => resolve('failed')}))))"""
-# The shell's stylesheet is an @import of preview.css: the file Windows CI lost once.
-STYLESHEETS = ("/__assets/preview/preview-shell.css", "/__assets/app/app.css")
+# A trazo script and a trazo stylesheet added once the page is in use.
+LATE_FILES = (("script", {"src": "/__assets/preview/preview-build.js?late"}),
+              ("link", {"rel": "stylesheet", "href": "/__assets/preview/preview-views.css?late"}))
+LATE_FILE = """((tag, props) => new Promise(resolve => document.head.append(Object.assign(
+  document.createElement(tag), props, {onload: () => resolve('loaded'), onerror: () => resolve('failed')}))))"""
+# An @import of preview.css: the stylesheet Windows CI lost once.
+SHELL_CSS = "/__assets/preview/preview-shell.css"
 # Every trazo script and stylesheet of this page load answered.
 ALL_LOADED = ("!performance.getEntriesByType('resource').some(e => e.responseStatus === 0"
               " && new URL(e.name).pathname.startsWith('/__assets/'))")
@@ -56,17 +55,17 @@ class ScriptReloadTests(WritingCase):
         self.assertTrue(self.evaluate("window.samePage === true"))
 
     def late_files_fail_without_reload(self, page):
-        for path, tag, props in LATE_FILES:
+        for tag, props in LATE_FILES:
+            path = props.get("src") or props["href"]
             with self.subTest(late=path), self.failing(path) as seen:
-                self.assertEqual(self.evaluate(f"{LATE_FILE}({json.dumps(path)}, '{tag}', {json.dumps(props)})"),
-                                 "failed")
+                self.assertEqual(self.evaluate(f"{LATE_FILE}('{tag}', {json.dumps(props)})"), "failed")
                 self.stays()
                 self.assertNotIn(page, seen)
             self.assertFalse(self.evaluate("!!document.getElementById('pk-script-note')"))
 
     def test_a_viewer_file_that_failed_reloads_the_page_once_and_it_starts(self):
         # app.js loads in the head, before there is a body for the note.
-        for path in ("/__assets/app/app.js", "/__assets/preview/preview-wordmark.js", *STYLESHEETS):
+        for path in ("/__assets/app/app.js", "/__assets/preview/preview-wordmark.js", SHELL_CSS):
             with self.subTest(path=path), self.failing(path, times=1) as seen:
                 self.open()
                 self.assertEqual(seen.count("/manuscript.html"), 2)
@@ -85,7 +84,7 @@ class ScriptReloadTests(WritingCase):
                 self.assertTrue(self.evaluate(ALL_LOADED))
 
     def test_a_file_that_fails_again_leaves_the_note_and_no_more_reloads(self):
-        for path in ("/__assets/preview/preview-wordmark.js", STYLESHEETS[0]):
+        for path in ("/__assets/preview/preview-wordmark.js", SHELL_CSS):
             with self.subTest(path=path), self.failing(path) as seen:
                 self.chrome.call("Page.navigate", {"url": self.url}, self.session)
                 self.wait_for("document.getElementById('pk-script-note') && document.readyState === 'complete'"
