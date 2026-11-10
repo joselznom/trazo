@@ -109,25 +109,32 @@
 
   // A reload the page cannot avoid (preview-update.js) may come with the caret in
   // a paragraph with nothing unsaved: the page comes back writing there, at the
-  // same place, if the paragraph reads the same. Kept as the page goes (pagehide,
-  // which an MCP App view also sends when it swaps frames), and only for a reload.
+  // same place, if the block (its file and key, which a numbered label is not)
+  // reads the same. Kept as the page goes (pagehide, which an MCP App view also
+  // sends when it swaps frames), and only for a reload. The caret's place is
+  // counted in the text as writing has it: writing drops the line break after a
+  // hard break, which flatText would read as a space.
   const caretKey = "preview-caret:" + Trazo.path();
+  const bare = (text) => text.replace(/\s+/g, "");
   window.addEventListener("pagehide", () => { if (App.reloading()) keepCaret(); });
   function keepCaret() {
     const selection = getSelection();
-    if (!writing || !selection.rangeCount || !writing.el.dataset.label) { sdel(caretKey); return; }
+    if (!writing || !selection.rangeCount) { sdel(caretKey); return; }
+    forgetPageText();  // text read before writing began has its line breaks
     const { nodes, map, flat } = flatText(writing.el), node = selection.focusNode, offset = selection.focusOffset;
     let at = map.findIndex(([i, k]) => nodes[i] === node && k >= offset);
     if (at < 0) { const last = map.findLastIndex(([i]) => nodes[i] === node); at = last < 0 ? flat.length : last + 1; }
-    sset(caretKey, JSON.stringify({ label: writing.el.dataset.label, flat, at }));
+    const { file, h } = writing.mark.dataset;
+    sset(caretKey, JSON.stringify({ file, h, text: bare(flat), at }));
   }
   function restoreCaret() {
     let kept = null;
     try { kept = JSON.parse(sget(caretKey)); } catch (e) { kept = null; }
     sdel(caretKey);
-    const el = kept && model.labelled.find((x) => x.dataset.label === kept.label);
-    if (!el || flatText(el).flat !== kept.flat || !startWriting(el)) return;
-    forgetPageText();  // writing drops the paragraph's line breaks
+    const found = kept && [...blockMark].find(([, mark]) => mark && mark.dataset.h === kept.h && mark.dataset.file === kept.file);
+    const el = found && found[0];
+    if (!el || bare(flatText(el).flat) !== kept.text || !startWriting(el)) return;
+    forgetPageText();
     const { nodes, map } = flatText(el), range = document.createRange();
     if (kept.at < map.length) range.setStart(nodes[map[kept.at][0]], map[kept.at][1]);
     else if (map.length) range.setStart(nodes[map.at(-1)[0]], map.at(-1)[1] + 1);
