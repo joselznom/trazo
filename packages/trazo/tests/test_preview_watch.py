@@ -9,6 +9,7 @@ from unittest.mock import patch
 import _support
 
 from trazo import preview, preview_sources
+from trazo.build_lock import Busy
 
 
 @unittest.skipUnless(shutil.which("pandoc"), "needs Pandoc")
@@ -39,6 +40,37 @@ class WatcherWakeTests(unittest.TestCase):
             time.sleep(0.01)
         self.assertGreater(state["manuscript"]["version"], before, state["manuscript"]["error"])
         self.assertGreater(watcher["synced"], watcher["written"])
+
+    def test_tables_waiting_for_another_build_keep_the_interval(self):
+        spec = _support.ROOT / "tables/specs/results.json"
+        text = spec.read_text(encoding="utf-8")
+        self.addCleanup(spec.write_text, text, encoding="utf-8")
+        state = {name: dict(value) for name, value in preview.STATE.items()}
+        watcher = {**preview.WATCHER, "rebuild": set(), "wake": None}
+        self.enterContext(patch.object(preview, "STATE", state))
+        self.enterContext(patch.object(preview, "WATCHER", watcher))
+        tries = []
+
+        def locked():  # another build holds the project's lock the whole time
+            tries.append(time.monotonic())
+            raise Busy("held")
+        self.enterContext(patch.object(preview, "render_spec_tables", locked))
+        self.enterContext(patch.object(preview, "regenerate_tables", locked))
+        signal = preview.Signal()
+        thread = threading.Thread(target=preview.watch, kwargs={"interval": 0.2, "stop_event": signal}, daemon=True)
+        thread.start()
+        self.addCleanup(thread.join, 5)
+        self.addCleanup(signal.set)
+        deadline = time.monotonic() + 30
+        while watcher["wake"] is None and time.monotonic() < deadline:  # it has read the sources
+            time.sleep(0.01)
+        spec.write_text(text + " ", encoding="utf-8")
+        while not tries and time.monotonic() < deadline:
+            time.sleep(0.01)
+        self.assertTrue(tries, "the tables stage never ran")
+        time.sleep(1)
+        # One try per interval (0.2 s), not a pass after another without a wait.
+        self.assertLess(len([t for t in tries if t > tries[0] + 0.05]), 10)
 
 
 if __name__ == "__main__":

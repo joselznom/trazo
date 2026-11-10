@@ -343,8 +343,10 @@ def watch(interval=0.5, stop_event=None, previous=None, numbers=None, failure=""
                 # pages last used.
                 if (now := numbered()) != shown:
                     failed |= build_all([name for name in preview.DOCS if name not in targets])
+            # Only after a build: a pass that built nothing (tables waiting for
+            # another build's lock) keeps the interval instead of spinning.
+            recheck = bool(targets) or now != shown
             shown = now
-            recheck = True
             # A render above replaced the outputs it could, so a note on one edited by hand may no
             # longer hold (and a hand edit during it must still be noted); otherwise only an output
             # changed by itself may differ.
