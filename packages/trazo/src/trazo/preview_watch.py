@@ -16,6 +16,7 @@ from typing import cast
 
 from . import dependencies, labels, preview_edit_review, processes, table
 from .build_lock import Busy, build_lock, child_env
+from .local_server import CHANGES
 
 
 def render_spec_tables() -> bool:
@@ -34,6 +35,7 @@ def render_spec_tables() -> bool:
         with preview.LOCK:
             for state in preview.STATE.values():
                 state.update(ok=False, error=f"tables: {error}", built=time.strftime("%H:%M:%S"))
+        CHANGES.notify()
     print(f"[preview] tables: {error or 'rendered'}", flush=True)
     return not error
 
@@ -68,6 +70,7 @@ def regenerate_tables():
         with preview.LOCK:  # keep the last good page; show why the tables did not update
             for state in preview.STATE.values():
                 state.update(ok=False, error=error, built=time.strftime("%H:%M:%S"))
+        CHANGES.notify()
     print(f"[preview] tables: {'error' if error else 'regenerated'}", flush=True)
     return not error
 
@@ -128,8 +131,21 @@ def build_all(names):
             with preview.LOCK:  # the page keeps its last good version
                 preview.STATE[name].update(ok=False, error=f"{type(exc).__name__}: {exc}",
                                            built=time.strftime("%H:%M:%S"))
+            CHANGES.notify()
             failed[name] = f"{name}: error {exc!r}"
     return failed
+
+
+def synced(checked: float) -> None:
+    """The pages show the sources read at `checked` (preview.WATCHER): a page
+    holding its reload for a save hears it at once (trazo.preview_status)."""
+    from . import preview
+    with preview.LOCK:
+        was = preview.building()
+        preview.WATCHER["synced"] = checked
+        released = was and not preview.building()
+    if released:  # not on every idle pass: nothing a page shows changed then
+        CHANGES.notify()
 
 
 def report_failure(exc: Exception, last: str = "") -> str:
@@ -144,6 +160,7 @@ def report_failure(exc: Exception, last: str = "") -> str:
         with preview.LOCK:
             for state in preview.STATE.values():
                 state.update(ok=False, error=message, built=time.strftime("%H:%M:%S"))
+        CHANGES.notify()
     if message != last:  # a lasting failure is printed once, not on every retry
         print(f"[preview] {line}", flush=True)
     return message
@@ -234,12 +251,12 @@ def watch(interval=0.5, stop_event=None, previous=None, numbers=None, failure=""
         try:
             current = snapshot()
             if failure and sources(current) == failed_on and time.monotonic() < retry_at:
-                preview.WATCHER["synced"] = checked  # the pages already show the error for these sources
+                synced(checked)  # the pages already show the error for these sources
                 continue
             with preview.LOCK:  # pages asked for although no source changed (accepted edits)
                 requested, preview.WATCHER["rebuild"] = cast(set[str], preview.WATCHER["rebuild"]), set()
             if current == previous and not requested and not failure and not waiting:
-                preview.WATCHER["synced"] = checked  # preview_start waits for it (trazo.preview_inputs)
+                synced(checked)  # preview_start waits for it (trazo.preview_inputs)
                 continue
             changed = {p for p in current.keys() | previous.keys()
                        if current.get(p) != previous.get(p)}
@@ -303,7 +320,7 @@ def watch(interval=0.5, stop_event=None, previous=None, numbers=None, failure=""
                 print("[preview] tables: waiting for another build of this project", flush=True)
             waiting = busy
             if not busy:  # the pages show the sources read at `checked`: a page holds no reload for them
-                preview.WATCHER["synced"] = checked
+                synced(checked)
         except Exception as exc:  # keep watching; every page says why it is old
             # Nothing of this pass is lost: table work that failed stays pending, and
             # the retry rebuilds the pages that failed (every page after a watcher failure).
@@ -311,7 +328,7 @@ def watch(interval=0.5, stop_event=None, previous=None, numbers=None, failure=""
                 with preview.LOCK:
                     cast(set[str], preview.WATCHER["rebuild"]).update(requested)
             failure = report_failure(exc, failure)
-            preview.WATCHER["synced"] = checked  # the status describes these sources: its error says the page is old
+            synced(checked)  # the status describes these sources: its error says the page is old
             failed_on, failures = None if current is None else sources(current), failures + 1
             again = exc.pages if isinstance(exc, PageFailed) else list(preview.DOCS)
             retry_at = time.monotonic() + min(30.0, 2.0 ** min(failures - 1, 5))  # a bounded exponent

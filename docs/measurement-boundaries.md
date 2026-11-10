@@ -79,6 +79,19 @@ preview is not built (`building` in `/__status` and `/__workspace`); the
 pass that read the save releases it when that pass ends, not the next idle
 tick. A pass still waiting for the tables lock keeps it held.
 
+A visible standalone page no longer asks `/__status` every 250 ms between
+its one-second workspace scans. It asks `/__status?since=<digest>&wait=<seconds>`,
+and the server holds the request until the status's `digest` changes (a
+build, a save from the preview, the pass that built it, an error) or the
+next scan is due, one second at most: about two requests a second while
+idle instead of four. A change answers the held request at once from the
+in-memory status, never a workspace build; comments and the Word build,
+which other processes change, are read again every 0.25 s, as the old poll
+did. Each visible tab holds one server thread for at most a second, and
+closing the server answers its held requests at once. MCP views and the
+editors keep the one-second workspace scan. Evidence is macOS; CI runs the
+tests on Linux.
+
 Limits: a nested trazo whose SIGTERM handler is held up longer than its share
 of the grace (a main thread stuck in C code) can be killed first, leaving what
 it ran; the CLI still waits for the build lock without a bound (its holders are

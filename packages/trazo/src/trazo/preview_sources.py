@@ -17,7 +17,7 @@ from typing import Any
 
 from . import preview_edit_review, preview_locate, source_publish
 from .expand import Values, load_entries, resolve_include
-from .local_server import Conflict, NotFound
+from .local_server import CHANGES, Conflict, NotFound
 from .local_server import RequestError as CommentError
 from .portable import can_exchange
 from .review_storage import StoreError, keep_newest, quarantine, read_list, review_lock, write_json
@@ -241,6 +241,7 @@ def mark_written():
     from . import preview
     with preview.LOCK:
         preview.WATCHER["written"] = time.time()
+    CHANGES.notify()  # a page holds its reload from now (trazo.preview_status)
 
 
 def latest_change(doc):

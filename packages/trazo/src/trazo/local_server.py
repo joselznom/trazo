@@ -10,12 +10,16 @@
   Cache-Control: no-store on every response; no CORS headers.
 - JSON replies that map RequestError (400), NotFound (404), Conflict (409),
   Unprocessable (422) and StoreError (500) to statuses.
+- Held replies (Changes): a request may wait, for a bounded time, until
+  what it reports changes; closing a server answers every held request.
 """
 
 import json
 import os
 import socketserver
 import sys
+import threading
+import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
@@ -62,6 +66,55 @@ class Unprocessable(RequestError):
     status = 422
 
 
+def seconds(value: str | None, name: str) -> float | None:
+    """A query parameter in seconds, None when absent; RequestError unless 0 <= value < inf."""
+    if value is None:
+        return None
+    try:
+        number = float(value)
+    except ValueError:
+        raise RequestError(f"{name} must be a number of seconds") from None
+    if not 0 <= number < float("inf"):
+        raise RequestError(f"{name} must be a number of seconds")
+    return number
+
+
+class Changes:
+    """Lets a request hold its reply until what it reports changes: code that
+    changes that state calls notify() afterwards, a request calls hold().
+    LocalServer.server_close releases every held request, so with
+    daemon_threads off closing does not wait out their holds."""
+
+    def __init__(self) -> None:
+        self._condition = threading.Condition()
+        self._changes = self._closes = 0
+
+    def notify(self, close: bool = False) -> None:
+        with self._condition:
+            self._changes += 1
+            self._closes += close
+            self._condition.notify_all()
+
+    def hold(self, read: Callable[[], Any], same: Callable[[Any], bool], seconds: float, recheck: float) -> Any:
+        """read()'s value once same(value) is false, `seconds` have passed or
+        a server closed. read() runs again at least every `recheck` seconds,
+        for changes nobody notifies (a file another process writes)."""
+        deadline = time.monotonic() + seconds
+        with self._condition:
+            closes = self._closes
+        while True:
+            with self._condition:  # before read(): a change during it is not missed
+                changes = self._changes
+            value = read()
+            left = deadline - time.monotonic()
+            if not same(value) or left <= 0:
+                return value
+            with self._condition:
+                if self._closes != closes:
+                    return value
+                self._condition.wait_for(lambda: self._changes != changes, min(left, recheck))
+
+
 class LocalServer(ThreadingHTTPServer):
     """ThreadingHTTPServer with a listen queue of 128 instead of 5, quiet
     about clients that leave mid-reply.
@@ -85,12 +138,20 @@ class LocalServer(ThreadingHTTPServer):
         socketserver.TCPServer.server_bind(self)
         self.server_name, self.server_port = self.server_address[:2]
 
+    def server_close(self) -> None:
+        CHANGES.notify(close=True)  # a held reply answers now, not at the end of its hold
+        super().server_close()
+
     def handle_error(self, request: Any, client_address: Any) -> None:
         # A closed tab or a reload drops the connection while a reply is being
         # written; that is no server error, so it prints no traceback.
         if isinstance(sys.exc_info()[1], ConnectionError):
             return
         super().handle_error(request, client_address)
+
+
+# One per process: a process serves one preview (trazo.preview_status holds on it).
+CHANGES = Changes()
 
 
 class GuardedHandler(SimpleHTTPRequestHandler):
