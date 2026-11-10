@@ -76,16 +76,26 @@
   }
 
   async function api(url, body, method) {
-    const response = await fetch(url, { method: method || (body === undefined ? "GET" : "POST"),
+    const verb = method || (body === undefined ? "GET" : "POST");
+    const response = await fetch(url, { method: verb,
       cache: "no-store", headers: body === undefined ? {} : { "Content-Type": "application/json" },
       body: body === undefined ? undefined : JSON.stringify(body) });
     const data = await response.json().catch(() => ({ error: `HTTP ${response.status}` }));
+    if (verb !== "GET") pollSoon();  // a save starts a build: learn of it now, not at the next poll
     return { ok: response.ok, status: response.status, data };
   }
 
   // One non-overlapping status request per page; consumers share the result.
+  // While a file written from the page is building, it polls often, so the
+  // page learns of the build within a tenth of a second.
   const listeners = new Set();
-  let timer = null, polling = false, latest = null;
+  let timer = null, polling = false, again = false, latest = null;
+  function pollSoon() {
+    if (polling) { again = true; return; }  // that answer may predate the request
+    if (!listeners.size) return;
+    clearTimeout(timer);
+    timer = setTimeout(poll, 0);
+  }
   async function poll() {
     if (polling || !listeners.size) return;
     clearTimeout(timer);
@@ -99,7 +109,9 @@
       await Promise.allSettled([...listeners].map(fn => fn(null, error)));
     } finally {
       polling = false;
-      if (listeners.size) timer = setTimeout(poll, document.hidden ? 5000 : 1000);
+      const wait = again ? 0 : document.hidden ? 5000 : latest?.building ? 100 : 1000;
+      again = false;
+      if (listeners.size) timer = setTimeout(poll, wait);
     }
   }
   function watch(fn) {
