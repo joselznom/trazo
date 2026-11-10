@@ -158,15 +158,3 @@ def locate_table(text, identifier):
                             "note": (body_start, max(body_start, offset - 1))}
                 offset += len(line)
     return {"start": start, "end": end, "stop": end, "note": None}
-
-
-def table_note(text, identifier):
-    """The ::: table-note block that follows a captioned Markdown table.
-
-    The caption may come before or after its table; the note follows both.
-    Returns (note, end): the editable (start, end) span of the note's text,
-    or None, and the offset after the table and caption, where a new note
-    goes. Returns None when the table caption is not found once.
-    """
-    found = locate_table(text, identifier)
-    return (found["note"], found["end"]) if found else None

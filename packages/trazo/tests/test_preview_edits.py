@@ -83,6 +83,17 @@ class SourceEdits(unittest.TestCase):
                 change("")
                 self.assertEqual(self.path.read_text(), original)
 
+    def test_markdown_table_note_is_removed_when_its_closing_fence_ends_in_other_whitespace(self):
+        # One CRLF line in an LF file, a non-breaking space, a form feed: the note
+        # is found, so clearing it must remove it, not fail.
+        for ending in ("\r", "\xa0", "\x0c"):
+            with self.subTest(ending=repr(ending)):
+                table = "# Tables\n\nTable: Title. {#tbl:note}\n\n| A |\n|---|\n| 1 |\n"
+                self.path.write_bytes((table + "\n::: table-note\nA note.\n:::" + ending + "\n\nAfter.\n").encode())
+                preview.change_table_caption({"doc": "manuscript", "id": "tbl:note", "changes": {"note": ""},
+                    "base_sha256": preview.get_table_caption("manuscript", "tbl:note")["sha256"]})
+                self.assertEqual(self.path.read_bytes().decode(), table + "\nAfter.\n")
+
     def test_generated_caption_uses_the_spec_with_locked_values(self):
         for label, kind in (("cohorts", "spec"),):
             with self.subTest(kind=kind):

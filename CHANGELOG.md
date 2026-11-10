@@ -104,6 +104,11 @@ Internal changes (tests, CI, refactoring) stay out.
 - A preview, table editor or diagram editor page whose script failed to load
   (seen now and then on Windows) reloads itself once instead of staying half
   started; if the script fails again, the page says to reload it.
+- The word counts no longer fail on a manuscript whose `::: abstract` block
+  holds a raw HTML `<header>`; clearing a table note whose closing `:::` line
+  ends in a stray carriage return or non-breaking space removes it instead of
+  answering "server error"; and a comment change sent without a comment id is
+  refused as an invalid request instead of "no comment with id None".
 
 ### Removed
 
