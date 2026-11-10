@@ -21,7 +21,6 @@ from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, NoReturn
-from uuid import uuid4
 
 from .portable import lock, replace, sync, sync_folder, try_lock, unlock
 from .project import PROJECT
@@ -135,6 +134,9 @@ def _abandoned(candidate: Path, lock_file: Path | None = None) -> bool:
 def quarantine(path: Path, what: str, cause: Exception) -> NoReturn:
     """Move the damaged store at `path` aside, unchanged, and raise StoreError
     saying where; the next operation starts a new one. `what` names it."""
+    # Imported here: setup imports this module, and a stdlib module new to it
+    # would write its bytecode into the Python that setup must leave unchanged.
+    from uuid import uuid4
     backup = path.with_name(f"{path.stem}.corrupt-{uuid4().hex}{path.suffix}")
     try:
         replace(path, backup)
