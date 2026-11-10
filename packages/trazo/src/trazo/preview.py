@@ -123,7 +123,7 @@ from typing import cast
 from . import preview_export
 from .background import CommandJob
 from .expand import VALUES_PATH
-from .local_server import Conflict, Download, NotFound  # noqa: F401  (callers catch preview.NotFound)
+from .local_server import CHANGES, Conflict, Download, NotFound  # noqa: F401  (callers catch preview.NotFound)
 from .local_server import RequestError as CommentError
 from .preview_block_format import change_format
 from .preview_block_save import change_block
@@ -173,6 +173,7 @@ from .preview_sources import (  # noqa: F401
     source_path,
     source_state,
 )
+from .preview_status import status
 from .preview_watch import (  # noqa: F401
     build_and_watch,
     changed_documents,
@@ -268,6 +269,7 @@ def build(name):
                      built=time.strftime("%H:%M:%S"))
         if not error:  # a failed build keeps the last good page and version
             state["version"] += 1
+    CHANGES.notify()  # a held /__status answers (trazo.preview_status)
     status = "error" if error else f"{len(warnings)} warning(s)" if warnings else "ok"
     print(f"[preview] {name}: {status}", flush=True)
     return not error
@@ -277,16 +279,6 @@ def building():
     """Whether a file written from the preview is not built yet: a page holds
     its reload meanwhile. The caller holds LOCK."""
     return cast(float, WATCHER.get("written", 0.0)) > cast(float, WATCHER["synced"])
-
-
-def status():
-    with LOCK:
-        docs = {name: dict(state) for name, state in STATE.items()}
-        # Pages poll this between /__workspace scans, so it must not lag a save.
-        unbuilt = building()
-    # "server" lets trazo mcp tell its own preview from another one on the port.
-    return {**docs, "comments": comments_stamp(), "docx": docx_status(), "synced": WATCHER["synced"],
-            "building": unbuilt, "server": {"pid": os.getpid(), "project": str(PROJECT.root)}}
 
 
 def export_indexes(options):
@@ -350,7 +342,7 @@ def fresh_seconds(value):
 def get_route(path, query):
     first = lambda key: query.get(key, [None])[0]
     routes = {
-        "/__status": status, "/__comments": lambda: comments_payload(first("doc")),
+        "/__status": lambda: status(first("since"), first("wait")), "/__comments": lambda: comments_payload(first("doc")),
         "/__edits": lambda: edits_payload(first("doc")), "/__values": values_info,
         "/__source": lambda: get_source(first("file")), "/__references": references,
         "/__undo": lambda: latest_change(first("doc")),

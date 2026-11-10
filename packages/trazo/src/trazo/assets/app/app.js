@@ -83,35 +83,45 @@
     return { ok: response.ok, status: response.status, data };
   }
 
-  // One request at a time. Preview pages refresh document state cheaply between
-  // workspace scans; catalogs and input fingerprints retain their one-second cadence.
-  // Host tool calls and document names colliding with status metadata use workspace only.
+  // One request at a time. Between workspace scans a preview page asks for document
+  // state, and the server holds that request until the state changes or the next scan
+  // is due (trazo.preview_status); catalogs and input fingerprints keep their one-second
+  // cadence. Host tool calls and document names colliding with status metadata use workspace only.
   const listeners = new Map();
-  let timer = null, polling = false, latest = null, workspaceAt = 0;
+  let timer = null, polling = false, latest = null, workspaceAt = 0, digest = "", leaving = false;
+  // Leaving the page aborts the held request: that is no lost server.
+  addEventListener("pagehide", () => { leaving = true; });
+  addEventListener("pageshow", () => { leaving = false; });
   async function poll() {
     if (polling || !listeners.size) return;
     clearTimeout(timer);
     polling = true;
     const fast = !window.TRAZO_VIEW && [...listeners.values()].some(Boolean)
-      && !["comments", "docx", "synced", "building", "server"].some(name => Object.hasOwn(latest?.documents || {}, name));
+      && !["comments", "docx", "synced", "building", "digest", "server"].some(name => Object.hasOwn(latest?.documents || {}, name));
+    let failed = false;
     try {
-      const workspace = !fast || !latest || performance.now() - workspaceAt >= 1000;
-      const result = await api(workspace ? "/__workspace" : "/__status");
+      const due = workspaceAt + 1000 - performance.now();
+      const workspace = !fast || !latest || due <= 0;
+      const result = await api(workspace ? "/__workspace"
+        : `/__status?since=${encodeURIComponent(digest)}&wait=${Math.ceil(due) / 1000}`);
       if (!result.ok) throw new Error(result.data.error || "Workspace unavailable");
       if (workspace) {
         latest = result.data;
         workspaceAt = performance.now();
       } else {
+        digest = result.data.digest;
         latest = { ...latest,
           documents: Object.fromEntries(Object.keys(latest.documents).map(name => [name, result.data[name]])),
           comments: result.data.comments, docx: result.data.docx, building: result.data.building };
       }
       await Promise.allSettled([...listeners.keys()].map(fn => fn(latest, null)));
     } catch (error) {
-      await Promise.allSettled([...listeners.keys()].map(fn => fn(null, error)));
+      failed = true;
+      if (!leaving) await Promise.allSettled([...listeners.keys()].map(fn => fn(null, error)));
     } finally {
       polling = false;
-      if (listeners.size) timer = setTimeout(poll, document.hidden ? 5000 : fast ? 250 : 1000);
+      // The server paces held requests; a failed one waits, as before they were held.
+      if (listeners.size) timer = setTimeout(poll, document.hidden ? 5000 : !fast ? 1000 : failed ? 250 : 0);
     }
   }
   function watch(fn, { preview = false } = {}) {
