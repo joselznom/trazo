@@ -77,7 +77,14 @@ pages build) is built at once, not after a tick, and its page before the
 other documents' first builds. A page holds its update (in place or by a
 reload) while a save from the preview is not built (`building` in `/__status` and `/__workspace`); the
 pass that read the save releases it when that pass ends, not the next idle
-tick. A pass still waiting for the tables lock keeps it held.
+tick. A pass still waiting for the tables lock keeps it held. A pass that
+reads a save after it is published and before the edit review accepts it
+builds the save as another program's pending edit; accepting it
+(`preview_edit_review.absorb`) asks the watcher to rebuild its documents, so
+the page is released with the save as the author's. Before, nothing built it
+again (the source did not change) and the page kept that build: in warm saves
+from a real Chrome page on the load paper, each after a random 0 to 0.5 s,
+2 of 600 never showed before the change and 0 of 600 after.
 
 A visible standalone page no longer asks `/__status` every 250 ms between
 its one-second workspace scans. It asks `/__status?since=<digest>&wait=<seconds>`,
