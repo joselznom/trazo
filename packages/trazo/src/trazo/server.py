@@ -119,10 +119,12 @@ SCRIPT_GUARD = """<script>(() => {
 })();</script>"""
 
 
-def decorate_page(page, counts=None, stamp=False):
+def decorate_page(page, counts=None, stamp=False, version=None):
     """A page with the workspace's shared head; `counts` (a document page's,
     from counts.page_counts) becomes window.PREVIEW_COUNTS. `stamp` adds
-    <meta name="trazo-page"> with the page_stamp of the decorated page."""
+    <meta name="trazo-page"> with the page_stamp of the decorated page;
+    `version`, <meta name="trazo-version">: the document version it was
+    served at, which the viewer compares with its first status."""
     # builds: document name -> the DOCX its full build writes ("" = no full build).
     builds = {name: PROJECT.config["documents"][name]["docx"] if PROJECT.document_build(name) is not None else ""
               for name in PROJECT.documents}
@@ -156,6 +158,8 @@ def decorate_page(page, counts=None, stamp=False):
     page = page.replace("</head>", shared + "</head>", 1)
     if stamp:
         page = page.replace("</head>", f'<meta name="trazo-page" content="{page_stamp(page)}"></head>', 1)
+    if version is not None:  # after the stamp: a rebuild of the same text keeps its comment anchors
+        page = page.replace("</head>", f'<meta name="trazo-version" content="{int(version)}"></head>', 1)
     return page.encode()
 
 
@@ -177,8 +181,12 @@ def served_page(path: str) -> bytes | None:
     built = static_file(path)
     if not built:
         return stub_page(name)
+    # The version before the text: a build landing in between makes the page
+    # reload once more, never keep an older text than it claims.
+    with preview.LOCK:
+        version = preview.STATE.get(name, {}).get("version")  # none: the viewer keeps its first status
     page = built.read_text(encoding="utf-8")
-    return decorate_page(page, served_counts(name, page), stamp=True)
+    return decorate_page(page, served_counts(name, page), stamp=True, version=version)
 
 
 def stub_page(name: str) -> bytes:

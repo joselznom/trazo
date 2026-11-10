@@ -234,7 +234,8 @@ STATE = {name: {"version": 0, "ok": False, "error": "", "warnings": [], "built":
          for name in DOCS}
 LOCK = threading.Lock()
 # The time.time() of the watcher's last check that found every watched file as
-# the pages were built from (preview_watch); /__status reports it as `synced`.
+# the pages were built from, or whose pass then built every page from them
+# (preview_watch); /__status reports it as `synced`.
 # It advances whether those builds succeeded or not: each page's `error`
 # (STATE, also set when a build raised) says whether it shows them or keeps
 # its last good version. `rebuild`: pages to build again although no source

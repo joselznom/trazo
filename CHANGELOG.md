@@ -51,6 +51,8 @@ Internal changes (tests, CI, refactoring) stay out.
 ### Changed
 
 - Saved changes appear sooner in a visible preview, especially in longer papers.
+- A change saved while the preview is still opening shows at once: its page
+  builds before the other documents finish their first build.
 - The preview's selection bar tells apart what reaches Word from what does
   not. **Underline**, the reading mark, is now **Highlight** and paints the
   text violet; it still stays out of Word and out of the agent's list, and
@@ -79,6 +81,8 @@ Internal changes (tests, CI, refactoring) stay out.
 
 ### Fixed
 
+- A preview page no longer keeps an older text when a build lands while it
+  loads: it reloads to the new one.
 - A corrupt manuscript undo history is preserved in a separate file and shown as
   an error. Retrying resumes saving and undoing new changes without repairing
   the old history by hand.

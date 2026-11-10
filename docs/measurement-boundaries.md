@@ -72,6 +72,13 @@ page's Pandoc no longer outlives it. A page whose Pandoc could not run, ran
 out of time or was killed by a signal joins the watcher's 1 to 30 s retry; text
 Pandoc rejects is not rebuilt until it changes.
 
+A change the watcher already sees when it starts (a save while the first
+pages build) is built at once, not after a tick, and its page before the
+other documents' first builds. A page holds its reload while a save from the
+preview is not built (`building` in `/__status` and `/__workspace`); the
+pass that read the save releases it when that pass ends, not the next idle
+tick. A pass still waiting for the tables lock keeps it held.
+
 Limits: a nested trazo whose SIGTERM handler is held up longer than its share
 of the grace (a main thread stuck in C code) can be killed first, leaving what
 it ran; the CLI still waits for the build lock without a bound (its holders are
@@ -96,6 +103,12 @@ after the page has started never reloads it, so typed text is not lost.
 Checked on macOS by resetting one script's connection in Chrome; the Windows
 rate after the fix is not measured. A failed wait in the browser tests now
 prints the failed resources with their status and the server's request log.
+
+A document page carries the version it was served at
+(`<meta name="trazo-version">`, read before the file), and the viewer
+compares its first status with it, so a build that lands between serving
+the page and that status still reloads it. A build between the two reads
+causes one extra reload, never a missed one.
 
 ## Storage and recovery limits
 
