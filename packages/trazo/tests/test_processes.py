@@ -12,8 +12,10 @@ import tempfile
 import time
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 import _support  # noqa: F401  (sets TRAZO_ROOT before trazo loads)
+from test_mcp import gone, wait_until
 
 from trazo import portable, processes
 
@@ -23,15 +25,6 @@ HOLD = ("import subprocess, sys; p = subprocess.Popen([sys.executable, '-c', 'im
         "print('done', p.pid, flush=True)")
 DETACHED = (", creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP"
             if os.name == "nt" else ", start_new_session=True")
-
-
-def wait_gone(pid: int, seconds: float = 5) -> bool:
-    deadline = time.monotonic() + seconds
-    while portable.pid_alive(pid):
-        if time.monotonic() > deadline:
-            return False
-        time.sleep(0.05)
-    return True
 
 
 class RunTests(unittest.TestCase):
@@ -47,26 +40,28 @@ class RunTests(unittest.TestCase):
         self.assertIn("started", caught.exception.stdout)
         self.assertIn("did not finish within 3 s and was stopped", str(caught.exception))
         self.assertIsInstance(caught.exception, subprocess.TimeoutExpired)  # existing handlers still catch it
-        self.assertTrue(wait_gone(int(pid_file.read_text())), "a child outlived the deadline")
+        self.assertTrue(wait_until(lambda: gone(int(pid_file.read_text()))), "a child outlived the deadline")
 
     def test_a_child_holding_the_output_does_not_turn_success_into_a_timeout(self) -> None:
         started = time.monotonic()
-        result = processes.run([PY, "-c", HOLD.format("")], timeout=60, linger=1, text=True)
+        with patch.object(processes, "LINGER", 1):
+            result = processes.run([PY, "-c", HOLD.format("")], timeout=60, text=True)
         self.assertLess(time.monotonic() - started, 15)
         self.assertIsInstance(result, processes.Held)
         self.assertEqual((result.returncode, result.stdout.split()[0], result.stopped), (0, "done", True))
-        self.assertTrue(wait_gone(int(result.stdout.split()[1])), "the holder was not stopped")
+        self.assertTrue(wait_until(lambda: gone(int(result.stdout.split()[1]))), "the holder was not stopped")
 
     def test_a_detached_child_holding_the_output_ends_the_wait_after_the_linger(self) -> None:
         started = time.monotonic()
-        result = processes.run([PY, "-c", HOLD.format(DETACHED)], timeout=60, linger=1, text=True)
+        with patch.object(processes, "LINGER", 1):
+            result = processes.run([PY, "-c", HOLD.format(DETACHED)], timeout=60, text=True)
         holder = int(result.stdout.split()[1])
         self.addCleanup(lambda: portable.pid_alive(holder) and portable.kill_group(holder))
         self.assertLess(time.monotonic() - started, 15)
         self.assertIsInstance(result, processes.Held)
         self.assertEqual(result.returncode, 0)
         if os.name == "nt":  # a detached process stays in the job: it ends with it
-            self.assertTrue(wait_gone(holder), "the job did not contain the detached holder")
+            self.assertTrue(wait_until(lambda: gone(holder)), "the job did not contain the detached holder")
         else:  # its own session: not ours to stop
             self.assertFalse(result.stopped)
             self.assertTrue(portable.pid_alive(holder))
@@ -119,7 +114,7 @@ class SignalTests(unittest.TestCase):
                     time.sleep(0.05)
                 runner.send_signal(signum)
                 self.assertNotEqual(runner.wait(15), 0)
-                self.assertTrue(wait_gone(int(pid_file.read_text())), "the command's child survived")
+                self.assertTrue(wait_until(lambda: gone(int(pid_file.read_text()))), "the command's child survived")
 
 
 if __name__ == "__main__":

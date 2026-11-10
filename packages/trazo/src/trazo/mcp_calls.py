@@ -85,11 +85,9 @@ class Calls:
         A process it started that keeps the output open after it exits is
         stopped after processes.LINGER seconds, and the result says so."""
         try:
-            timeout = float(os.environ.get("TRAZO_MCP_TIMEOUT", "1200"))
-        except ValueError:
-            raise ToolError("TRAZO_MCP_TIMEOUT must be a positive finite number of seconds") from None
-        if not 0 < timeout < float("inf"):
-            raise ToolError("TRAZO_MCP_TIMEOUT must be a positive finite number of seconds")
+            timeout = processes.env_seconds("TRAZO_MCP_TIMEOUT", 1200)
+        except ValueError as exc:
+            raise ToolError(str(exc)) from None
         cwd, base = (where.root, project_env(where)) if isinstance(where, Project) else (where, os.environ)
         with self.lock:
             if self.closed or self.cancelled.get(key):

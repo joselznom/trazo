@@ -12,7 +12,7 @@ what it started, and on Windows then reads the pipes without a bound:
   stop() from another thread and at stop_all(), which the preview calls on
   shutdown and Python at exit;
 - a process the command started that keeps the output pipes open after the
-  command exits delays the result by `linger` seconds at most: the group is
+  command exits delays the result by LINGER seconds at most: the group is
   then killed and the result is a Held with the command's own exit code (a
   holder outside the group is left running);
 - output is UTF-8 with replacement characters (text=True), so one stray byte
@@ -43,6 +43,7 @@ LINGER = 5.0  # seconds a descendant may hold the pipes after the command exits
 # trazo process (trazo.background, trazo.mcp_calls) give it, so its own groups end first.
 STOP_WAIT = 3.0
 GRACE = 5.0  # stop()'s default: seconds between SIGTERM and SIGKILL
+KILL = getattr(signal, "SIGKILL", signal.SIGTERM)  # Windows ends a group whatever the signal
 
 
 class Timeout(subprocess.TimeoutExpired, TimeoutError):
@@ -71,6 +72,17 @@ class Held(subprocess.CompletedProcess[Any]):
         fate = "stopped" if self.stopped else "left running (it is outside the command's process group)"
         return (f"{Path(self.args[0]).name} exited, but a process it started kept its output open; "
                 f"that process was {fate}")
+
+
+def env_seconds(name: str, default: float) -> float:
+    """$name as a deadline in seconds, else `default`; ValueError unless it is positive and finite."""
+    try:
+        value = float(os.environ.get(name) or default)
+    except ValueError:
+        value = float("nan")
+    if not 0 < value < float("inf"):
+        raise ValueError(f"{name} must be a positive finite number of seconds")
+    return value
 
 
 def decode(data: bytes) -> str:
@@ -108,19 +120,13 @@ class _Run:
 
     def signal(self, signum: int) -> None:
         """Send `signum` to the group; Windows ends it."""
-        if os.name == "nt":
-            if self.job is not None:
-                self.job.terminate()
-            else:
-                portable.kill_group(self.process.pid)
-            return
-        try:
-            os.killpg(self.process.pid, signum)
-        except (ProcessLookupError, PermissionError):
-            pass
+        if self.job is not None:
+            self.job.terminate()
+        else:
+            portable.kill_group(self.process.pid, signum)
 
     def kill(self) -> None:
-        self.signal(signal.SIGKILL if os.name != "nt" else signal.SIGTERM)
+        self.signal(KILL)
 
 
 _LIVE: dict[subprocess.Popen[bytes], _Run] = {}  # every command run() is waiting for
@@ -129,7 +135,7 @@ _LOCK = threading.RLock()  # reentrant: the SIGTERM handler may run while this t
 
 def run(argv: Sequence[str | os.PathLike[str]], *, timeout: float | None, cwd: str | os.PathLike[str] | None = None,
         env: Mapping[str, str] | None = None, input: bytes | str | None = None, capture: bool = True,
-        text: bool = False, on_line: Callable[[str], None] | None = None, linger: float = LINGER,
+        text: bool = False, on_line: Callable[[str], None] | None = None, hint: str = "",
         started: Callable[[subprocess.Popen[bytes]], None] | None = None) -> subprocess.CompletedProcess[Any]:
     """Run argv for `timeout` seconds at most (positive and finite; None only
     where a user turned the limit off); raises OSError when it cannot start
@@ -139,7 +145,8 @@ def run(argv: Sequence[str | os.PathLike[str]], *, timeout: float | None, cwd: s
     it the command shares this process's stdin, stdout and stderr. on_line:
     stderr joins stdout and each line goes to on_line as it comes, decoded,
     without being kept. started(process) runs once the command started (to
-    register it for stop()); what it raises stops the command."""
+    register it for stop()); what it raises stops the command. `hint` names
+    the setting that sets the limit, for the Timeout's message."""
     if timeout is not None and not 0 < timeout < float("inf"):
         raise ValueError("timeout must be a positive finite number of seconds")
     command = [os.fspath(arg) for arg in argv]
@@ -162,11 +169,11 @@ def run(argv: Sequence[str | os.PathLike[str]], *, timeout: float | None, cwd: s
             reader = (_Threads if os.name == "nt" else _Selector)(process, data, on_line)
         if started is not None:
             started(process)
-        result = _wait(entry, command, timeout, linger, reader)
+        result = _wait(entry, command, timeout, reader)
     except Timeout as exc:
+        exc.hint = hint
         if text:
-            exc.output, exc.stderr = (None if value is None else decode(value)  # type: ignore[assignment]
-                                      for value in (exc.output, exc.stderr))
+            exc.output, exc.stderr = _text(exc.output, exc.stderr)
         raise
     except BaseException as exc:  # Ctrl+C, SIGTERM (cli.main), started(): never leave the group behind
         if not entry.stopping:
@@ -175,9 +182,12 @@ def run(argv: Sequence[str | os.PathLike[str]], *, timeout: float | None, cwd: s
     finally:
         _forget(entry, reader)
     if text and pipes:
-        result.stdout, result.stderr = (None if value is None else decode(value)
-                                        for value in (result.stdout, result.stderr))
+        result.stdout, result.stderr = _text(result.stdout, result.stderr)
     return result
+
+
+def _text(*values: bytes | None) -> Any:
+    return tuple(None if value is None else decode(value) for value in values)
 
 
 def _stop(entry: _Run, signum: int) -> None:
@@ -188,27 +198,29 @@ def _stop(entry: _Run, signum: int) -> None:
     entry.kill()
 
 
-def _wait(entry: _Run, argv: list[str], timeout: float | None, linger: float,
+def _wait(entry: _Run, argv: list[str], timeout: float | None,
           reader: _Selector | _Threads | None) -> subprocess.CompletedProcess[Any]:
     limit = float("inf") if timeout is None else timeout
     deadline = time.monotonic() + limit
-    exited_at: float | None = None
+    give_up: float | None = None  # when the pipes held after the command exited stop counting
     stopped = False
     while reader is not None and reader.open():
         now = time.monotonic()
-        if now >= deadline:  # what it says while it stops is part of the output
-            _stop(entry, signal.SIGTERM)
-            end = time.monotonic() + 1.0
-            while reader.open() and (left := end - time.monotonic()) > 0:
-                reader.pump(min(0.2, left))
+        if now >= deadline:  # what it says while it stops is part of the output, read meanwhile
+            entry.stopping = True
+            entry.signal(signal.SIGTERM)
+            _drain(reader, now + STOP_WAIT, lambda: entry.exited(0))
+            entry.exited(max(0.0, now + STOP_WAIT - time.monotonic()))
+            entry.kill()
+            _drain(reader, time.monotonic() + 1.0)
             raise Timeout(argv, limit, *reader.output())
-        if exited_at is None and entry.exited(0):
-            exited_at = now
-        if exited_at is not None and now - exited_at >= linger:
+        if give_up is None and entry.exited(0):
+            give_up = now + LINGER
+        if give_up is not None and now >= give_up:
             if stopped:  # a process outside the group holds them
                 return Held(argv, entry.process.returncode, *reader.output(), stopped=False)
             entry.kill()  # the holder is in the group: one more second for the end of the output
-            stopped, exited_at = True, now - linger + 1.0
+            stopped, give_up = True, now + 1.0
             continue
         reader.pump(min(0.2, deadline - now))
     if not entry.exited(None if timeout is None else max(0.0, deadline - time.monotonic())):
@@ -218,6 +230,12 @@ def _wait(entry: _Run, argv: list[str], timeout: float | None, linger: float,
     if stopped:
         return Held(argv, entry.process.returncode, *output, stopped=True)
     return subprocess.CompletedProcess(argv, entry.process.returncode, *output)
+
+
+def _drain(reader: _Selector | _Threads, end: float, done: Callable[[], bool] = lambda: False) -> None:
+    """Read the pipes until they close, done() or `end`."""
+    while reader.open() and not done() and (left := end - time.monotonic()) > 0:
+        reader.pump(min(0.2, left))
 
 
 def _forget(entry: _Run, reader: _Selector | _Threads | None) -> None:
@@ -295,13 +313,40 @@ def stop_on_signals() -> None:
             signal.signal(signum, end)
 
 
-class _Selector:
+class _Reader:
+    """What both readers share: output kept per pipe, or lines for on_line."""
+
+    def __init__(self, process: subprocess.Popen[bytes], on_line: Callable[[str], None] | None) -> None:
+        self.process, self.on_line = process, on_line
+        self.chunks: dict[Any, list[bytes]] = {process.stdout: [], process.stderr: []}
+        self.partial: dict[Any, bytearray] = {process.stdout: bytearray(), process.stderr: bytearray()}
+
+    def feed(self, stream: Any, chunk: bytes) -> None:
+        """Keep a chunk, or pass on_line its complete lines (b"" at the end flushes the rest)."""
+        if self.on_line is None:
+            self.chunks[stream].append(chunk)
+            return
+        partial = self.partial[stream]
+        partial += chunk
+        end = partial.rfind(b"\n") + 1 if chunk else len(partial)
+        if end:
+            for line in bytes(partial[:end]).split(b"\n")[:-1 if chunk or partial.endswith(b"\n") else None]:
+                self.on_line(decode(line).rstrip("\n"))
+            del partial[:end]
+
+    def output(self) -> tuple[bytes | None, bytes | None]:
+        if self.on_line is not None:
+            return b"", None
+        return tuple(None if s is None else b"".join(list(self.chunks[s]))  # type: ignore[return-value]
+                     for s in (self.process.stdout, self.process.stderr))
+
+
+class _Selector(_Reader):
     """POSIX: the pipes read (and stdin written) as they are ready."""
 
     def __init__(self, process: subprocess.Popen[bytes], data: bytes | None,
                  on_line: Callable[[str], None] | None) -> None:
-        self.process, self.on_line, self.partial = process, on_line, b""
-        self.chunks: dict[Any, list[bytes]] = {process.stdout: [], process.stderr: []}
+        super().__init__(process, on_line)
         self.selector = selectors.DefaultSelector()
         for stream in (process.stdout, process.stderr):
             if stream is not None:
@@ -322,14 +367,7 @@ class _Selector:
             chunk = os.read(key.fd, 65536)
             if not chunk:
                 self.selector.unregister(key.fileobj)
-                if self.on_line is not None and self.partial:
-                    self.on_line(decode(self.partial).rstrip("\n"))
-            elif self.on_line is not None:
-                *lines, self.partial = (self.partial + chunk).split(b"\n")
-                for line in lines:
-                    self.on_line(decode(line).rstrip("\n"))
-            else:
-                self.chunks[key.fileobj].append(chunk)
+            self.feed(key.fileobj, chunk)
 
     def write(self, stdin: Any) -> None:
         try:
@@ -342,12 +380,6 @@ class _Selector:
             self.selector.unregister(stdin)
             stdin.close()
 
-    def output(self) -> tuple[bytes | None, bytes | None]:
-        if self.on_line is not None:
-            return b"", None
-        return tuple(None if s is None else b"".join(self.chunks[s])  # type: ignore[return-value]
-                     for s in (self.process.stdout, self.process.stderr))
-
     def close(self) -> None:
         self.selector.close()
         for stream in (self.process.stdin, self.process.stdout, self.process.stderr):
@@ -355,14 +387,13 @@ class _Selector:
                 stream.close()
 
 
-class _Threads:
+class _Threads(_Reader):
     """Windows, where pipes cannot be selected: a thread per pipe. A pipe
     still held at the end stays with its thread, which ends with the holder."""
 
     def __init__(self, process: subprocess.Popen[bytes], data: bytes | None,
                  on_line: Callable[[str], None] | None) -> None:
-        self.process, self.on_line = process, on_line
-        self.chunks: dict[Any, list[bytes]] = {process.stdout: [], process.stderr: []}
+        super().__init__(process, on_line)
         self.readers = {stream: threading.Thread(target=self.read, args=(stream,), daemon=True)
                         for stream in (process.stdout, process.stderr) if stream is not None}
         threads = list(self.readers.values())
@@ -372,22 +403,13 @@ class _Threads:
             thread.start()
 
     def read(self, stream: Any) -> None:
-        partial = b""
-        while True:
+        chunk = b"-"
+        while chunk:
             try:
                 chunk = os.read(stream.fileno(), 65536)
             except OSError:  # the other end closed
                 chunk = b""
-            if not chunk:
-                break
-            if self.on_line is None:
-                self.chunks[stream].append(chunk)
-                continue
-            *lines, partial = (partial + chunk).split(b"\n")
-            for line in lines:
-                self.on_line(decode(line).rstrip("\n"))
-        if self.on_line is not None and partial:
-            self.on_line(decode(partial).rstrip("\n"))
+            self.feed(stream, chunk)
 
     @staticmethod
     def write(stdin: Any, data: bytes) -> None:
@@ -405,12 +427,6 @@ class _Threads:
             if thread.is_alive():
                 thread.join(wait)
                 return
-
-    def output(self) -> tuple[bytes | None, bytes | None]:
-        if self.on_line is not None:
-            return b"", None
-        return tuple(None if s is None else b"".join(list(self.chunks[s]))  # type: ignore[return-value]
-                     for s in (self.process.stdout, self.process.stderr))
 
     def close(self) -> None:
         for stream, thread in self.readers.items():

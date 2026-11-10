@@ -21,7 +21,6 @@ each stage and stops it, with what it started, when time runs out).
 from __future__ import annotations
 
 import json
-import os
 import subprocess
 import tempfile
 import time
@@ -130,23 +129,12 @@ def split(args: list[str]) -> tuple[list[str], list[str]] | None:
     return first + ["--to=json"], second
 
 
-def timeout_seconds() -> float:
-    """TIMEOUT_ENV's seconds (positive and finite), else 600."""
-    try:
-        value = float(os.environ.get(TIMEOUT_ENV) or 600)
-    except ValueError:
-        value = float("nan")
-    if not 0 < value < float("inf"):
-        raise ValueError(f"{TIMEOUT_ENV} must be a positive finite number of seconds")
-    return value
-
-
 def version(command: list[str], cwd) -> str:
     """The first line of `pandoc --version`; "" when Pandoc cannot start."""
     try:
-        result = processes.run([*command, "--version"], cwd=cwd, text=True, timeout=VERSION_TIMEOUT)
-    except processes.Timeout as exc:
-        exc.hint = "check commands.pandoc"
+        result = processes.run([*command, "--version"], cwd=cwd, text=True, timeout=VERSION_TIMEOUT,
+                               hint="check commands.pandoc")
+    except processes.Timeout:
         raise
     except OSError:
         return ""
@@ -158,10 +146,10 @@ def run(args: list[str], *, input: bytes | str | None = None, text: bool = False
         cwd=None) -> subprocess.CompletedProcess:
     """Like subprocess.run([*pandoc, *args], capture_output=True, cwd=cwd)
     (the project root by default), with `timeout` seconds at most (default
-    timeout_seconds()); raises OSError when Pandoc cannot start,
+    TIMEOUT_ENV's, else 600); raises OSError when Pandoc cannot start,
     processes.Timeout (a TimeoutExpired) when it runs out of time, and
     ValueError for `--defaults` with the crossref filter."""
-    timeout = timeout_seconds() if timeout is None else timeout
+    timeout = processes.env_seconds(TIMEOUT_ENV, 600) if timeout is None else timeout
     command = list(command or PROJECT.command("pandoc"))
     try:
         return _run(args, input, text, timeout, command, cwd or PROJECT.root)

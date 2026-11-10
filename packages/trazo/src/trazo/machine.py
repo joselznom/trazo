@@ -119,10 +119,10 @@ def machine_name() -> str:
 def version_line(command: list[str]) -> str:
     """The first line `command --version` prints, or "" when it cannot run."""
     try:
-        result = processes.run([*command, "--version"], timeout=30)
+        result = processes.run([*command, "--version"], timeout=30, text=True)
     except OSError:  # processes.Timeout included
         return ""
-    lines = (result.stdout or result.stderr).decode("utf-8", errors="replace").strip().splitlines()
+    lines = (result.stdout or result.stderr).strip().splitlines()
     return lines[0].strip() if result.returncode == 0 and lines else ""
 
 

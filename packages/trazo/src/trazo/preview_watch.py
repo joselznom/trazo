@@ -5,19 +5,16 @@ there when it runs (preview.NAME), so patching them on trazo.preview reaches it.
 
 The tables stages take the build lock without waiting: while another build holds
 it, the pass fails with build_lock.Busy and is retried like any failure. The
-project's tables command has TABLES_TIMEOUT seconds (PREVIEW_TABLES_TIMEOUT, as
+project's tables command has 1200 seconds, or $PREVIEW_TABLES_TIMEOUT's (as
 PREVIEW_DOCX_TIMEOUT for the Word job that runs the same generator).
 """
 
-import os
 import subprocess
 import time
 from typing import cast
 
 from . import dependencies, labels, preview_edit_review, processes, table
 from .build_lock import Busy, build_lock, child_env
-
-TABLES_TIMEOUT = float(os.environ.get("PREVIEW_TABLES_TIMEOUT") or 1200)  # seconds
 
 
 def render_spec_tables() -> bool:
@@ -57,9 +54,9 @@ def regenerate_tables():
             command = preview.PROJECT.command("tables")
             try:  # child_env: a trazo the command calls runs in this turn
                 result = processes.run(command, cwd=preview.ROOT, text=True, env=child_env(),
-                                       timeout=TABLES_TIMEOUT)
-            except processes.Timeout as exc:  # kept pending: the next spec change runs it again
-                exc.hint = "PREVIEW_TABLES_TIMEOUT sets the limit"
+                                       timeout=processes.env_seconds("PREVIEW_TABLES_TIMEOUT", 1200),
+                                       hint="PREVIEW_TABLES_TIMEOUT sets the limit")
+            except (processes.Timeout, ValueError) as exc:  # kept pending: the next spec change runs it again
                 result = subprocess.CompletedProcess([], 1, "", str(exc))
             except OSError as exc:
                 result = subprocess.CompletedProcess([], 127, "", f"could not run the tables command: {exc}")

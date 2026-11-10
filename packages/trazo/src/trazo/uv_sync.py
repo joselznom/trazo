@@ -11,6 +11,7 @@ wheels on a slow link, or TIMEOUT_ENV's (positive finite seconds)."""
 from __future__ import annotations
 
 import os
+import subprocess
 import sys
 from pathlib import Path
 
@@ -18,16 +19,6 @@ from . import processes
 from .machine import uv_environment
 
 TIMEOUT_ENV = "TRAZO_UV_TIMEOUT"
-
-
-def timeout_seconds() -> float:
-    try:
-        value = float(os.environ.get(TIMEOUT_ENV) or 1800)
-    except ValueError:
-        value = float("nan")
-    if not 0 < value < float("inf"):
-        raise ValueError(f"{TIMEOUT_ENV} must be a positive finite number of seconds")
-    return value
 
 
 def sync(uv: str, where: str, root: Path, locked: bool) -> int:
@@ -38,16 +29,16 @@ def sync(uv: str, where: str, root: Path, locked: bool) -> int:
     if where == "data folder":  # setup's uv: its Python and cache stay in the data folder
         env.update(uv_environment())
     command = [uv, "sync", "--quiet", *(["--locked"] if locked else [])]
-    timeout = timeout_seconds()
-    try:
-        result = processes.run(command, cwd=root, env=env, text=True, timeout=timeout)
-        if result.returncode and "Failed to initialize cache" in result.stderr:
-            print("uv sync: uv's cache is not writable here; using .cache/uv", file=sys.stderr)
-            env["UV_CACHE_DIR"] = str(root / ".cache" / "uv")
-            result = processes.run(command, cwd=root, env=env, text=True, timeout=timeout)
-    except processes.Timeout as exc:
-        exc.hint = f"uv sync; check the network, or set {TIMEOUT_ENV} for a longer sync"
-        raise
+    timeout = processes.env_seconds(TIMEOUT_ENV, 1800)
+
+    def run() -> subprocess.CompletedProcess[str]:
+        return processes.run(command, cwd=root, env=env, text=True, timeout=timeout,
+                             hint=f"uv sync; check the network, or set {TIMEOUT_ENV} for a longer sync")
+    result = run()
+    if result.returncode and "Failed to initialize cache" in result.stderr:
+        print("uv sync: uv's cache is not writable here; using .cache/uv", file=sys.stderr)
+        env["UV_CACHE_DIR"] = str(root / ".cache" / "uv")
+        result = run()
     sys.stdout.write(result.stdout)
     sys.stderr.write(result.stderr)
     return result.returncode

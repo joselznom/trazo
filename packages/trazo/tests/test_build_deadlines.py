@@ -1,10 +1,8 @@
 """A build whose Pandoc, metadata read, uv sync or own step hangs ends with
 an error that names what hung and its limit, and leaves nothing running."""
 
-import json
 import os
 import shutil
-import signal
 import subprocess
 import sys
 import tempfile
@@ -13,12 +11,12 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+import _hang
 import _support
+from test_mcp import gone, wait_until
 
-from trazo import frontmatter, portable
+from trazo import frontmatter
 from trazo.project import PACKAGE_DIR
-
-HANG = Path(__file__).with_name("_hang.py")
 
 
 class BuildDeadlines(unittest.TestCase):
@@ -26,32 +24,14 @@ class BuildDeadlines(unittest.TestCase):
         self.root = Path(self.enterContext(tempfile.TemporaryDirectory())) / "paper"
         shutil.copytree(_support.FIXTURE, self.root)
         self.pids = self.root.parent / "hang.pids"
-        self.addCleanup(self.end_stand_ins)
-
-    def end_stand_ins(self) -> None:
-        """What the fix should have ended, so a failing run leaves nothing behind."""
-        if self.pids.is_file():
-            for pid in map(int, self.pids.read_text().split()):
-                if portable.pid_alive(pid):  # one process each, not a group leader
-                    portable.kill_group(pid) if os.name == "nt" else os.kill(pid, signal.SIGKILL)
+        self.addCleanup(_hang.end, self.pids)
 
     def assert_stand_ins_gone(self) -> None:
-        pids = [int(pid) for pid in self.pids.read_text().split()]
-        deadline = time.monotonic() + 10
-        while any(portable.pid_alive(pid) for pid in pids):
-            self.assertLess(time.monotonic(), deadline, "the hung program or its child outlived the build")
-            time.sleep(0.05)
+        self.assertTrue(wait_until(lambda: all(map(gone, _hang.recorded(self.pids))), 10),
+                        "the hung program or its child outlived the build")
 
     def stand_in(self, program: str, mode: str) -> list[str]:
-        return [sys.executable, str(HANG), str(self.pids), shutil.which(program) or program, mode]
-
-    def configure(self, commands: dict[str, list[str]] | None = None, *tables: str) -> None:
-        config = self.root / "trazo.toml"
-        text = config.read_text()
-        for name, command in (commands or {}).items():
-            lines = [row for row in text.splitlines() if not row.startswith(f"{name} = ")]
-            text = "\n".join(lines).replace("[commands]", f"[commands]\n{name} = {json.dumps(command)}") + "\n"
-        config.write_text(text + "\n" + "\n".join(tables) + "\n")
+        return _hang.command(self.pids, shutil.which(program) or program, mode)
 
     def build(self, **env: str) -> subprocess.CompletedProcess:
         environ = {**os.environ, "TRAZO_ROOT": str(self.root), "PYTHONPATH": str(PACKAGE_DIR.parent), **env}
@@ -63,7 +43,7 @@ class BuildDeadlines(unittest.TestCase):
 
     @unittest.skipUnless(shutil.which("pandoc"), "needs Pandoc")
     def test_a_hung_pandoc_stops_the_build_and_keeps_the_earlier_word_file(self) -> None:
-        self.configure({"pandoc": self.stand_in("pandoc", "docx")})
+        _hang.set_command(self.root, "pandoc", self.stand_in("pandoc", "docx"))
         earlier = self.root / "output" / "supplementary.docx"
         earlier.parent.mkdir(exist_ok=True)
         earlier.write_bytes(b"last good")
@@ -75,11 +55,8 @@ class BuildDeadlines(unittest.TestCase):
         self.assert_stand_ins_gone()
 
     def test_a_step_past_the_projects_limit_is_stopped_and_named(self) -> None:
-        child = "import time; time.sleep(3600)"
-        script = ("import os, subprocess, sys, time; "
-                  f"child = subprocess.Popen([sys.executable, '-c', {child!r}]); "
-                  f"open({str(self.pids)!r}, 'a').write(f'{{os.getpid()}} {{child.pid}}\\n'); time.sleep(3600)")
-        self.configure({"tables": [sys.executable, "-c", script]}, "[build]", "timeout = 2")
+        _hang.set_command(self.root, "tables", _hang.command(self.pids, sys.executable, "any"),
+                          "[build]", "timeout = 2")
         result = self.build()
         self.assertEqual(result.returncode, 1, result.stderr)
         self.assertIn("commands.tables: ", result.stderr)
@@ -95,7 +72,8 @@ class BuildDeadlines(unittest.TestCase):
         uv.chmod(0o755)
         (self.root / "pyproject.toml").write_text('[project]\nname = "paper"\nversion = "0"\n')
         (self.root / "step.py").write_text("print('step')\n")
-        self.configure({}, "[[build.steps]]", 'name = "uses-python"', 'run = ["step.py"]', "outputs = []")
+        with (self.root / "trazo.toml").open("a") as config:
+            config.write('\n[[build.steps]]\nname = "uses-python"\nrun = ["step.py"]\noutputs = []\n')
         result = self.build(TRAZO_UV_TIMEOUT="2", PATH=f"{tools}{os.pathsep}{os.environ['PATH']}")
         self.assertEqual(result.returncode, 1, result.stderr)
         self.assertIn("did not finish within 2 s and was stopped (uv sync; check the network, "

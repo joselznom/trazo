@@ -7,27 +7,19 @@ import http.client
 import json
 import os
 import shutil
-import signal
 import sys
 import threading
 import time
 import unittest
-from pathlib import Path
 from unittest.mock import patch
 
+import _hang
 import _support  # noqa: F401  (sets TRAZO_ROOT before trazo loads)
-from test_mcp import Session, free_port, wait_until
+from test_mcp import Session, free_port, gone, wait_until
 from test_preview_watch_failures import PreviewCase, get, status
 
-from trazo import portable
 from trazo.build_lock import build_lock
 from trazo.project import DEFAULTS, Project
-
-HANG = Path(__file__).with_name("_hang.py")
-
-
-def pids_in(path: Path) -> list[int]:
-    return [int(pid) for pid in path.read_text().split()] if path.is_file() else []
 
 
 @unittest.skipUnless(shutil.which("pandoc"), "needs Pandoc")
@@ -35,24 +27,13 @@ class PreviewDeadlineTests(PreviewCase):
     def setUp(self) -> None:
         self.root = self.project()
         self.pids = self.root.parent / "hang.pids"
-        self.addCleanup(self.end_stand_ins)
-
-    def end_stand_ins(self) -> None:
-        """What the fix should have ended, so a failing run leaves nothing behind."""
-        for pid in pids_in(self.pids):
-            if portable.pid_alive(pid):  # one process each, not a group leader
-                portable.kill_group(pid) if os.name == "nt" else os.kill(pid, signal.SIGKILL)
+        self.addCleanup(_hang.end, self.pids)
 
     def gone(self) -> bool:
-        return not any(portable.pid_alive(pid) for pid in pids_in(self.pids))
-
-    def configure(self, name: str, command: list[str]) -> None:
-        config = self.root / "trazo.toml"
-        rows = [row for row in config.read_text().splitlines() if not row.startswith(f"{name} = ")]
-        config.write_text("\n".join(rows).replace("[commands]", f"[commands]\n{name} = {json.dumps(command)}") + "\n")
+        return all(map(gone, _hang.recorded(self.pids)))
 
     def pandoc(self, mode: str) -> None:
-        self.configure("pandoc", [sys.executable, str(HANG), str(self.pids), shutil.which("pandoc"), mode])
+        _hang.set_command(self.root, "pandoc", _hang.command(self.pids, shutil.which("pandoc"), mode))
 
     def start_with(self, env: dict[str, str]) -> int:
         with patch.dict(os.environ, env):  # the MCP server and the preview it starts inherit them
@@ -71,7 +52,7 @@ class PreviewDeadlineTests(PreviewCase):
                   f"    child = subprocess.Popen([sys.executable, '-c', {child!r}])\n"
                   f"    open({str(self.pids)!r}, 'a').write(f'{{os.getpid()}} {{child.pid}}\\n')\n"
                   "    time.sleep(3600)\n")
-        self.configure("tables", [sys.executable, "-c", script])
+        _hang.set_command(self.root, "tables", [sys.executable, "-c", script])
         port = self.start_with({"PREVIEW_TABLES_TIMEOUT": "2"})
         self.assertTrue(wait_until(lambda: status(port)["manuscript"]["ok"]))
         flag.touch()  # from now on the command hangs
@@ -130,7 +111,7 @@ class PreviewDeadlineTests(PreviewCase):
     def test_a_hung_page_pandoc_ends_with_the_preview(self) -> None:
         self.pandoc("page")
         self.start_with({})
-        self.assertTrue(wait_until(lambda: pids_in(self.pids)), "the page build did not start Pandoc")
+        self.assertTrue(wait_until(lambda: _hang.recorded(self.pids)), "the page build did not start Pandoc")
         stop = self.session.tool("preview_stop", project=str(self.root))
         self.assertFalse(stop["isError"], stop["content"])
         self.assertTrue(wait_until(self.gone, timeout=20), "the page's Pandoc outlived the preview")
@@ -146,9 +127,9 @@ class PreviewDeadlineTests(PreviewCase):
         port = self.start_with({})
         self.assertTrue(wait_until(lambda: all("rejected" in status(port)[name]["error"]
                                                for name in ("manuscript", "supplementary"))), status(port))
-        calls = len(pids_in(self.pids))
+        calls = len(_hang.recorded(self.pids))
         time.sleep(4)  # longer than the first retries of a failure Pandoc could not finish
-        self.assertEqual(len(pids_in(self.pids)), calls, "Pandoc ran again on text that did not change")
+        self.assertEqual(len(_hang.recorded(self.pids)), calls, "Pandoc ran again on text that did not change")
 
 
 if __name__ == "__main__":

@@ -27,12 +27,13 @@ def _read(path, mtime_ns, size, command):
                 [*command, "-f", "markdown", f"--metadata-file={path}",
                  "-t", "markdown", f"--template={template}"],
                 input="\n", text=True, timeout=TIMEOUT)
-            if result.returncode:
-                raise MetadataError(f"cannot read metadata {path}: {result.stderr.strip()}")
+        except OSError as exc:  # processes.Timeout included
+            raise MetadataError(f"cannot read metadata {path}: {exc}") from exc
+        if result.returncode:
+            raise MetadataError(f"cannot read metadata {path}: {result.stderr.strip()}")
+        try:
             return json.loads(result.stdout)
-        except (OSError, ValueError) as exc:  # processes.Timeout is an OSError
-            if isinstance(exc, MetadataError):
-                raise
+        except ValueError as exc:
             raise MetadataError(f"cannot read metadata {path}: {exc}") from exc
 
 

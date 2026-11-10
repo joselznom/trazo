@@ -58,9 +58,9 @@ def group_options() -> dict[str, Any]:
     return {"start_new_session": True}
 
 
-def kill_group(pid: int, graceful: bool = False) -> None:
-    """End the group `pid` leads: SIGTERM when graceful, else SIGKILL; on
-    Windows, always force-end the process tree. A group already gone is fine."""
+def kill_group(pid: int, signum: int | None = None) -> None:
+    """Send the group `pid` leads `signum` (default SIGKILL); on Windows,
+    always force-end the process tree. A group already gone is fine."""
     if os.name == "nt":
         taskkill = os.path.join(os.environ.get("SystemRoot", r"C:\Windows"), "System32", "taskkill.exe")
         try:
@@ -70,7 +70,7 @@ def kill_group(pid: int, graceful: bool = False) -> None:
             pass
         return
     try:
-        os.killpg(pid, signal.SIGTERM if graceful else signal.SIGKILL)
+        os.killpg(pid, signal.SIGKILL if signum is None else signum)
     except (ProcessLookupError, PermissionError):
         pass
 
