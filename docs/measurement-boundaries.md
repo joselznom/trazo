@@ -84,7 +84,8 @@ builds the save as another program's pending edit; accepting it
 the page is released with the save as the author's. Before, nothing built it
 again (the source did not change) and the page kept that build: in warm saves
 from a real Chrome page on the load paper, each after a random 0 to 0.5 s,
-2 of 600 never showed before the change and 0 of 600 after.
+2 of 600 never showed before the change and 0 of 600 after, and with two
+forced Word builds running alongside, 3 of 500 before and 0 of 500 after.
 
 A visible standalone page no longer asks `/__status` every 250 ms between
 its one-second workspace scans. It asks `/__status?since=<digest>&wait=<seconds>`,
