@@ -188,6 +188,7 @@
       }
       showSaveState("Undone", true);
       putBack(step);
+      if (answer.payload.warning) toast(answer.payload.warning);  // trouble after the file went back
     });
     return true;
   }
@@ -221,6 +222,7 @@
       showSaveState("Saved", true);
       step.saveId = answer.payload.save_id;
       again();
+      if (answer.payload.warning) toast(answer.payload.warning);
     });
     return true;
   }
