@@ -164,6 +164,9 @@ Internal changes (tests, CI, refactoring) stay out.
 - After a save from the preview, the page reloads once, when its build has
   the save. It could reload first to an older build, without the words you
   had just written, and then again.
+- The diagram editor keeps the notice that says where your version was kept
+  when another program wrote the diagram during a save. A second notice,
+  about inputs it could not read again, could replace it.
 
 ### Upgrade notes
 

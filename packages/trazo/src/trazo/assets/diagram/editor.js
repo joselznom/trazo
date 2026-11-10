@@ -83,7 +83,7 @@
     return node;
   }
 
-  const { toast, showBanner, warned, conflict } = DiagramNotices(h);
+  const { toast, showBanner, warned, conflict, staleInputs } = DiagramNotices(h);
 
   function s(name, attrs, parent) {
     const node = document.createElementNS(SVG_NS, name);
@@ -3485,8 +3485,7 @@
     const [r, values] = await Promise.all([api("GET", `payload/${encodeURIComponent(name)}`), api("GET", "values")]);
     if (S.name !== name || seq !== inputLoadSeq) return false;
     if (!r.ok || !r.data?.payload || !values.ok) {
-      showBanner("error", "Scientific inputs could not be refreshed; showing the last usable drawing.",
-        (r.data?.issues || []).map(item => item.message));
+      staleInputs(r.data?.issues, S.blocked === "conflict");
       return false;
     }
     S.tokens = r.data.payload.tokens;

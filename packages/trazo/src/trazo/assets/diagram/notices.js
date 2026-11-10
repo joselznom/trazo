@@ -55,6 +55,14 @@
           h("button", { type: "button", onclick: actions.downloadMine }, "Download my version"),
         ]);
     }
-    return { toast, showBanner, warned, conflict };
+    // The page could not read the diagram's inputs again (`issues` say why). While a save is
+    // `conflicted` the banner on screen stays: only it has the choices and where this page's
+    // version was kept.
+    function staleInputs(issues, conflicted) {
+      if (conflicted && !$("#banner").hidden) return;
+      showBanner("error", "Scientific inputs could not be refreshed; showing the last usable drawing.",
+        (issues || []).map((item) => item.message));
+    }
+    return { toast, showBanner, warned, conflict, staleInputs };
   };
 })();

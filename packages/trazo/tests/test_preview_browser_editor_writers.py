@@ -106,6 +106,7 @@ class EditorWriterNoticeTests(PreviewBrowserTestCase):
             self.wait_for("!document.querySelector('#banner').hidden")
         [copy] = self.copies()
         self.assertIn("Typed in the editor", copy.read_text())
+        self.evaluate("new Promise(resolve => setTimeout(resolve, 3000))")  # the page reads the file's inputs again
         self.assertIn(copy.relative_to(_support.ROOT).as_posix(), self.evaluate("document.querySelector('#banner').textContent"))
 
     def test_a_diagram_save_shows_trouble_after_publishing(self):
