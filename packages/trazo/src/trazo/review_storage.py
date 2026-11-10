@@ -8,7 +8,6 @@ older than ORPHAN_SECONDS that nobody holds: a live writer keeps its file even
 when suspended for longer than that.
 """
 
-import glob
 import json
 import os
 import re
@@ -106,8 +105,8 @@ def scratch_folder(parent: Path, prefix: str) -> Iterator[Path]:
     """A temporary folder in `parent`, locked through its `.lock` file while in
     use and removed after. The folders with `prefix` that killed users left
     there are removed first, as remove_orphans does for files."""
-    for leftover in parent.glob(glob.escape(prefix) + "*"):
-        if leftover.is_dir() and _abandoned(leftover, leftover / ".lock"):
+    for leftover in parent.iterdir():
+        if leftover.name.startswith(prefix) and leftover.is_dir() and _abandoned(leftover, leftover / ".lock"):
             shutil.rmtree(leftover, ignore_errors=True)
     with tempfile.TemporaryDirectory(prefix=prefix, dir=parent) as folder, \
             open(Path(folder) / ".lock", "wb") as handle:
