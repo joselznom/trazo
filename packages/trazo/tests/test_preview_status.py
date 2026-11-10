@@ -72,10 +72,11 @@ class HeldStatus(unittest.TestCase):
     def test_a_change_the_page_shows_answers_a_held_request_at_once(self):
         changes = {
             "a build": (lambda: self.assertTrue(preview.build(DOC)),
-                        lambda reply: reply[DOC]["version"] == 1 and not reply["building"]),
-            "a save from the page": (preview_sources.mark_written, lambda reply: reply["building"]),
+                        lambda before, reply: reply[DOC]["version"] == before[DOC]["version"] + 1
+                        and not reply["building"]),
+            "a save from the page": (preview_sources.mark_written, lambda before, reply: reply["building"]),
             "the watcher catching up with that save": (lambda: preview_watch.synced(time.time()),
-                                                       lambda reply: not reply["building"]),
+                                                       lambda before, reply: not reply["building"]),
         }
         for change, (make, shown) in changes.items():
             with self.subTest(change):
@@ -86,7 +87,7 @@ class HeldStatus(unittest.TestCase):
                 self.assertFalse(waiting.is_alive(), "still held after the change")
                 [(code, reply)] = answers
                 self.assertEqual(code, 200)
-                self.assertTrue(shown(reply), reply)
+                self.assertTrue(shown(before, reply), reply)
                 self.assertNotEqual(reply["digest"], before["digest"])
 
     def test_without_a_change_a_held_request_answers_when_its_wait_ends(self):
