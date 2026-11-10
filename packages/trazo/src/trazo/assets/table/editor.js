@@ -64,7 +64,7 @@
     $("#te-ftext").textContent = text.startsWith("Saved") ? "Saved automatically · ⌘Z undoes" : text;
     $("#te-fdot").className = "te-dot" + (error ? " err" : busy || pending.size ? " warn" : "");
   }
-  const { flash, banner, warned, conflict } = T.messages(h);
+  const { flash, banner, warned, conflict, failed } = T.messages(h);
 
   // ---------------------------------------------------------------- spec helpers
   // Spec path of a leaf of the model: <id>, <group>.<leaf>, or <pivot>.<leaf>
@@ -625,14 +625,13 @@
     const r = await api("/__table/undo", { label, hidden: showHidden });
     if (r.ok) {
       blocked = false;
-      banner(null);
-      warned(r.data);
+      banner(r.data.warning, "err");
       accept(r.data);
       flash(r.data.undone.replace(/^undone: /, "Undone: ").replace(/; next undo: .*$/, ""));
       setSave(`Saved · ${st.file}`);
       loadList();
     } else {
-      flash(r.data.error || "Undo failed");
+      failed(r.data, "Undo failed");
       loadTable(true);
     }
   }

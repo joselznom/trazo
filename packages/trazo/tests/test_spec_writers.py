@@ -219,6 +219,22 @@ class SpecWriters(Restore):
         self.assertEqual(status, 200, undone)
         self.assertIn("could not set the replaced version aside", undone["undone"])
         self.assertTrue(undone["warning"], undone)
+        # A new table writes its line into the document through a source save: its reply says so too.
+        intro = _support.ROOT / "manuscript/main/01_introduction.md"
+        self.addCleanup(lambda: [p.unlink() for p in intro.parent.glob(intro.name + ".*.swap")])
+        self.addCleanup(intro.write_bytes, intro.read_bytes())
+        folder = TemporaryDirectory()
+        self.addCleanup(folder.cleanup)
+        for name in ("FILE_HISTORY_PATH", "EDITS_PATH"):
+            patcher = patch.object(preview, name, Path(folder.name) / f"{name}.json")
+            patcher.start()
+            self.addCleanup(patcher.stop)
+        status, made = self.call("/__table/new", {"title": "A table typed by hand", "line": None,
+                                                  "file": "manuscript/main/01_introduction.md"})
+        self.assertEqual(status, 200, made)
+        self.assertTrue(made.get("warning"), made)
+        self.addCleanup(table.output_path(made["label"]).unlink, missing_ok=True)
+        self.addCleanup(table.spec_path(made["label"]).unlink, missing_ok=True)
         # A spec table's caption saves and undoes through the table editor: its reply says so too.
         state = preview.get_table_caption("supplementary", "tbl:cohorts")
         saved = preview.change_table_caption({"doc": "supplementary", "id": "tbl:cohorts", "base_sha256": state["sha256"],

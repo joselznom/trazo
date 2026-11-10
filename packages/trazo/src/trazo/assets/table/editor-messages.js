@@ -5,7 +5,7 @@
   "use strict";
   const T = (window.TableEditor = window.TableEditor || {});
   T.messages = function (h) {
-    const $ = (s, r = document) => r.querySelector(s);
+    const $ = (s) => document.querySelector(s);
     let flashTimer = null;
     // A short notice; with `action` ({label, run}) it stays longer and offers
     // a button (Undo after a comment change). Hovering keeps it open.
@@ -40,6 +40,11 @@
       banner(`This table changed on disk since it was loaded (another edit or an agent). Your last edits are not saved.${kept}`, "err",
         [h("button", { type: "button", class: "pv-btn sm", text: "Reload (lose my edits)", onclick: reload })]);
     }
-    return { flash, banner, warned, conflict };
+    // A refused reply: one that names copies of what was not written (`kept`) stays as a banner.
+    function failed(data, fallback) {
+      if (data.kept) banner(data.error, "err");
+      else flash(data.error || fallback);
+    }
+    return { flash, banner, warned, conflict, failed };
   };
 })();

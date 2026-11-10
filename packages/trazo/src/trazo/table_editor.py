@@ -274,19 +274,21 @@ def with_include(text: str, line: Any, label: str) -> str:
     return f"{text[:end].rstrip()}\n\n{table_hand.include_line(label)}\n" + (f"\n{tail}" if tail.strip() else "")
 
 
-def publish(label: str, spec: dict[str, Any], source: dict[str, Any], text: str) -> None:
+def publish(label: str, spec: dict[str, Any], source: dict[str, Any], text: str) -> dict[str, str]:
     """Write a new table typed by hand and the document text that shows it. Not in the
-    table history: undoing the file would leave its !include behind."""
+    table history: undoing the file would leave its !include behind. Returns the
+    document save's `warning`, if any, for the reply."""
     from .preview_sources import change_source
     with tb.review_lock():
         tb.write_atomic(tb.spec_path(label), tb.dump_spec(spec))
     tb.render_one(label)
     try:
-        change_source({"file": source["file"], "text": text, "base_sha256": source["sha256"]})
+        saved = change_source({"file": source["file"], "text": text, "base_sha256": source["sha256"]})
     except Exception:  # the document changed: no table without its line
         tb.spec_path(label).unlink()
         tb.output_path(label).unlink(missing_ok=True)
         raise
+    return {"warning": saved["warning"]} if saved.get("warning") else {}
 
 
 def new_table(request: Any) -> dict[str, Any]:
@@ -304,8 +306,7 @@ def new_table(request: Any) -> dict[str, Any]:
     problems = tb.Checker().spec(spec)
     if problems:
         raise Unprocessable("the table cannot be created", issues=problems)
-    publish(label, spec, source, text)
-    return {"label": label}
+    return {"label": label, **publish(label, spec, source, text)}
 
 
 def convert_table(request: Any) -> dict[str, Any]:
@@ -317,8 +318,8 @@ def convert_table(request: Any) -> dict[str, Any]:
         found = table_convert.plan(doc, request.get("id"))
         if op == "check":
             return {"ok": True}
-        publish(found["label"], found["spec"], found["source"], found["text"])
-        return {"label": found["label"], "markdown": found["markdown"]}
+        warned = publish(found["label"], found["spec"], found["source"], found["text"])
+        return {"label": found["label"], "markdown": found["markdown"], **warned}
     if op != "undo":
         raise RequestError("op must be check, convert or undo")
     label, markdown = spec_file(request.get("label")), request.get("markdown")
@@ -330,10 +331,10 @@ def convert_table(request: Any) -> dict[str, Any]:
     source = get_source(file_including(doc, label))
     lines = source["text"].split("\n")
     lines[lines.index(table_hand.include_line(label))] = markdown
-    change_source({"file": source["file"], "text": "\n".join(lines), "base_sha256": source["sha256"]})
+    saved = change_source({"file": source["file"], "text": "\n".join(lines), "base_sha256": source["sha256"]})
     tb.spec_path(label).unlink()
     tb.output_path(label).unlink(missing_ok=True)
-    return {}
+    return {"warning": saved["warning"]} if saved.get("warning") else {}
 
 
 def file_including(doc: Any, label: str) -> str:

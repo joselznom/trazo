@@ -9,6 +9,7 @@
   const FORMATS = [["B", "Bold", "**"], ["I", "Italic", "*"], ["x²", "Superscript", "^"], ["x₂", "Subscript", "~"]];
   T.hand = function (E, K) {
     const { h, $ } = E;
+    const notes = T.messages(h);  // the banner, and what a reply says about other programs' writes
     const { row, ctx, icon } = K;
     const shortId = (id) => id.split(".").pop();
     const body = () => E.spec.body;
@@ -106,11 +107,13 @@
       const notice = $("#te-banner");
       const undo = async () => {
         const r = await E.api("/__table/convert", { op: "undo", ...made });
-        if (r.ok) location.href = E.App.returnUrl || `/${made.doc}.html`;
-        else E.flash(r.data.error || "Not undone");
+        if (r.ok && !r.data.warning) location.href = E.App.returnUrl || `/${made.doc}.html`;
+        else if (r.ok) notes.banner(`Undone: the Markdown is back in the text. ${r.data.warning}`, "err");
+        else notes.failed(r.data, "Not undone");
       };
       notice.className = "te-banner";
-      notice.replaceChildren(h("div", { class: "te-grow", text: "This table is now editable here. Its Markdown left the text." }),
+      notice.replaceChildren(h("div", { class: "te-grow",
+        text: `This table is now editable here. Its Markdown left the text.${made.warning ? ` ${made.warning}` : ""}` }),
         h("button", { type: "button", class: "pv-btn sm", text: "Undo", onclick: undo }),
         h("button", { type: "button", class: "te-icon", "aria-label": "Dismiss", text: "✕", onclick: () => { notice.hidden = true; } }));
       notice.hidden = false;
@@ -212,11 +215,13 @@
         const found = docs.find((d) => d.doc === doc.value).sections[Number(section.value)];
         const rows = mode === "paste" && area.value.trim() ? range(area.value) : null;
         const made = await E.api("/__table/new", { title: title.value, file: found.file, line: found.line, ...(rows ? { rows } : {}) });
-        if (!made.ok) { E.flash(made.data.error || "The table was not created"); return; }
+        if (!made.ok) { notes.failed(made.data, "The table was not created"); return; }
         close();
         await E.loadList();
         location.hash = made.data.label;
         E.flash(`Added at the end of “${found.title}”. Cite it as [@tbl:${made.data.label}]`);
+        // Opening the new table clears the banner: a warning stays as a notice to dismiss.
+        if (made.data.warning) E.flash(made.data.warning, { label: "OK", run: () => {} });
       };
       const overlay = h("div", { class: "te-modal", onkeydown: (e) => { if (e.key === "Escape") { e.stopPropagation(); close(); } } },
         h("div", { class: "te-dialog", role: "dialog", "aria-label": "New table" }, h("h3", { text: "New table" }),

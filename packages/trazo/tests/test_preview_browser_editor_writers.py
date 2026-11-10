@@ -2,7 +2,9 @@
 
 import json
 import shutil
+import sys
 import unittest
+from pathlib import Path
 from unittest.mock import patch
 
 import _support  # noqa: F401  (sets TRAZO_ROOT before trazo loads)
@@ -68,6 +70,26 @@ class EditorWriterNoticeTests(PreviewBrowserTestCase):
         [copy] = self.copies()
         self.assertIn("Method typed in the editor", copy.read_text())
         self.assertIn(MARKER, self.spec.read_text())
+        self.assertIn(copy.relative_to(_support.ROOT).as_posix(), self.evaluate("document.querySelector('#te-banner').textContent"))
+
+    def test_a_table_undo_collision_keeps_the_copy_path_on_screen(self):
+        self.open_table()
+        self.edit_header("Method")
+        self.wait_for("document.querySelector('#te-undo').disabled === false")
+        read, done = Path.read_bytes, []
+
+        def read_then_write(path):  # right after the undo's locked read of the spec
+            data = read(path)
+            if not done and path == self.spec and sys._getframe(1).f_code.co_name == "revert_file":
+                done.append(True)
+                self.spec.write_text(self.spec.read_text().replace("{", '{"' + MARKER + '": 1, ', 1))
+            return data
+        with patch.object(Path, "read_bytes", read_then_write):
+            self.evaluate("document.querySelector('#te-undo').click()")
+            self.wait_for("!document.querySelector('#te-banner').hidden")
+        [copy] = self.copies()
+        self.assertIn(MARKER, self.spec.read_text())
+        self.evaluate("new Promise(resolve => setTimeout(resolve, 3000))")  # longer than a flash lasts
         self.assertIn(copy.relative_to(_support.ROOT).as_posix(), self.evaluate("document.querySelector('#te-banner').textContent"))
 
     def test_a_table_save_shows_trouble_after_publishing(self):

@@ -83,7 +83,7 @@
     return node;
   }
 
-  const { toast, showBanner, warned, ...notices } = DiagramNotices(h);
+  const { toast, showBanner, warned, conflict } = DiagramNotices(h);
 
   function s(name, attrs, parent) {
     const node = document.createElementNS(SVG_NS, name);
@@ -3395,7 +3395,7 @@
   }
 
   function showConflict() {
-    notices.showConflict(`${PATHS.diagrams}/${S.name}.json`, S.conflict, { keepMine, loadTheirs, downloadMine });
+    conflict(`${PATHS.diagrams}/${S.name}.json`, S.conflict, { keepMine, loadTheirs, downloadMine });
   }
 
   async function keepMine() {
