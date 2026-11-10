@@ -50,6 +50,8 @@ Internal changes (tests, CI, refactoring) stay out.
 
 ### Changed
 
+- The preview shows what you saved sooner: leaving a paragraph brings its new
+  build in about 0.7 s instead of about 2 s.
 - The preview's selection bar tells apart what reaches Word from what does
   not. **Underline**, the reading mark, is now **Highlight** and paints the
   text violet; it still stays out of Word and out of the agent's list, and
