@@ -2,7 +2,6 @@
 the real handler and real builds."""
 
 import base64
-import time
 import unittest
 
 import _support
@@ -27,15 +26,6 @@ SNAPSHOT = r"""(() => {
 
 class InPlaceTests(WritingCase):
     maxDiff = None
-
-    def built_again(self, text):
-        """The watcher's work after a change: the page built, `synced` past the write."""
-        self.chapter.write_text(text, encoding="utf-8")
-        self.assertEqual(preview.render("manuscript", preview.OUT_DIR)[0], "")
-        with preview.LOCK:
-            preview.STATE["manuscript"]["version"] += 1
-            preview.WATCHER["synced"] = time.time()
-            return preview.STATE["manuscript"]["version"]
 
     def assert_same_as_a_fresh_load(self):
         shown = self.evaluate(SNAPSHOT)

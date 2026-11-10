@@ -1,6 +1,7 @@
 """What the writing tests in Chrome share: a chapter on the real page, and real clicks and keys."""
 
 import json
+import time
 
 import _support
 from _preview_browser import PreviewBrowserTestCase
@@ -28,6 +29,16 @@ class WritingCase(PreviewBrowserTestCase):
         self.chapter.write_text(text, encoding="utf-8")
         self.assertEqual(preview.render("manuscript", preview.OUT_DIR)[0], "")
         self.open()
+
+    def built_again(self, text):
+        """The watcher's work after a change: the page built, `synced` past the write.
+        Returns the new version."""
+        self.chapter.write_text(text, encoding="utf-8")
+        self.assertEqual(preview.render("manuscript", preview.OUT_DIR)[0], "")
+        with preview.LOCK:
+            preview.STATE["manuscript"]["version"] += 1
+            preview.WATCHER["synced"] = time.time()
+            return preview.STATE["manuscript"]["version"]
 
     def source(self):
         return self.chapter.read_text(encoding="utf-8")

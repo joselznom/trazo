@@ -201,16 +201,14 @@ class WritingTests(WritingCase):
         self.wait_for("document.querySelector('.pv-save-state').textContent === 'Saved'")
         self.assertEqual([e["new"] for e in preview.edits_payload("manuscript")["edits"]], ["some"])
 
-    def test_the_page_takes_a_build_only_after_leaving_the_text(self):
+    def test_the_page_takes_a_build_with_the_caret_in_the_text(self):
         self.build()
         shown = preview.STATE["manuscript"]["version"]
         self.write_in("plain")
         with preview.LOCK:
             preview.STATE["manuscript"]["version"] += 1
-        self.wait_for("!document.querySelector('.pv-hold').hidden")
-        self.assertEqual(self.evaluate("loaded?.manuscript"), shown)
-        self.leave()
         self.wait_for(f"loaded?.manuscript === {shown + 1}")
+        self.assertTrue(self.evaluate("!!writing && document.activeElement === writing.el"))
 
 
 if __name__ == "__main__":
