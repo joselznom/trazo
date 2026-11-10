@@ -1,5 +1,5 @@
-"""What trazo does differently on Windows: process groups, file locks and
-checking a PID.
+"""What trazo does differently on Windows: process groups, file locks,
+checking a PID and syncing a folder; and on macOS, flushing the drive's cache.
 
 POSIX ends a process group with killpg and locks with flock. Windows has
 neither: a group is the process tree that taskkill /T ends (forcefully: a
@@ -45,6 +45,51 @@ def replace(source: str | os.PathLike[str], target: str | os.PathLike[str]) -> N
         except PermissionError:
             time.sleep(0.05)
     os.replace(source, target)
+
+
+# fsync answers these where a filesystem cannot sync (some network and FUSE
+# volumes, a folder on some systems): nothing more can be done there.
+_NO_SYNC = frozenset({errno.EINVAL, errno.ENOTSUP, errno.EOPNOTSUPP, errno.ENOTTY})
+
+
+def sync(fd: int, full: bool = False) -> None:
+    """Flush an open file to the disk (fsync). macOS fsync leaves the data in
+    the drive's own cache, so `full` there uses F_FULLFSYNC, which empties it
+    (about 7 ms), and falls back to fsync where the filesystem does not support
+    it. Any other failure, such as EIO, is raised."""
+    if full and sys.platform == "darwin":
+        try:
+            fcntl.fcntl(fd, fcntl.F_FULLFSYNC)
+            return
+        except OSError as exc:
+            if exc.errno not in _NO_SYNC:
+                raise
+    try:
+        os.fsync(fd)
+    except OSError as exc:
+        if exc.errno not in _NO_SYNC:
+            raise
+
+
+def sync_file(path: str | os.PathLike[str]) -> None:
+    """sync() a file that is not open (Windows flushes only a writable handle)."""
+    fd = os.open(path, os.O_RDWR if os.name == "nt" else os.O_RDONLY)
+    try:
+        sync(fd)
+    finally:
+        os.close(fd)
+
+
+def sync_folder(folder: str | os.PathLike[str], full: bool = False) -> None:
+    """sync() a folder, so the names a rename put in it survive a power loss.
+    Windows cannot open a folder that way: there it is left to the filesystem."""
+    if os.name == "nt":
+        return
+    fd = os.open(folder, os.O_RDONLY)
+    try:
+        sync(fd, full)
+    finally:
+        os.close(fd)
 
 
 # Filesystems whose atomic exchange trazo uses: macOS APFS (renamex_np with

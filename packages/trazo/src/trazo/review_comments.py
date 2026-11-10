@@ -136,7 +136,7 @@ class CommentStore:
 
     def save(self, comments: list[Comment]) -> None:
         write_atomic(self.path, (json.dumps(comments, ensure_ascii=False, indent=2) + "\n")
-                     .encode("utf-8"))
+                     .encode("utf-8"), durable=True)
 
     def history_of(self, history: list[dict[str, Any]], name: str | None) -> list[int]:
         """Indexes of the comment entries of one scope (all with None); an

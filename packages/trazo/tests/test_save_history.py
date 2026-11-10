@@ -13,10 +13,10 @@ from tempfile import TemporaryDirectory
 from typing import Any
 from unittest.mock import patch
 
-import _support  # noqa: F401  # selects the disposable paper before importing trazo
+import _support  # selects the disposable paper before importing trazo
 from test_table import Restore
 
-from trazo import diagram, preview, source_publish, table
+from trazo import diagram, preview, review_history, source_publish, table
 from trazo.local_server import LocalServer
 from trazo.review_history import History
 
@@ -77,6 +77,19 @@ class SaveHistoryTests(Restore):
         with patch("os.replace", side_effect=refuse), patch.object(source_publish, "exchange", refuse_exchange):
             yield
 
+    def edit(self, kind: str, text: str) -> tuple[str, dict[str, Any]]:
+        """The endpoint and body of an editor save that sets `text` in the fixture's
+        "results" table (its spec, or the shared spec) or "example" diagram."""
+        if kind == "diagram":
+            _, state = self.call("/__diagrams/file/example")
+            state["diagram"]["nodes"][0]["text"] = text
+            return "/__diagrams/file/example", {"diagram": state["diagram"], "base_sha256": state["sha256"]}
+        _, state = self.call("/__table?label=results")
+        return "/__table" + ("/shared" if kind == "shared" else ""), {
+            "label": "results", "ops": [{"op": "set", "value": text,
+                                         "path": "maps.method.forest" if kind == "shared" else "title"}],
+            "base_sha256": state["shared"]["sha256"] if kind == "shared" else state["sha256"]}
+
     def test_history_failure_does_not_publish_table_or_diagram_text(self) -> None:
         for kind in ("table", "shared", "diagram"):
             path = (table.spec_path("results") if kind == "table" else table.SHARED_PATH
@@ -85,17 +98,7 @@ class SaveHistoryTests(Restore):
             for error in (errno.ENOSPC, errno.EACCES):
                 with self.subTest(kind=kind, error=error), preserve(path, history):
                     before = path.read_bytes()
-                    if kind == "diagram":
-                        _, state = self.call("/__diagrams/file/example")
-                        state["diagram"]["nodes"][0]["text"] = "Saved after retry"
-                        endpoint = "/__diagrams/file/example"
-                        body = {"diagram": state["diagram"], "base_sha256": state["sha256"]}
-                    else:
-                        _, state = self.call("/__table?label=results")
-                        endpoint = "/__table" + ("/shared" if kind == "shared" else "")
-                        body = {"label": "results", "ops": [{"op": "set", "value": "Saved after retry",
-                                "path": "maps.method.forest" if kind == "shared" else "title"}],
-                                "base_sha256": state["shared"]["sha256"] if kind == "shared" else state["sha256"]}
+                    endpoint, body = self.edit(kind, "Saved after retry")
                     with self.refuse_replace(history, error):
                         status, result = self.call(endpoint, body)
                     self.assertEqual(status, 500, result)
@@ -171,6 +174,80 @@ class SaveHistoryTests(Restore):
                 self.assertEqual(path.read_bytes(), previous, "failed autosave destroyed the last saved version")
                 diagram.undo()
                 self.assertEqual(path.read_bytes(), original, "failed autosave broke the previous undo group")
+
+    def test_a_failed_save_at_the_history_limits_keeps_the_oldest_undo(self) -> None:
+        for limit in ("HISTORY_LIMIT", "HISTORY_BYTES"):
+            with self.subTest(limit=limit), TemporaryDirectory() as directory:
+                root = Path(directory).resolve()
+                source, history = root / "source.txt", History(root / "history.json")
+                source.write_text("0")
+                for n in range(1, 4):
+                    history.write_file(source, str(n).encode(), f"save {n}")
+                # The store is full: three entries, or exactly their size.
+                full = 3 if limit == "HISTORY_LIMIT" else sum(len(json.dumps(e, ensure_ascii=False))
+                                                             for e in history.load())
+                with patch.object(review_history, limit, full):
+                    with self.refuse_replace(source, errno.ENOSPC), self.assertRaises(OSError):
+                        history.write_file(source, b"failed", "failed save")
+                    for _ in range(3):
+                        history.undo()
+                self.assertEqual(source.read_text(), "0", "the failed save cost the oldest undo")
+
+    def test_a_failed_source_save_keeps_every_undo(self) -> None:
+        name = "manuscript/main/01_introduction.md"
+        path = _support.ROOT / name
+        with TemporaryDirectory() as directory, preserve(path), \
+                patch.object(preview, "FILE_HISTORY_PATH", Path(directory) / "file_history.json"), \
+                patch.object(preview, "EDITS_PATH", Path(directory) / "edits.json"):
+            original = path.read_bytes()
+
+            def save(text: str) -> tuple[int, Any]:
+                _, state = self.call(f"/__source?file={name}")
+                return self.call("/__source", {"file": name, "text": state["text"] + text,
+                                               "base_sha256": state["sha256"]})
+            for n in range(1, 4):
+                self.assertEqual(save(f"\nSave {n}.\n")[0], 200)
+            with patch.object(preview, "FILE_HISTORY_LIMIT", 3):
+                with self.refuse_replace(path, errno.ENOSPC):
+                    status, result = save("\nNever saved.\n")
+                self.assertEqual(status, 500, result)
+                status, state = self.call(f"/__source?file={name}")
+                self.assertTrue(state["can_undo"], "undo looks unavailable after a failed save")
+                for _ in range(3):
+                    status, result = self.call("/__source", {"op": "undo", "file": name})
+                    self.assertEqual(status, 200, result)
+            self.assertEqual(path.read_bytes(), original)
+
+    def test_a_damaged_table_or_diagram_history_is_set_aside_once(self) -> None:
+        damaged = b'[{"kind": "file", "label": "cut sho'
+        for kind in ("table", "diagram"):
+            path = diagram.diagram_path("example") if kind == "diagram" else table.spec_path("results")
+            history = diagram.HISTORY_PATH if kind == "diagram" else table.HISTORY_PATH
+            page = "/__diagrams/file/example" if kind == "diagram" else "/__table?label=results"
+
+            def save() -> tuple[int, Any]:
+                """The editor's page, then its save: the first that fails, or the save."""
+                status, result = self.call(page)
+                if status != 200:  # the table editor's page reads the history; the diagram's does not
+                    return status, result
+                return self.call(*self.edit(kind, "Saved over a damaged history"))
+            with self.subTest(kind=kind), preserve(path, history):
+                history.parent.mkdir(parents=True, exist_ok=True)
+                history.write_bytes(damaged)
+                status, result = save()
+                kept = list(history.parent.glob(f"{history.stem}.corrupt-*{history.suffix}"))
+                self.addCleanup(lambda found=kept: [p.unlink(missing_ok=True) for p in found])
+                self.assertEqual(status, 500, result)
+                self.assertEqual(len(kept), 1, "the damaged history was not set aside")
+                self.assertIn(str(kept[0]), result["error"])
+                self.assertEqual(kept[0].read_bytes(), damaged)
+                status, result = save()
+                self.assertEqual(status, 200, result)
+                if kind == "diagram":
+                    diagram.undo()
+                else:
+                    self.assertEqual(self.call("/__table/undo", {"label": "results"})[0], 200)
+                self.assertNotIn(b"Saved over a damaged history", path.read_bytes())
 
 
 if __name__ == "__main__":
