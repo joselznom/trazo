@@ -115,6 +115,7 @@
   spy();
   setTab(tab);
   started = true;
+  if (view === "doc") requestAnimationFrame(restoreCaret);  // focus needs the page drawn
   loadComments();
   loadEdits();
   if (view !== "submission") loadSubmission();  // applyView() opened the view
@@ -171,11 +172,13 @@
       // A newer build may still lack the last save: a reload to it would take
       // back what the author left on the page until the next one.
       // In the document view the page changes in place when it can (preview-update.js),
-      // also while the author writes; a reload waits for them.
+      // also while the author writes; a reload waits for unsaved words.
       if (stale && !all.building) {
         const how = view === "doc" ? await updatePage() : "reload";
         if (how === "done" || how === "partial") { loaded[doc] = versions[doc]; blocksHeld = how === "partial"; }
-        else if (how === "reload" && !busy && await App.reload(() => !hasUnsaved())) return;
+        // Also with the caret in the text: it comes back (restoreCaret). An MCP App
+        // view's page may stay after all, so the next poll goes on.
+        else if (how === "reload" && !hasUnsaved() && App.reload(() => !hasUnsaved())) { polling = false; return; }
       }
       hold.hidden = !(busy && (versions[doc] !== loaded[doc] || blocksHeld || (view !== "doc" && stale)));
       if (view === "doc") for (const n of docNames) if (n !== doc) loaded[n] = versions[n];  // not shown here

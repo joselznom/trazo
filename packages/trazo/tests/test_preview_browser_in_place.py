@@ -78,6 +78,25 @@ class InPlaceTests(WritingCase):
         self.wait_for("!!document.querySelector('[data-label=\"Another part ¶1\"]')")
 
 
+class OtherDocumentTests(PreviewBrowserTestCase):
+    def test_citations_from_another_document_stay_after_an_update(self):
+        other = preview.OUT_DIR / "supplementary.html"
+        other.write_text(other.read_text().replace("<p>Another paragraph.</p>",
+            '<p>As in <a href="manuscript.html#fig:external">Figure 1</a>.</p>'))
+        self.open()
+        cites = "model.items.find((it) => it.id === 'fig:external').cites.filter((c) => c.from).length"
+        self.wait_for(f"{cites} === 1")  # the other documents are read after the page starts
+        # The new page comes after the other documents are read again for the same poll.
+        self.evaluate("""(() => { const fetch = window.fetch; window.fetch = (url, options) => String(url).startsWith('/manuscript.html')
+          ? new Promise((resolve) => setTimeout(resolve, 500)).then(() => fetch(url, options)) : fetch(url, options); })()""")
+        page = preview.OUT_DIR / "manuscript.html"
+        page.write_text(page.read_text().replace("Another paragraph.", "Another paragraph, rewritten."))
+        with preview.LOCK:
+            preview.STATE["manuscript"]["version"] += 1
+        self.wait_for("document.querySelector('[data-label=\"Introduction ¶2\"]')?.textContent.includes('rewritten')")
+        self.assertEqual(self.evaluate(cites), 1)
+
+
 class ImageTests(PreviewBrowserTestCase):
     def test_an_image_rebuilt_at_the_same_path_reloads_the_page(self):
         image = _support.ROOT / "figures/external/ordinary.png"

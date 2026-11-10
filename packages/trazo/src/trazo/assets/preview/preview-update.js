@@ -209,6 +209,7 @@
     }) };
 
     Object.assign(model, Model.analyse(page, doc));
+    Model.crossCitations(analyses);  // what the other documents cite here, which analyse does not see
     for (const el of added) for (const setUp of blockSetups) setUp(el);
     setCounts(COUNTS && countsIn(next));  // also the headings
     for (const refresh of pageRefreshes) refresh();

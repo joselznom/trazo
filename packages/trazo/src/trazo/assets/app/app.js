@@ -68,10 +68,14 @@
     }).catch(() => {});
   }
   window.addEventListener("pageshow", () => { reloadPending = false; });
+  // An MCP App view reloads once the new page's bundle came, and not at all if the
+  // author declines to leave unsaved work meanwhile: this page may stay.
   function reload(canReload = () => true) {
     if (reloadPending || !canReload()) return false;
     reloadPending = true;
-    (window.TRAZO_VIEW || location).reload();
+    Promise.resolve((window.TRAZO_VIEW || location).reload()).finally(() => {
+      if (window.TRAZO_VIEW) reloadPending = false;
+    });
     return true;
   }
 
@@ -310,5 +314,5 @@
     load: (scope, name) => api(`/__review?scope=${scope}${name == null ? "" : "&name=" + encodeURIComponent(name)}`),
     change: (scope, body) => api("/__review", { ...body, scope }),
   };
-  window.Trazo = { api, watch, el, commentDeletion, plainClick, readPrefs, savePrefs, theme, mountTheme, editorLink, returnUrl, review, reveal, reload, path: pagePath, search: pageSearch, replaceHash, applyTheme };
+  window.Trazo = { api, watch, el, commentDeletion, plainClick, readPrefs, savePrefs, theme, mountTheme, editorLink, returnUrl, review, reveal, reload, reloading: () => reloadPending, path: pagePath, search: pageSearch, replaceHash, applyTheme };
 })();

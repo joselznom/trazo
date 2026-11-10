@@ -87,6 +87,20 @@ class ViewParityTests(McpAppViewTestCase):
         # The same page, and the figure with its inlined image was left as it was.
         self.assertEqual(self.frame("[w.samePage, d.querySelector('#fig\\\\:external img').kept]"), [True, True])
 
+    def test_a_reload_declined_for_unsaved_work_leaves_the_page_able_to_reload(self):
+        self.host(sandbox=False)
+        self.wait_frame(READY)
+        # Unsaved work starts while the new page's bundle is on its way, and the author stays.
+        self.frame("(() => { w.samePage = true; w.confirm = () => false; "
+                   " const s = d.createElement('script'); s.textContent = 'unsavedChecks.push(() => window.dirty === true)';"
+                   " d.body.append(s);"
+                   " w.Trazo.reload(); w.dirty = true; })()")
+        self.wait_frame("w.Trazo.reloading() === false")
+        self.assertTrue(self.frame("w.samePage === true"))
+        self.frame("w.dirty = false")
+        self.assertTrue(self.frame("w.Trazo.reload()"))
+        self.wait_frame("w?.samePage === undefined && d?.querySelector('.pv-bs-label')")
+
     def test_the_diagram_editor_has_its_figure_fonts(self):
         tokens = json.loads((Path(_support.ROOT) / "figures" / "style" / "tokens.json").read_text())
         family = tokens["fonts"]["family"]
