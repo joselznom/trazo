@@ -230,7 +230,7 @@ def shutdown() -> None:
 def serve(port=8765, on_bind=None):
     """Serve until SIGTERM, Ctrl-C or shutdown(); on_bind(port) runs once the port is bound."""
     from . import diagram_editor, preview
-    stop_event = threading.Event()
+    stop_event, watching = threading.Event(), preview.Signal()
     def stop(signum, frame):
         raise KeyboardInterrupt
     signal.signal(signal.SIGTERM, stop)
@@ -238,7 +238,7 @@ def serve(port=8765, on_bind=None):
         if on_bind:
             on_bind(server.server_port)
         # Start serving before Pandoc finishes; editors remain usable during builds.
-        workers = [threading.Thread(target=preview.build_and_watch, args=(stop_event,), daemon=True),
+        workers = [threading.Thread(target=preview.build_and_watch, args=(watching,), daemon=True),
                    threading.Thread(target=diagram_editor.CHECKER.reap, args=(stop_event,), daemon=True)]
         for worker in workers:
             worker.start()
@@ -253,6 +253,7 @@ def serve(port=8765, on_bind=None):
         finally:
             SERVING.remove(server)
             stop_event.set()
+            watching.set()
             preview.DOCX_JOB.stop("cancelled")
             diagram_editor.shutdown()
             for worker in workers:

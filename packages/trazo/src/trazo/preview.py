@@ -173,6 +173,7 @@ from .preview_sources import (  # noqa: F401
     source_state,
 )
 from .preview_watch import (  # noqa: F401
+    Signal,
     build_and_watch,
     changed_documents,
     regenerate_tables,
@@ -240,8 +241,9 @@ LOCK = threading.Lock()
 # changed (after edits were accepted); `outputs`: spec tables whose Markdown
 # is not what their spec makes (preview_edit_review.check_outputs);
 # `written`: the time.time() of the latest manuscript write from the preview
-# (preview_sources.mark_written), not yet built while later than `synced`.
-WATCHER = {"synced": 0.0, "written": 0.0, "rebuild": set(), "outputs": []}
+# (preview_sources.mark_written), not yet built while later than `synced`;
+# `wake`: what makes the running watcher check at once (preview_watch.Signal).
+WATCHER = {"synced": 0.0, "written": 0.0, "rebuild": set(), "outputs": [], "wake": None}
 
 LOCATE_LOW = 0.45  # below this a match is not trusted
 DIAGRAM_NAME = re.compile(r"^[a-z0-9][a-z0-9_-]*$")
