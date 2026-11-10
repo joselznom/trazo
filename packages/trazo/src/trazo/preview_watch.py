@@ -131,6 +131,7 @@ def build_all(names):
             with preview.LOCK:  # the page keeps its last good version
                 preview.STATE[name].update(ok=False, error=f"{type(exc).__name__}: {exc}",
                                            built=time.strftime("%H:%M:%S"))
+            CHANGES.notify()
             failed[name] = f"{name}: error {exc!r}"
     return failed
 
@@ -139,8 +140,12 @@ def synced(checked: float) -> None:
     """The pages show the sources read at `checked` (preview.WATCHER): a page
     holding its reload for a save hears it at once (trazo.preview_status)."""
     from . import preview
-    preview.WATCHER["synced"] = checked
-    CHANGES.notify()
+    with preview.LOCK:
+        was = preview.building()
+        preview.WATCHER["synced"] = checked
+        released = was and not preview.building()
+    if released:  # not on every idle pass: nothing a page shows changed then
+        CHANGES.notify()
 
 
 def report_failure(exc: Exception, last: str = "") -> str:
@@ -155,6 +160,7 @@ def report_failure(exc: Exception, last: str = "") -> str:
         with preview.LOCK:
             for state in preview.STATE.values():
                 state.update(ok=False, error=message, built=time.strftime("%H:%M:%S"))
+        CHANGES.notify()
     if message != last:  # a lasting failure is printed once, not on every retry
         print(f"[preview] {line}", flush=True)
     return message

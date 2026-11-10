@@ -66,6 +66,19 @@ class Unprocessable(RequestError):
     status = 422
 
 
+def seconds(value: str | None, name: str) -> float | None:
+    """A query parameter in seconds, None when absent; RequestError unless 0 <= value < inf."""
+    if value is None:
+        return None
+    try:
+        number = float(value)
+    except ValueError:
+        raise RequestError(f"{name} must be a number of seconds") from None
+    if not 0 <= number < float("inf"):
+        raise RequestError(f"{name} must be a number of seconds")
+    return number
+
+
 class Changes:
     """Lets a request hold its reply until what it reports changes: code that
     changes that state calls notify() afterwards, a request calls hold().

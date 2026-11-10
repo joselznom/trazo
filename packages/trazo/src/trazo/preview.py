@@ -123,7 +123,7 @@ from typing import cast
 from . import preview_export
 from .background import CommandJob
 from .expand import VALUES_PATH
-from .local_server import CHANGES, Conflict, Download, NotFound  # noqa: F401  (callers catch preview.NotFound)
+from .local_server import CHANGES, Conflict, Download, NotFound, seconds  # noqa: F401  (callers catch preview.NotFound)
 from .local_server import RequestError as CommentError
 from .preview_block_format import change_format
 from .preview_block_save import change_block
@@ -327,18 +327,6 @@ def submission_report(fields=True, fresh=None):
     return preview_submission.report(fields, manuscript_counts, states, ROOT, (REVIEW_DIR, OUT_DIR), fresh)
 
 
-def fresh_seconds(value):
-    if value is None:
-        return None
-    try:
-        seconds = float(value)
-    except ValueError:
-        raise CommentError("fresh must be a number of seconds") from None
-    if not 0 <= seconds < float("inf"):
-        raise CommentError("fresh must be a number of seconds")
-    return seconds
-
-
 def get_route(path, query):
     first = lambda key: query.get(key, [None])[0]
     routes = {
@@ -349,7 +337,7 @@ def get_route(path, query):
         "/__figure-text": lambda: get_figure_text(first("doc"), first("id")),
         "/__table-caption": lambda: get_table_caption(first("doc"), first("id")),
         "/__export": lambda: export_request(query),
-        "/__submission": lambda: submission_report(first("fields") != "0", fresh_seconds(first("fresh"))),
+        "/__submission": lambda: submission_report(first("fields") != "0", seconds(first("fresh"), "fresh")),
         "/__export-formats": lambda: {"formats": ["docx", "png", "pdf", *(
             ["svg"] if preview_export.vector_path(preview_export.image_path(first("src") or "")) else [])]},
     }
