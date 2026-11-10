@@ -9,7 +9,7 @@ from unittest.mock import patch
 
 import _support
 
-from trazo import preview, preview_edit_review, preview_watch, table
+from trazo import preview, preview_edit_review, preview_sources, preview_watch, table
 
 INTRO = "manuscript/main/01_introduction.md"
 
@@ -54,6 +54,18 @@ class EditReviewTests(unittest.TestCase):
         self.assertEqual(self.path.read_text(encoding="utf-8"), text)
         self.assertEqual(self.pending(), [])
         self.assertEqual(preview.WATCHER["rebuild"], {"manuscript"})
+
+    def test_a_save_still_reaches_the_pages_when_another_file_cannot_be_read(self):
+        self.pending()  # the baseline, taken while every file reads
+        other = _support.ROOT / "manuscript/supplementary/S1_methods.md"
+        self.addCleanup(other.write_bytes, other.read_bytes())
+        other.write_bytes(b"\xff not UTF-8\n")
+        text = self.path.read_text(encoding="utf-8")
+        preview.change_source({"file": INTRO, "text": text.replace("We studied", "We followed"),
+                               "base_sha256": preview_sources.sha256_of(self.path.read_bytes())})
+        # Published: the page holds its reload for the save and is rebuilt with it.
+        self.assertGreater(preview.WATCHER.get("written", 0.0), 0.0)
+        self.assertIn("manuscript", preview.WATCHER["rebuild"])
 
     def test_rejecting_restores_the_text_and_undo_save_brings_the_edit_back(self):
         self.pending()
