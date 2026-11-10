@@ -44,12 +44,15 @@ def main() -> int:
     if missing:
         print(f"strict override lists modules with no source file: {', '.join(missing)}")
         return 1
-    run = subprocess.run([sys.executable, "-m", "mypy"], cwd=TRAZO, capture_output=True, text=True)
+    run = subprocess.run([sys.executable, "-m", "mypy", "--no-color-output"], cwd=TRAZO, capture_output=True, text=True)
     # mypy exits 0 when clean and 1 with errors; anything else means it did not check.
     if run.returncode not in (0, 1):
         print(run.stdout + run.stderr, end="")
         return run.returncode or 1
     lines = run.stdout.splitlines()
+    if run.returncode and not any(map(ERROR.match, lines)):  # errors in a format this cannot read
+        print(run.stdout + run.stderr, end="")
+        return 1
     bad = [line for line in lines if (m := ERROR.match(line)) and module_of(m[1]) in strict]
     print("\n".join(bad) if bad else f"{len(strict)} strict modules clean")
     print(f"whole package: {lines[-1] if lines else 'no output'}")
