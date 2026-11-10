@@ -159,6 +159,7 @@
       $(".pv-xlabel", section.row).textContent = section.text;
       $(".pv-xwords", section.row).textContent = section.total ? fmt(section.total) : "";
     }
+    if (!exportPanel.hidden) renderExport();  // its pills and totals
   });
   const branch =(section) => exportSections.filter((x) => x === section || section.el.contains(x.el));
   const selected = new Set(), folded = new Set();

@@ -1,9 +1,13 @@
 """The preview takes a new build of its document in place: in Chrome, against
 the real handler and real builds."""
 
+import base64
 import time
 import unittest
 
+import _support
+from _mcp_app_view import PNG
+from _preview_browser import PreviewBrowserTestCase
 from _preview_writing import TEXT, WritingCase
 
 from trazo import preview
@@ -65,12 +69,37 @@ class InPlaceTests(WritingCase):
         self.assertIn("very", self.evaluate("document.querySelector('.pv-page').textContent"))
         self.assert_same_as_a_fresh_load()
 
+    def test_new_values_reach_the_page_and_its_value_tips(self):
+        values = _support.ROOT / "data/values.json"
+        self.keep_files(values)
+        self.build()
+        self.assertEqual(self.evaluate("loadValues().then((v) => v['cohort.n'].text)"), "120")
+        values.write_text(values.read_text().replace('"value": 120, "text": "120"', '"value": 121, "text": "121"'))
+        version = self.built_again(TEXT)
+        self.wait_for(f"loaded.manuscript === {version}")
+        self.assertIn("121 fields", self.evaluate("document.querySelector('.pv-page').textContent"))
+        self.assertEqual(self.evaluate("loadValues().then((v) => v['cohort.n'].text)"), "121")
+
     def test_a_new_section_reloads_the_page(self):
         self.build()
         self.evaluate("window.samePage = true")
         self.built_again(TEXT + "\n## Another part\n\nIts words.\n")
         self.wait_for("window.samePage === undefined")
         self.wait_for("!!document.querySelector('[data-label=\"Another part ¶1\"]')")
+
+
+class ImageTests(PreviewBrowserTestCase):
+    def test_an_image_rebuilt_at_the_same_path_reloads_the_page(self):
+        image = _support.ROOT / "figures/external/ordinary.png"
+        self.keep_files(image)
+        image.parent.mkdir(parents=True, exist_ok=True)
+        image.write_bytes(base64.b64decode(PNG))
+        self.open()
+        self.evaluate("window.samePage = true")
+        image.write_bytes(base64.b64decode(PNG) + b"\0")  # a new build of it: the page's HTML is the same
+        with preview.LOCK:
+            preview.STATE["manuscript"]["version"] += 1
+        self.wait_for("window.samePage === undefined")
 
 
 if __name__ == "__main__":

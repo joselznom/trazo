@@ -5,6 +5,7 @@
   // ---------------------------------------------------------------- tooltips
   // Substituted values and in-text citations (hover or focus).
   let valuesPromise = null;
+  pageRefreshes.push(() => { valuesPromise = null; });  // a new build may bring new values
   const loadValues = () => (valuesPromise = valuesPromise
     || fetch("/__values", { cache: "no-store" }).then((r) => r.json()).catch(() => ({})));
   setUpBlocks((root) => within(root, ".pv-val").forEach((el) => { el.tabIndex = 0; }));

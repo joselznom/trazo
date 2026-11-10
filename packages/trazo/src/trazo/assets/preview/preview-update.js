@@ -55,6 +55,9 @@
     next.getElementById("pk-shell-ready")?.remove();  // after the viewer's scripts: never in the page
     const fresh = Model.blocks(next.body);
     if (loadedConfig(next.body) !== loadedConfig(document.body)) return null;
+    // A changed image reads the same in its block (trazo.server.image_stamp).
+    const images = (d) => d.querySelector('meta[name="trazo-images"]')?.content;
+    if (images(next) !== images(document)) return null;
     if (fresh.sections.length !== shownBlocks.sections.length
         || parentIndexes(fresh.sections).join() !== parentIndexes(shownBlocks.sections).join()) return null;
     const groups = fresh.groups.map((els, g) => {

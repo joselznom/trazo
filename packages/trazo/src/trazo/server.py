@@ -10,6 +10,7 @@ from __future__ import annotations
 import hashlib
 import html
 import json
+import re
 import signal
 import threading
 from functools import lru_cache
@@ -83,10 +84,22 @@ def page_stamp(page: str) -> str:
     return digest.hexdigest()[:32]
 
 
+def image_stamp(page: str) -> str:
+    """A digest of the local images a document page shows (path, size, time):
+    the viewer reloads for a build that changed one, as its blocks read the same."""
+    digest = hashlib.sha256()
+    for src in sorted(set(re.findall(r'<img\b[^>]*?\ssrc="([^"]+)"', page))):
+        path = static_file(html.unescape(src))
+        info = path.stat() if path and path.is_file() else None
+        digest.update(f"{src}\0{info and info.st_size}\0{info and info.st_mtime_ns}\n".encode())
+    return digest.hexdigest()[:32]
+
+
 def decorate_page(page, counts=None, stamp=False):
     """A page with the workspace's shared head; `counts` (a document page's,
     from counts.page_counts) becomes window.PREVIEW_COUNTS. `stamp` adds
-    <meta name="trazo-page"> with the page_stamp of the decorated page."""
+    <meta name="trazo-page"> with the page_stamp of the decorated page, and
+    <meta name="trazo-images"> with its image_stamp."""
     # builds: document name -> the DOCX its full build writes ("" = no full build).
     builds = {name: PROJECT.config["documents"][name]["docx"] if PROJECT.document_build(name) is not None else ""
               for name in PROJECT.documents}
@@ -119,7 +132,8 @@ def decorate_page(page, counts=None, stamp=False):
         page = head + '<span id="pk-shell-ready" hidden></span>' + end + rest
     page = page.replace("</head>", shared + "</head>", 1)
     if stamp:
-        page = page.replace("</head>", f'<meta name="trazo-page" content="{page_stamp(page)}"></head>', 1)
+        page = page.replace("</head>", f'<meta name="trazo-page" content="{page_stamp(page)}">'
+                            f'<meta name="trazo-images" content="{image_stamp(page)}"></head>', 1)
     return page.encode()
 
 
