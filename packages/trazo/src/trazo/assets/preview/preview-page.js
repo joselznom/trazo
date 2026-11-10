@@ -7,10 +7,14 @@
 // trazo.preview.VIEWER_SCRIPTS; their top-level names are shared globals.
   const Model = window.PreviewModel;
   if (!Model) {  // preview-model.js did not load (or this is a stale tab after an upgrade)
-    const note = document.createElement("p");
-    note.style.cssText = "margin:2em;font:16px system-ui,sans-serif";
-    note.textContent = "Viewer scripts did not load; reload the page.";
-    document.body.prepend(note);
+    // The served page's script guard (trazo.server) may have shown it already.
+    if (!document.getElementById("pk-script-note")) {
+      const note = document.createElement("p");
+      note.id = "pk-script-note";
+      note.style.cssText = "margin:2em;font:16px system-ui,sans-serif";
+      note.textContent = "Viewer scripts did not load; reload the page.";
+      document.body.prepend(note);
+    }
     // Throw rather than return, so the viewer can be split into classic scripts.
     throw new Error("preview-model.js did not load");
   }

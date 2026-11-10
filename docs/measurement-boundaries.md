@@ -60,6 +60,20 @@ Windows avoids closing pipes owned by still-running reader threads. A detached
 process can keep such a daemon thread alive. The changed Windows path and Linux
 process-group behavior were not run locally; all measured evidence is macOS.
 
+## Viewer page loads
+
+A served page (document, table editor, diagram editor) loads about 45 files
+over separate HTTP/1.0 connections. On Windows CI about one test in 600 lost
+one script: the request failed inside Chrome (status 0) without reaching the
+server, and the page stayed half-started. That network layer is not
+identified. A trazo script that fails while the page is still parsing now
+shows "Viewer scripts did not load; reload the page." and reloads the page
+once per tab; if it fails again the note stays and nothing reloads. A failure
+after the page has started never reloads it, so typed text is not lost.
+Checked on macOS by resetting one script's connection in Chrome; the Windows
+rate after the fix is not measured. A failed wait in the browser tests now
+prints the failed resources with their status and the server's request log.
+
 ## Storage and recovery limits
 
 Table and diagram history is now persisted before source publication. Pending
@@ -83,8 +97,15 @@ check runs just before `os.replace` and replies say `exact: false`. The
 a late write through a file held open past 600 seconds, a write at the instant
 of the rename without exchange, and a writer's own read-modify-write.
 
-A first build during an edit can contain the earlier snapshot; the next build
-incorporates the change. Single-build snapshot coherence remains unproven.
+A Word build snapshots its watched inputs (content hash, mtime, size, inode)
+before reading them and again just before publishing; on any difference it
+discards the result, retries once, then fails and keeps the earlier DOCX. Steps,
+the table render and the diagram export compare pre-run and post-run snapshots
+and write no record when an input changed. So a published DOCX and its stamp
+describe one state of those inputs, and undoing a mid-build edit rebuilds it.
+Not covered: an edit undone with its mtime and inode restored, files outside the
+watched set (paths Pandoc resolves by itself, a step's undeclared reads), and
+documents a `[documents] build` command builds (mtime freshness).
 Persistent disk/permission/tool failures must be repaired in the environment;
 automatic recovery means the next ordinary operation succeeds after that fault
 is removed. ENOSPC was injected through file APIs; the owner's disk was not filled.
