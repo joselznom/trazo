@@ -184,7 +184,7 @@ def served_page(path: str) -> bytes | None:
     # The version before the text: a build landing in between makes the page
     # reload once more, never keep an older text than it claims.
     with preview.LOCK:
-        version = preview.STATE[name]["version"]
+        version = preview.STATE.get(name, {}).get("version")  # none: the viewer keeps its first status
     page = built.read_text(encoding="utf-8")
     return decorate_page(page, served_counts(name, page), stamp=True, version=version)
 
