@@ -55,18 +55,29 @@ _NO_SYNC = frozenset({errno.EINVAL, errno.ENOTSUP, errno.EOPNOTSUPP, errno.ENOTT
 def sync(fd: int, full: bool = False) -> None:
     """Flush an open file to the disk (fsync). macOS fsync leaves the data in
     the drive's own cache, so `full` there uses F_FULLFSYNC, which empties it
-    (about 7 ms), and falls back to fsync where the filesystem refuses it."""
+    (about 7 ms), and falls back to fsync where the filesystem does not support
+    it. Any other failure, such as EIO, is raised."""
     if full and sys.platform == "darwin":
         try:
             fcntl.fcntl(fd, fcntl.F_FULLFSYNC)
             return
-        except OSError:
-            pass
+        except OSError as exc:
+            if exc.errno not in _NO_SYNC:
+                raise
     try:
         os.fsync(fd)
     except OSError as exc:
         if exc.errno not in _NO_SYNC:
             raise
+
+
+def sync_file(path: str | os.PathLike[str]) -> None:
+    """sync() a file that is not open (Windows flushes only a writable handle)."""
+    fd = os.open(path, os.O_RDWR if os.name == "nt" else os.O_RDONLY)
+    try:
+        sync(fd)
+    finally:
+        os.close(fd)
 
 
 def sync_folder(folder: str | os.PathLike[str], full: bool = False) -> None:

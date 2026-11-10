@@ -35,7 +35,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from uuid import uuid4
 
-from .portable import ExchangeUnsupported, exchange, replace, sync, sync_folder
+from .portable import ExchangeUnsupported, exchange, replace, sync, sync_file, sync_folder
 from .review_storage import ORPHAN_SECONDS, REVIEW_DIR, ROOT, write_atomic
 
 CONFLICTS_DIR = REVIEW_DIR / "conflicts"
@@ -82,6 +82,7 @@ def _keep(source: Path, name: str, kind: str) -> Path:
     target = _copy_path(name, kind)
     try:
         os.replace(source, target)
+        sync_file(target)  # a late write into a parked file may not be on the disk yet
         sync_folder(target.parent)
     except OSError as exc:
         if exc.errno != errno.EXDEV:  # the review folder is on another disk: copy it

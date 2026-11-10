@@ -100,8 +100,9 @@ file, and a killed Word build leaves `output/.trazo-*` with an unfinished DOCX.
 Each is locked while in use (the folder through its `.lock` file); the next write
 of the same file, or the next Word build, removes those older than 600 s that
 nobody holds, the same grace as the parked files of a source save. A writer
-suspended between creating its file and locking it (microseconds) for 10 minutes
-loses it and fails visibly. On network or synced folders another machine's lock
+suspended for 10 minutes in the microseconds before it locks its file, or between
+closing it and the rename, loses it and fails visibly (`FileNotFoundError`, the target
+untouched). On network or synced folders another machine's lock
 is invisible. Temporaries of files never written again stay; new papers'
 `.gitignore` hides both temporary patterns. Not covered: `trazo setup`'s
 `.setup-*` folder and `trazo new`'s staging folder after a kill (code reading).
