@@ -41,5 +41,6 @@ wrote never disappears for a moment. Only the blocks that changed are replaced,
 with the paragraph numbers, figures, citations and counts after them, so your
 place, caret and open panels stay. This goes on while you write: the paragraph
 you are in, and the ones ⌘Z may put back, wait until you leave the text. A
-change beyond that, such as a new section, reloads the page instead, once you
-leave the text.
+change beyond that, such as a new section, reloads the page instead: with
+nothing unsaved in your paragraph it comes back with the caret where it was,
+and with unsaved words it waits until you leave the text.

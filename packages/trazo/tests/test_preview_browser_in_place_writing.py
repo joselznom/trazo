@@ -89,6 +89,33 @@ class WritingInPlaceTests(UndoCase):
         self.assertEqual(self.source(), TEXT)
         self.assertIn("121 fields", self.evaluate(PAGE_TEXT))  # what the build brought stays
 
+    def test_a_reload_puts_the_caret_back_where_it_was(self):
+        self.build()
+        self.evaluate("window.samePage = true")
+        self.write_in("plain")
+        self.caret_after("plain")
+        self.built_again(TEXT + "\n## Another part\n\nIts words.\n")  # a new section: a reload
+        self.wait_for("window.samePage === undefined")
+        self.wait_for("typeof started !== 'undefined' && started && !!writing && document.activeElement === writing.el")
+        self.assertTrue(self.evaluate("getSelection().isCollapsed"
+                                      " && getSelection().focusNode.data.slice(0, getSelection().focusOffset).endsWith('plain')"))
+        self.type("ly")
+        self.assertIn("plainly words", self.evaluate("textOf(writing.el)"))
+
+    def test_a_reload_waits_for_unsaved_words(self):
+        self.build()
+        self.evaluate("window.samePage = true")
+        self.write_in("plain")
+        self.type("very ")
+        self.built_again(TEXT + "\n## Another part\n\nIts words.\n")
+        self.wait_for("!document.querySelector('.pv-hold').hidden")
+        self.assertTrue(self.evaluate("window.samePage === true"))
+        self.leave()
+        self.settled()
+        self.built_again(self.source())  # the build of that save
+        self.wait_for("window.samePage === undefined")
+        self.wait_for("!!document.querySelector('.pv-page')?.textContent.includes('very')")
+
 
 if __name__ == "__main__":
     unittest.main()

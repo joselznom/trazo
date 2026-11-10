@@ -107,6 +107,35 @@
     return ed;
   }
 
+  // A reload the page cannot avoid (preview-update.js) may come with the caret in
+  // a paragraph with nothing unsaved: the page comes back writing there, at the
+  // same place, if the paragraph reads the same. Kept before the reload, not on
+  // unload: an MCP App view swaps frames without one.
+  const caretKey = "preview-caret:" + Trazo.path();
+  function keepCaret() {
+    const selection = getSelection();
+    if (!writing || !selection.rangeCount || !writing.el.dataset.label) { sdel(caretKey); return; }
+    const { nodes, map, flat } = flatText(writing.el), node = selection.focusNode, offset = selection.focusOffset;
+    let at = map.findIndex(([i, k]) => nodes[i] === node && k >= offset);
+    if (at < 0) { const last = map.findLastIndex(([i]) => nodes[i] === node); at = last < 0 ? flat.length : last + 1; }
+    sset(caretKey, JSON.stringify({ label: writing.el.dataset.label, flat, at }));
+  }
+  function restoreCaret() {
+    let kept = null;
+    try { kept = JSON.parse(sget(caretKey)); } catch (e) { kept = null; }
+    sdel(caretKey);
+    const el = kept && model.labelled.find((x) => x.dataset.label === kept.label);
+    if (!el || flatText(el).flat !== kept.flat || !startWriting(el)) return;
+    forgetPageText();  // writing drops the paragraph's line breaks
+    const { nodes, map } = flatText(el), range = document.createRange();
+    if (kept.at < map.length) range.setStart(nodes[map[kept.at][0]], map[kept.at][1]);
+    else if (map.length) range.setStart(nodes[map.at(-1)[0]], map.at(-1)[1] + 1);
+    else range.setStart(el, el.childNodes.length);
+    el.focus({ preventScroll: true });
+    getSelection().removeAllRanges();
+    getSelection().addRange(range);
+  }
+
   function stopWriting() {
     const ed = writing;
     writing = null;
