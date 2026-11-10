@@ -64,7 +64,7 @@ class InPlaceTests(WritingCase):
         self.leave()
         self.wait_for("saves === 0")
         version = self.built_again(self.source())
-        self.wait_for(f"loaded.manuscript === {version}")
+        self.wait_for(f"loaded?.manuscript === {version}")
         self.assertTrue(self.evaluate("window.samePage === true"))
         self.assertIn("very", self.evaluate("document.querySelector('.pv-page').textContent"))
         self.assert_same_as_a_fresh_load()
@@ -76,7 +76,7 @@ class InPlaceTests(WritingCase):
         self.assertEqual(self.evaluate("loadValues().then((v) => v['cohort.n'].text)"), "120")
         values.write_text(values.read_text().replace('"value": 120, "text": "120"', '"value": 121, "text": "121"'))
         version = self.built_again(TEXT)
-        self.wait_for(f"loaded.manuscript === {version}")
+        self.wait_for(f"loaded?.manuscript === {version}")
         self.assertIn("121 fields", self.evaluate("document.querySelector('.pv-page').textContent"))
         self.assertEqual(self.evaluate("loadValues().then((v) => v['cohort.n'].text)"), "121")
 

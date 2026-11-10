@@ -208,9 +208,9 @@ class WritingTests(WritingCase):
         with preview.LOCK:
             preview.STATE["manuscript"]["version"] += 1
         self.wait_for("!document.querySelector('.pv-hold').hidden")
-        self.assertEqual(self.evaluate("loaded.manuscript"), shown)
+        self.assertEqual(self.evaluate("loaded?.manuscript"), shown)
         self.leave()
-        self.wait_for(f"loaded.manuscript === {shown + 1}")
+        self.wait_for(f"loaded?.manuscript === {shown + 1}")
 
 
 if __name__ == "__main__":

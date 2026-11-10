@@ -196,11 +196,11 @@ class ReloadAfterSavesTests(UndoCase):
         self.saved_now()
         # The watcher has not caught up with this save: that build lacks it, so the page keeps its own.
         time.sleep(2.5)  # two polls of the page's status
-        self.assertEqual(self.evaluate("loaded.manuscript"), shown)
+        self.assertEqual(self.evaluate("loaded?.manuscript"), shown)
         with preview.LOCK:
             preview.STATE["manuscript"]["version"] += 1
             preview.WATCHER["synced"] = time.time()
-        self.wait_for(f"loaded.manuscript === {shown + 2}")
+        self.wait_for(f"loaded?.manuscript === {shown + 2}")
 
 
 if __name__ == "__main__":

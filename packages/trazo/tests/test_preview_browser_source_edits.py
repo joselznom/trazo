@@ -222,7 +222,7 @@ class SourceEditTests(PreviewBrowserTestCase):
                     preview.WATCHER["synced"] = time.time()
                     version = preview.STATE["manuscript"]["version"]
                 # The page takes the build in place.
-                self.wait_for(f"loaded.manuscript === {version}")
+                self.wait_for(f"loaded?.manuscript === {version}")
                 self.assertEqual(self.evaluate("performance.timeOrigin"), before["origin"])
                 if shortening:
                     target = target.replace(json.dumps(long_text), json.dumps(short_text))
