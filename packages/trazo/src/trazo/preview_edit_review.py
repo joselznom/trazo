@@ -35,7 +35,8 @@ from typing import Any, cast
 
 from . import edit_diff, preview_blocks
 from .local_server import RequestError
-from .review_storage import StoreError, review_lock, write_atomic, write_json
+from .review_storage import StoreError, review_lock, write_json
+from .source_publish import publish
 
 MAX_ITEMS = 10_000
 
@@ -139,7 +140,7 @@ def reader() -> tuple[Callable[[Path], str] | None, Callable[[], None]]:
 def page_files(doc: str) -> list[str]:
     """The tracked files a document's page is built from, in page order."""
     from . import preview
-    from .build_graph import expand_includes
+    from .build_inputs import expand_includes
     names = {path.resolve(): name for name, path in tracked().items()}
     found = (names.get(path.resolve()) for path in expand_includes(preview.PROJECT.document_files(doc)))
     return list(dict.fromkeys(name for name in found if name))
@@ -179,13 +180,15 @@ def _items(request: Any) -> tuple[str, dict[str, list[str]]]:
 
 def change_edits(request: Any) -> dict[str, Any]:
     """Accept or reject edits; those that changed since the page was built
-    are left as they are and listed as missed ({file, id})."""
+    are left as they are and listed as missed ({file, id}), as are those of
+    a file another program wrote while their rejection was being published
+    (source_publish keeps that version and the rejected text)."""
     from . import preview
     from .preview_sources import read_file_history, read_source, save_file_history, sha256_of, source_path
     op, by_file = _items(request)
     paths = {name: source_path(name) for name in by_file}  # validates every name first
     ensure()
-    done, missed = 0, []
+    done, missed, warnings = 0, [], []
     with review_lock():
         store = load()
         if store is None:
@@ -204,12 +207,19 @@ def change_edits(request: Any) -> dict[str, Any]:
                 store["files"][name] = edit_diff.accept(store["files"].get(name, ""), chosen)
                 continue
             new = edit_diff.reject(text, chosen).encode("utf-8")
+            # Recorded before publishing, as a save is: a damaged history stops the
+            # rejection first, and the text it replaces is in history if trazo dies.
             history = read_file_history() if history is None else history
             history.append({"time": time.strftime("%Y-%m-%d %H:%M:%S"), "at": time.time_ns(), "file": name, "kind": "reject",
                             "before_text": text, "before_sha": sha256_of(data), "after_sha": sha256_of(new)})
-            write_atomic(path, new)
-        if history is not None:
             save_file_history(history)
+            result = publish(path, new, data, name)
+            warnings += [result.warning] if result.warning else []
+            if not result.published:
+                history.pop()
+                save_file_history(history)
+                done -= len(chosen)
+                missed += [{"file": asked, "id": e.id} for e in chosen]
         if op == "accept" and done:
             save(store)
     if op == "accept" and done:
@@ -217,7 +227,8 @@ def change_edits(request: Any) -> dict[str, Any]:
         rebuild = {doc for doc in preview.DOCS if names & set(page_files(doc))}
         with preview.LOCK:
             cast(set[str], preview.WATCHER["rebuild"]).update(rebuild)
-    return {"done": done, "missing": len(missed), "missed": missed}
+    return {"done": done, "missing": len(missed), "missed": missed,
+            **({"warning": " ".join(warnings)} if warnings else {})}
 
 
 def absorb(name: str, before: str, after: str) -> None:

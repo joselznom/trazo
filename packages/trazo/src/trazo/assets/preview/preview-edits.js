@@ -162,6 +162,7 @@
     // The list keeps matching the marks until the rebuilt page replaces both.
     if (missed.size) toast(`${plural(missed.size, "edit")} changed since the page was built and stayed as they are; the page reloads with them.`);
     else if (message) toast(message);
+    if (payload.warning) toast(payload.warning);
     return payload;
   }
 

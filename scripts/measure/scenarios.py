@@ -134,10 +134,16 @@ def concurrent_writers(root: Path, *, atomic: bool = False) -> dict:
                 proc.wait(timeout=5)
     retained = marker in source.read_text() or any(marker in p.read_text() for p in (root / "notes/review").glob("*history.json"))
     response = json.loads(output.read_text())
-    return {"violations": [] if retained else ["HTTP save acknowledged success after overwriting the independent writer; its text is absent from history"],
-            "retained": retained, "response": response, "site": site, "log": stdout + stderr,
+    violations = [] if retained else ["HTTP save acknowledged success after overwriting the independent writer; its text is absent from history"]
+    if response["status"] == 409:
+        # A conflict must keep the text the browser sent, not only the other writer's.
+        browser = "The browser saved a new paragraph."
+        if not any(browser in (root / p).read_text() for p in response["body"].get("kept", [])):
+            violations.append("HTTP 409 without a kept copy of the browser's text")
+    return {"violations": violations, "retained": retained, "response": response, "site": site, "log": stdout + stderr,
             "writer": "atomic replacement" if atomic else "in-place write",
-            "limitation": "An independent writer does not take review_lock. A change after the locked read and before publication can be overwritten without notice or recovery."}
+            "limitation": "An independent writer does not take review_lock. Without atomic exchange (exFAT, FAT, HFS+, "
+                          "network filesystems, Windows) a write in the instant before publication can still be lost."}
 
 
 def browser_cases(root: Path, name: str) -> dict:

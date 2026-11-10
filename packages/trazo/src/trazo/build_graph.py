@@ -39,38 +39,33 @@ import glob
 import hashlib
 import json
 import os
-import re
 import shutil
 import subprocess
 import sys
 import tempfile
-import urllib.parse
 import zipfile
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
 from . import __version__
+from .build_inputs import (
+    ATTEMPTS,
+    Snapshot,
+    changes,
+    expand_inputs,
+    image_targets,
+    missing_resources,
+    recorded_inputs,
+    snapshot,
+    watched,
+)
 from .build_lock import child_env, locked
 from .project import ASSETS_DIR, PROJECT, Project
 from .review_storage import write_atomic, write_json
 
 STATE_NAME = "steps.json"
 BUILD_ENV = "TRAZO_BUILD_ENV"
-TARGET = re.compile(r"\s*(?:<([^>\n]+)>|([^\s)]+))")
-
-
-MISSING_RESOURCE = re.compile(r"Could not fetch resource '?(.+?)'?(?::\s|$)", re.M)
-
-
-def missing_resources(stderr: str) -> str | None:
-    """The error for images Pandoc could not find (it only warns, and writes
-    the image's description), or None."""
-    missing = [urllib.parse.unquote(name) for name in MISSING_RESOURCE.findall(stderr)]
-    if not missing:
-        return None
-    return (f"Pandoc could not find {', '.join(dict.fromkeys(missing))}: build it first "
-            "(a [[build.steps]] entry with it in outputs) or fix the image path")
 
 
 class BuildError(Exception):
@@ -104,65 +99,6 @@ def order(steps: list[dict[str, Any]]) -> list[dict[str, Any]]:
         for needs in waiting.values():
             needs.discard(ready[0]["name"])
     return ordered
-
-
-def image_targets(markdown: str) -> list[str]:
-    """Local targets of Markdown images, `![alt](target "title")`; the alt
-    text may hold brackets ([Title.]{.caption-title}) and nested images."""
-    found, start = [], 0
-    while (start := markdown.find("![", start)) != -1:
-        depth, end = 0, start + 1
-        while end < len(markdown):
-            char = markdown[end]
-            if char == "\\":
-                end += 1
-            elif char == "[":
-                depth += 1
-            elif char == "]":
-                depth -= 1
-                if not depth:
-                    break
-            end += 1
-        start += 2
-        if depth or markdown[end + 1:end + 2] != "(":
-            continue
-        if (match := TARGET.match(markdown, end + 2)) and "://" not in (target := match[1] or match[2]):
-            found.append(target)
-    return found
-
-
-def expand_includes(paths: list[Path]) -> list[Path]:
-    """The sources and every file they `!include`, recursively (missing ones too)."""
-    from .expand import include_lines, resolve_include
-    found, pending = [], list(paths)
-    while pending:
-        path = pending.pop(0)
-        if path in found:
-            continue
-        found.append(path)
-        try:
-            text = path.read_text(encoding="utf-8")
-        except OSError:
-            continue
-        for _, target in include_lines(text):
-            if target is not None:
-                try:
-                    pending.append(resolve_include(target, path))
-                except FileNotFoundError:
-                    pass
-    return found
-
-
-def recorded_inputs(paths) -> list[str]:
-    """The inputs a generated JSON file records ({"inputs": {path: sha256}})."""
-    found = []
-    for path in paths:
-        try:
-            found += [name for name in json.loads(path.read_text(encoding="utf-8")).get("inputs", {})
-                      if not Path(name).is_absolute()]
-        except (OSError, ValueError, AttributeError):
-            pass
-    return found
 
 
 class Builder:
@@ -225,15 +161,21 @@ class Builder:
         return sorted(found)
 
     def digest(self, command, inputs, extra=None, env=True) -> str:
-        """The hash of a command, its input contents, `extra` and, with `env`, [build.env]."""
-        contents = {}
-        for path in sorted(set(inputs)):
-            try:
-                contents[self.rel(path)] = hashlib.sha256(path.read_bytes()).hexdigest()
-            except OSError:
-                contents[self.rel(path)] = None
+        """The hash of a command, its input contents (paths, or a snapshot of
+        them), `extra` and, with `env`, [build.env]."""
+        seen = inputs if isinstance(inputs, dict) else snapshot(inputs)
+        contents = {self.rel(path): value and value[0] for path, value in seen.items()}
         data = {"command": command, "inputs": contents, "extra": extra, **({"env": self.env} if env else {})}
         return hashlib.sha256(json.dumps(data, sort_keys=True).encode()).hexdigest()
+
+    def held_still(self, before: Snapshot, what: str, paths=(), written=()) -> Snapshot:
+        """BuildError when a file of `before` changed, except `written` (the
+        run's outputs), so its stage records nothing; else a new snapshot of `paths`."""
+        after, moved = changes(before, paths, written)
+        if moved:
+            raise BuildError(f"{what}: {', '.join(self.rel(p) for p in moved)} changed while it ran; "
+                             "build again once the edits are saved")
+        return {path: after[path] for path in paths}
 
     def fresh(self, key: str, digest: str, outputs=()) -> bool:
         record = self.state.get(key)
@@ -382,14 +324,17 @@ class Builder:
         if self.fresh(key, digest, declared) and all(self.files([out]) for out in outputs):
             return
         self.python()
+        started = snapshot(hashed())  # after uv sync, which may write uv.lock
+        writes = outputs if writes is None else writes
         self.did(label or key)
-        self.guarded(key, outputs if writes is None else writes,
-                     lambda: self.run_python(run, label or key))
+        self.guarded(key, writes, lambda: self.run_python(run, label or key))
+        now = hashed()  # with the inputs the script recorded
+        after = self.held_still(started, label or key, now, self.files(writes))
         written = record_outputs() if record_outputs else self.files(outputs)
         missing = [out for out in outputs if not any(p.is_file() and p.stat().st_size for p in self.files([out]))]
         if missing:
             raise BuildError(f"{label or key} did not write {', '.join(missing)}")
-        self.record(key, self.digest(run, hashed(), extra), written)
+        self.record(key, self.digest(run, after, extra), written)
 
     def step(self, step: dict[str, Any], key: str | None = None) -> None:
         if step["run"]:
@@ -453,9 +398,8 @@ class Builder:
         if not labels:
             return
         outputs = [table.output_path(label) for label in labels]
-        digest = self.digest(["table", "render", "--all"],
-                             [*specs.glob("*.json"), *self.project.path("table_data").glob("*.json")],
-                             __version__, env=False)
+        started = snapshot([*specs.glob("*.json"), *self.project.path("table_data").glob("*.json")])
+        digest = self.digest(["table", "render", "--all"], started, __version__, env=False)
         if self.fresh("tables-render", digest, outputs):
             return
         self.did("tables: render")
@@ -464,6 +408,7 @@ class Builder:
             if table.main(["render", "--all"]):
                 raise BuildError("table render --all failed")
         self.guarded("tables-render", [self.rel(p) for p in outputs], render)
+        self.held_still(started, "tables: render")
         missing = [self.rel(p) for p in outputs if not p.is_file()]
         if missing:
             raise BuildError(f"table render did not write {', '.join(missing)}")
@@ -483,8 +428,9 @@ class Builder:
                             for p in self.project.path(key).rglob("*") if p.is_file()),
                           self.project.path("figure_tokens"), self.project.path("values"),
                           ASSETS_DIR / "diagram" / "renderer.js"]
-        digest = lambda: self.digest(["diagram", "export"], inputs(), env=False)  # noqa: E731
-        if not diagram.all_diagrams() or self.fresh("diagrams", digest()):
+        started = snapshot(inputs())
+        digest = self.digest(["diagram", "export"], started, env=False)
+        if not diagram.all_diagrams() or self.fresh("diagrams", digest):
             return
         stale = [p.stem for p in diagram.all_diagrams() if diagram.export_state(p) not in ("current", "draft")]
         if stale:
@@ -494,7 +440,10 @@ class Builder:
             self.forget("diagrams")
             if diagram.cmd_export(stale, False):
                 raise BuildError("diagram export failed")
-        self.record("diagrams", digest())
+            now = inputs()  # with the new exports, which are inputs too
+            after = self.held_still(started, "diagrams: export", now, (p for n in stale for p in diagram.export_paths(n)))
+            digest = self.digest(["diagram", "export"], after, env=False)
+        self.record("diagrams", digest)
 
     def prepare(self, exports: bool = True) -> None:
         """Every stage before the per-document ones; without `exports`, all
@@ -548,15 +497,15 @@ class Builder:
         sources = self.project.document_files(name)
         target = folder / f"{name}.md"
         metadata_file(name, folder)
-        inputs = [*expand_includes(sources), self.project.path("values"),
-                  self.project.path("table_specs") / "_shared.json", self.project.path("metadata"),
-                  self.root / "trazo.toml"]
+        started = snapshot(expand_inputs(self.project, name))
         extra = [[self.rel(p) for p in sources], __version__, *(["authors"] if self.authors else [])]
-        digest = self.digest(["expand", name], inputs, extra, env=False)
+        digest = self.digest(["expand", name], started, extra, env=False)
         if not self.fresh(f"expand:{name}", digest, [target]):
             self.did(f"expand: {name}")
             self.forget(f"expand:{name}")
-            write_atomic(target, expand_files(sources, document=name, with_authors=self.authors).encode("utf-8"))
+            text = expand_files(sources, document=name, with_authors=self.authors)
+            self.held_still(started, f"expand: {name}")  # no mix of versions
+            write_atomic(target, text.encode("utf-8"))
             self.record(f"expand:{name}", digest, [target])
         return target
 
@@ -577,7 +526,23 @@ class Builder:
 
     def pandoc_docx(self, name: str, indexes=()) -> None:
         """trazo's own Word build of a document: expand, Pandoc, after-docx
-        steps, docx-finish; skipped when fresh."""
+        steps, docx-finish; skipped when fresh. Published and recorded only
+        when its inputs held still; else built again, and after ATTEMPTS it
+        fails, keeping the earlier file."""
+        for attempt in range(1, ATTEMPTS + 1):
+            started = snapshot(watched(self.project, name))  # what it reads before Pandoc
+            try:
+                return self.pandoc_docx_once(name, indexes, started)
+            except Exception:  # also when an edit made it fail (an image renamed with its link)
+                if not (moved := changes(started)[1]):
+                    raise
+            changed = f"docx: {name}: {', '.join(self.rel(p) for p in moved)} changed during the build"
+            if attempt == ATTEMPTS:
+                raise BuildError(f"{changed} {ATTEMPTS} times; the earlier Word file is kept. "
+                                 "Build again once the edits are saved") from None
+            self.log(f"[build] {changed}; building again")
+
+    def pandoc_docx_once(self, name: str, indexes, started: Snapshot) -> None:
         output = self.project.document_docx(name)
         source = self.expand(name)
         numbering = self.project.path("build") / f"{name}-numbering.json"
@@ -596,8 +561,10 @@ class Builder:
                   *(self.root / s["run"][0] for s in after if s["run"]),
                   *([self.root / "uv.lock"] if after else [])]
         commands = [self.pandoc(source, numbering, output), *(s["run"] for s in after)]
+        seen = snapshot(inputs)
+        started.update((path, value) for path, value in seen.items() if path not in started)
         # [build.env] only matters to the after-docx steps that receive it.
-        digest = self.digest(commands, inputs, [sorted(indexes), self.versions()], env=bool(after))
+        digest = self.digest(commands, seen, [sorted(indexes), self.versions()], env=bool(after))
         if self.fresh(f"docx:{name}", digest, [output]):
             return
         self.did(f"docx: {name}")
@@ -612,7 +579,9 @@ class Builder:
                     run = [arg.replace("{docx}", self.rel(target)) for arg in step["run"]]
                     self.run_python(run, f"step {step['name']}")
             from .docx_indexes import apply
-            write_atomic(output, apply(target.read_bytes(), list(indexes)))
+            finished = apply(target.read_bytes(), list(indexes))
+            self.held_still(started, f"docx: {name}")  # each file's first snapshot
+            write_atomic(output, finished)
         self.record(f"docx:{name}", digest, [output])
 
     def documents(self, names=None) -> list[str]:

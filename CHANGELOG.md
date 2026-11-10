@@ -80,6 +80,19 @@ Internal changes (tests, CI, refactoring) stay out.
 - A failed table or diagram save keeps the last saved text and its undo history,
   including when a diagram autosave is interrupted.
 - The table editor no longer shows "null" under a table without a note (#15).
+- A Word file is published only from sources, bibliography, metadata and
+  figures that held still while it was built. When one changes mid-build,
+  trazo builds it again once; if it changes again, the build fails and keeps
+  the earlier Word file. A step or diagram export whose inputs change while it
+  runs fails too, and the next build runs it again, instead of reporting
+  "up to date" with stale output. Undoing such an edit now rebuilds the file.
+- A save from the preview, the table editor or the diagram editor no longer
+  overwrites a change that an agent, an editor or a sync app makes to the same
+  file while it is saved, on a Mac's APFS disk or Linux's ext4, XFS, Btrfs or
+  tmpfs: that version stays in the file, your text is copied to
+  `notes/review/conflicts/`, and the editor's conflict message says where the
+  copy is. On other disks the Source tab says once that a write at the instant
+  of saving can still be lost.
 - When the preview cannot rebuild for an unexpected reason (a file it cannot
   read, a tables command whose output it cannot decode), it now says so on the
   page instead of claiming "Build OK" or staying on "building..." forever, and
