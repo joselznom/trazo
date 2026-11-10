@@ -85,8 +85,8 @@ def get_table_caption(doc, identifier):
         if len(spans) != 1:
             raise Conflict("the table changed on disk; reload its caption")
         start, end = spans[0]
-        located = preview_edits.table_note(state["text"], identifier)
-        note = located[0] if located else None
+        located = preview_edits.locate_table(state["text"], identifier)
+        note = located["note"] if located else None
         state = {"kind": "markdown", "file": file, "sha256": state["sha256"],
             "can_undo": state["can_undo"], "fields": [
                 {"key": "caption", "segments": [{"text": state["text"][start:end]}], "values": []},
@@ -99,17 +99,16 @@ def with_table_note(text, identifier, note):
     table and caption when missing, removed when empty)."""
     if not isinstance(note, str) or "\r" in note or re.search(r"(?m)^ {0,3}:{3,}", note):
         raise CommentError("the note must be Markdown paragraphs without ::: fences")
-    located = preview_edits.table_note(text, identifier)
+    located = preview_edits.locate_table(text, identifier)
     if located is None:
         raise Conflict("the table changed on disk; reload its caption")
-    span, end = located
+    span, end = located["note"], located["end"]
     body = "\n\n".join(" ".join(p.split()) for p in re.split(r"\n\s*\n", note) if p.strip())
     if span:
         if body:
             return text[:span[0]] + body + text[span[1]:]
         # Remove the whole block: its blank line, fences and text.
-        close = re.compile(r"(?m)^ {0,3}:{3,}[ \t]*$").search(text, span[1])
-        return text[:end] + text[close.end():]
+        return text[:end] + text[located["stop"]:]
     if not body:
         return text
     return text[:end] + f"\n\n{table.NOTE_OPEN}\n{body}\n:::" + text[end:]

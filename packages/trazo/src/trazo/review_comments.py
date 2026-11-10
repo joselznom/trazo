@@ -88,7 +88,7 @@ def text_field(request: dict[str, Any], key: str, required: bool = False) -> str
 def ids_field(request: dict[str, Any]) -> list[str]:
     """The comment ids of a request: {id} or, for delete and purge, {ids: [...]}."""
     if "ids" not in request:
-        return [request.get("id")]
+        return [text_field(request, "id", required=True)]
     ids = request["ids"]
     if request.get("op") not in ("delete", "purge"):
         raise RequestError("only delete and purge accept ids")

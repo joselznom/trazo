@@ -115,6 +115,11 @@ Internal changes (tests, CI, refactoring) stay out.
   is, instead of blocking every save. Saves now reach the disk before trazo
   reports them (on a Mac, past the drive's cache for the files you write), and
   a paper update killed midway leaves `scripts/trazo` executable.
+- The word counts no longer fail on a manuscript whose `::: abstract` block
+  holds a raw HTML `<header>`; clearing a table note whose closing `:::` line
+  ends in a stray carriage return or non-breaking space removes it instead of
+  answering "server error"; and a comment change sent without a comment id is
+  refused as an invalid request instead of "no comment with id None".
 
 ### Upgrade notes
 
