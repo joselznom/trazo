@@ -152,7 +152,8 @@ def report_failure(exc: Exception, last: str = "") -> str:
 def build_and_watch(stop_event):
     """Build every page, then watch them: `trazo preview serve` runs it
     while it serves. A failure here must not end the thread: the watcher
-    is what notices the fix."""
+    is what notices the fix. A source change during these first builds ends
+    them, so the watcher builds the changed page before the others."""
     from . import preview
     before = preview.snapshot()  # a change during the first builds still rebuilds
     numbers, failure = None, ""
@@ -163,6 +164,10 @@ def build_and_watch(stop_event):
                 if stop_event.is_set():
                     return
                 failed |= build_all([name])
+                if preview.snapshot() != before:
+                    # The edited page goes first: watch() sees the change at
+                    # once and, as `shown` is then None, builds every other page.
+                    break
             numbers = numbered()
         preview_edit_review.check_outputs()
         if failed:
@@ -173,7 +178,8 @@ def build_and_watch(stop_event):
 
 
 def watch(interval=0.5, stop_event=None, previous=None, numbers=None, failure=""):
-    """Rebuild the pages on every change since `previous` (default: now).
+    """Rebuild the pages on every change since `previous` (default: now),
+    at once for one already made by the time it starts.
     `numbers`: what numbered() gave in the block that built them (default:
     read now). `failure`: what report_failure() said when the first builds
     failed. A failed table render stays pending across prose edits; after
@@ -196,7 +202,10 @@ def watch(interval=0.5, stop_event=None, previous=None, numbers=None, failure=""
     tables_pending, render_pending = False, False
     # After a failure (`failure` is its message) the next complete pass rebuilds every page.
     shown = numbered() if numbers is None and not failure else numbers
-    if snapshot() != previous:
+    # A change seen already (a save while the first pages built) is rebuilt
+    # at once, not after a poll interval.
+    pending = snapshot() != previous
+    if pending:
         shown = None
     failures, retry_at, failed_on = 0, 0.0, None
     waiting = False  # a tables stage found another build's lock: it stays pending, said once
@@ -216,7 +225,9 @@ def watch(interval=0.5, stop_event=None, previous=None, numbers=None, failure=""
         return {path: stamp for path, stamp in stamps.items() if not generated(path)}
 
     while True:
-        if stop_event is None:
+        if pending:
+            pending = False
+        elif stop_event is None:
             time.sleep(interval)
         elif stop_event.wait(interval):
             return

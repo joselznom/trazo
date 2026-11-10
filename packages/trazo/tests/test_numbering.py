@@ -217,7 +217,7 @@ class BetweenDocuments(unittest.TestCase):
         self.assertEqual(self.watched("![New.](figures/external/cross.svg){#fig:cross-new}\n\n", refresh=True),
                          ["supplementary", "manuscript"])
 
-    def test_an_edit_during_the_first_builds_rebuilds_every_page(self):
+    def test_an_edit_during_the_first_builds_rebuilds_every_page_before_the_first_wait(self):
         build = preview.build
 
         def building(name):
@@ -226,11 +226,30 @@ class BetweenDocuments(unittest.TestCase):
                 self.supplementary("![New.](figures/external/cross.svg){#fig:cross-new}\n\n")
             return done
 
-        stop = mock.Mock(**{"is_set.return_value": False, "wait.side_effect": [False, True]})  # one watcher pass
+        # The first wait stops the watcher: a change it already saw is rebuilt without a poll interval.
+        stop = mock.Mock(**{"is_set.return_value": False, "wait.return_value": True})
         with mock.patch.object(preview, "build", side_effect=building):
             preview.build_and_watch(stop)
         self.assertIn('href="supplementary.html#fig:cross-extra">S2</a>',
                       (preview.OUT_DIR / "manuscript.html").read_text())
+
+    def test_an_edit_during_a_first_build_renders_that_page_again_before_the_others(self):
+        build, built = preview.build, []
+
+        def building(name):
+            built.append(name)
+            done = build(name)
+            if built == ["manuscript"]:
+                self.write("main", "# Cross\n\n![Main.](figures/external/cross.svg){#fig:cross-main}\n\n"
+                                   "Saved while the preview opened.\n")
+            return done
+
+        stop = mock.Mock(**{"is_set.return_value": False, "wait.return_value": True})
+        with mock.patch.object(preview, "build", side_effect=building):
+            preview.build_and_watch(stop)
+        self.assertEqual(built[:2], ["manuscript", "manuscript"])
+        self.assertEqual(sorted(set(built)), sorted(PROJECT.documents))
+        self.assertIn("Saved while the preview opened", (preview.OUT_DIR / "manuscript.html").read_text())
 
     def test_an_edit_while_the_watcher_starts_rebuilds_every_page(self):
         for name in ("manuscript", "supplementary"):
