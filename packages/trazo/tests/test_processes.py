@@ -140,6 +140,19 @@ class SignalTests(unittest.TestCase):
             self.assertTrue(gone(int(pid_file.read_text())),
                             "the nested runner was killed before it stopped its command")
 
+    def test_every_level_of_nested_trazo_stops_its_commands_in_time(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            pid_file = Path(folder) / "leaf.pid"
+            command = [PY, "-c", "import os, signal, time; signal.signal(signal.SIGTERM, signal.SIG_IGN); "
+                                 f"open({str(pid_file)!r}, 'w').write(str(os.getpid())); time.sleep(60)"]
+            for _ in range(4):  # a trazo that runs a trazo ... that runs a command ignoring SIGTERM
+                command = [PY, "-c", "import sys; from trazo import processes; processes.stop_on_signals(); "
+                                     f"processes.run({command!r}, timeout=600, capture=False)"]
+            env = {**os.environ, "PYTHONPATH": os.pathsep.join(sys.path)}
+            with self.assertRaises(processes.Timeout):
+                processes.run(command, timeout=3, capture=False, env=env)
+            self.assertTrue(gone(int(pid_file.read_text())), "a nested level was killed before it stopped its command")
+
 
 if __name__ == "__main__":
     unittest.main()

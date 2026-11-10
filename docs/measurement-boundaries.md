@@ -50,9 +50,12 @@ metadata and form-field reads 60 s, `pandoc --version` 30 s, `uv sync` 1800 s
 (`TRAZO_UV_TIMEOUT`), the preview's tables command 1200 s
 (`PREVIEW_TABLES_TIMEOUT`) and a paper's own steps and commands 3600 s
 (`[build] timeout`; 0 turns it off). On expiry, Ctrl+C, SIGTERM or SIGHUP the
-group is stopped (SIGTERM or SIGINT, then SIGKILL after 3 s; a nested trazo
-stops its own groups first, since its owners wait 5 s) and the error names the
-command and the limit. Output a descendant keeps open after the command exits
+group is stopped (SIGTERM or SIGINT, then SIGKILL of what is left after the
+run's grace: 5 s for MCP calls and the preview's Word job, 4 s otherwise) and
+the error names the command and the limit. A command gets half its run's grace
+for its own runs (`TRAZO_STOP_GRACE`), and a trazo passes SIGTERM on to its
+groups before anything else, so a nested trazo kills what ignores SIGTERM
+before its parent kills it. Output a descendant keeps open after the command exits
 delays the result by 5 s at most: the group is killed and the result, a `Held`,
 carries the real exit code. That is the one change to the MCP contract: such a
 build is no longer reported as a timeout after 20 minutes. A holder outside the
@@ -67,7 +70,9 @@ page's Pandoc no longer outlives it. A page whose Pandoc could not run, ran
 out of time or was killed by a signal joins the watcher's 1 to 30 s retry; text
 Pandoc rejects is not rebuilt until it changes.
 
-Limits: the CLI still waits for the build lock without a bound (its holders are
+Limits: a nested trazo whose SIGTERM handler is held up longer than its share
+of the grace (a main thread stuck in C code) can be killed first, leaving what
+it ran; the CLI still waits for the build lock without a bound (its holders are
 now bounded, and the terminal shows the waiting line); `review_lock` waits only
 on a stalled filesystem; the Rosetta `sysctl` probe keeps its leader-only
 10-second timeout. Processes left behind by a command that exited normally

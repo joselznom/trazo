@@ -20,7 +20,11 @@ what it started, and on Windows then reads the pipes without a bound:
 
 Stopping is graceful on POSIX: SIGTERM (SIGINT after Ctrl+C), then SIGKILL
 of what is left after the run's grace. A command gets half of that grace as
-its own ($TRAZO_STOP_GRACE), so a trazo it runs stops its groups in time.
+its own ($TRAZO_STOP_GRACE), and a trazo's SIGTERM handler passes SIGTERM on
+to its groups before anything else, so each nested level kills what ignores
+it before its parent kills that level. Limit: a level whose handler is held
+up longer than its share of the grace (a main thread stuck in C code) can be
+killed first, leaving what it ran.
 Windows ends a job at once. Processes still running
 after a command exited normally, without holding its pipes, are left alone.
 """
@@ -169,11 +173,9 @@ def run(argv: Sequence[str | os.PathLike[str]], *, timeout: float | None, cwd: s
         raise ValueError("timeout must be a positive finite number of seconds")
     command = [os.fspath(arg) for arg in argv]
     if grace is None:
-        try:
-            grace = env_seconds(STOP_ENV, 4.0)
-        except ValueError:  # set by the trazo that started this one, never by hand
-            grace = 4.0
-    env = {**(os.environ if env is None else env), STOP_ENV: f"{max(0.5, grace / 2):g}"}
+        grace = _inherited_grace()
+    # Halved at each level, with no floor: a nested run's SIGKILL always comes before its parent's.
+    env = {**(os.environ if env is None else env), STOP_ENV: repr(grace / 2)}
     data = input.encode("utf-8") if isinstance(input, str) else input
     pipes = capture or on_line is not None
     options: dict[str, Any] = {"cwd": cwd, "env": env}
@@ -214,6 +216,15 @@ def run(argv: Sequence[str | os.PathLike[str]], *, timeout: float | None, cwd: s
 
 def _text(*values: bytes | None) -> Any:
     return tuple(None if value is None else decode(value) for value in values)
+
+
+def _inherited_grace() -> float:
+    """$TRAZO_STOP_GRACE (seconds, 0 included), set by the run that started this process; else 4."""
+    try:
+        value = float(os.environ.get(STOP_ENV, "4"))
+    except ValueError:
+        return 4.0
+    return value if 0 <= value < float("inf") else 4.0
 
 
 def _stop(entry: _Run, signum: int) -> None:
@@ -346,6 +357,13 @@ def stop_on_signals() -> None:
         return
 
     def end(signum: int, frame: object) -> None:
+        # SIGTERM reaches every group at once, before this process starts unwinding, so the
+        # SIGKILL deadlines of all levels run from about the same moment.
+        with _LOCK:
+            for entry in _LIVE.values():
+                if not entry.stopping:
+                    entry.stopping = True
+                    entry.signal(signal.SIGTERM)
         raise SystemExit(128 + signum)
     for signum in (signal.SIGTERM, signal.SIGHUP):
         if signal.getsignal(signum) == signal.SIG_DFL:
