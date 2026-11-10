@@ -7,7 +7,7 @@
   let valuesPromise = null;
   const loadValues = () => (valuesPromise = valuesPromise
     || fetch("/__values", { cache: "no-store" }).then((r) => r.json()).catch(() => ({})));
-  $$(".pv-val", page).forEach((el) => { el.tabIndex = 0; });
+  setUpBlocks((root) => within(root, ".pv-val").forEach((el) => { el.tabIndex = 0; }));
   const TIP_TARGET = ".pv-val, .citation a[href^='#ref-']";
   async function showTip(target) {
     tipFor = target;

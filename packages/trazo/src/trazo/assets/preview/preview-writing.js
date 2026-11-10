@@ -34,13 +34,22 @@
   // Each paragraph with the block it is: one with two is not one block, and takes no writing.
   const HEADINGS = "h1, h2, h3, h4, h5, h6";
   const blockMark = new Map();
-  if (browserWrites) for (const mark of $$(".pv-src", page)) {
-    const el = mark.closest("p, li");
-    if (el && !el.closest("nav, table, figure")) blockMark.set(el, blockMark.has(el) ? null : mark);
-  }
-  // A heading's mark is an attribute on it, which its <section> gets too.
-  if (browserWrites) for (const el of $$(`:is(${HEADINGS}).pv-head`, page)) blockMark.set(el, el);
-  for (const [el, mark] of blockMark) if (mark) el.classList.add("pv-can-write");
+  setUpBlocks((root) => {
+    if (!browserWrites) return;
+    const found = new Map();
+    for (const mark of within(root, ".pv-src")) {
+      const el = mark.closest("p, li");
+      if (el && !el.closest("nav, table, figure")) found.set(el, found.has(el) ? null : mark);
+    }
+    // A heading's mark is an attribute on it, which its <section> gets too.
+    for (const el of within(root, `:is(${HEADINGS}).pv-head`)) found.set(el, el);
+    for (const [el, mark] of found) {
+      blockMark.set(el, mark);
+      if (mark) el.classList.add("pv-can-write");
+    }
+  });
+  // Blocks an in-place update took out.
+  pageRefreshes.push(() => { for (const el of blockMark.keys()) if (!el.isConnected) blockMark.delete(el); });
   const isHeading = (el) => el.matches(HEADINGS);
 
   const chipChar = (chip) => String.fromCharCode(chip.dataset.new === undefined ? CHIP + Number(chip.dataset.i) : NEW_CHIP + Number(chip.dataset.new));

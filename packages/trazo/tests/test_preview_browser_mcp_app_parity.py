@@ -7,9 +7,9 @@ from pathlib import Path
 from unittest.mock import patch
 
 import _support
-from _mcp_app_view import McpAppViewTestCase
+from _mcp_app_view import PNG, McpAppViewTestCase
 
-from trazo import preview_export
+from trazo import preview, preview_export
 
 DOCX = b"PK\x03\x04 a Word file"
 EXPORT = (DOCX, "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "manuscript-intro.docx")
@@ -70,6 +70,22 @@ class ViewParityTests(McpAppViewTestCase):
         self.frame("w.Trazo.savePrefs({theme: 'dark'})")
         self.evaluate("sendContext({theme: 'light'})")
         self.wait_frame("d.documentElement.dataset.theme === 'dark'")
+
+    def test_a_new_build_changes_only_its_changed_blocks(self):
+        image = Path(_support.ROOT) / "figures" / "external" / "ordinary.png"
+        self.keep_files(image)
+        image.parent.mkdir(parents=True, exist_ok=True)
+        image.write_bytes(base64.b64decode(PNG))
+        self.host(sandbox=False)
+        self.wait_frame(READY + " && d.querySelector('#fig\\\\:external img').src.startsWith('data:')")
+        self.frame("(() => { w.samePage = true; d.querySelector('#fig\\\\:external img').kept = true; })()")
+        page = preview.OUT_DIR / "manuscript.html"
+        page.write_text(page.read_text().replace("Another paragraph.", "Another paragraph, rewritten."))
+        with preview.LOCK:
+            preview.STATE["manuscript"]["version"] += 1
+        self.wait_frame("d.querySelector('[data-label=\"Introduction ¶2\"]')?.textContent.includes('rewritten')")
+        # The same page, and the figure with its inlined image was left as it was.
+        self.assertEqual(self.frame("[w.samePage, d.querySelector('#fig\\\\:external img').kept]"), [True, True])
 
     def test_the_diagram_editor_has_its_figure_fonts(self):
         tokens = json.loads((Path(_support.ROOT) / "figures" / "style" / "tokens.json").read_text())

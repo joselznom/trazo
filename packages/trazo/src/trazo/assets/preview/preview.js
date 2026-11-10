@@ -169,7 +169,12 @@
       const stale = (view !== "doc" ? docNames : [doc]).some((n) => versions[n] !== loaded[n]);
       // A newer build may still lack the last save: a reload to it would take
       // back what the author left on the page until the next one.
-      if (stale && !busy && !all.building && await App.reload(() => !hasUnsaved())) return;
+      // In the document view the page changes in place when it can (preview-update.js).
+      if (stale && !busy && !all.building) {
+        const how = view === "doc" ? await updatePage() : "reload";
+        if (how === "done") loaded[doc] = versions[doc];
+        else if (how === "reload" && await App.reload(() => !hasUnsaved())) return;
+      }
       hold.hidden = !(busy && stale);
       if (view === "doc") for (const n of docNames) if (n !== doc) loaded[n] = versions[n];  // not shown here
       // Refresh copies fetched at another version, or before the first

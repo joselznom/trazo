@@ -8,10 +8,10 @@ sidebar, Figures & Tables view). preview-model.js is shared by the page and
 the Figures & Tables view: the other documents are fetched as /<name>.html
 and parsed with the same code. Paragraph labels come from it and must not
 change, because stored review comments depend on them. Sources are watched
-and rebuilt on save; the page reloads itself. Build errors and warnings
-appear as a banner instead of stopping the server. In-text references to
-figures and tables are links (`--metadata=linkReferences:true`, preview
-only) and feed the "Cited in" lists.
+and rebuilt on save; the page updates in place or reloads. Build errors
+and warnings appear as a banner instead of stopping the server. In-text
+references to figures and tables are links
+(`--metadata=linkReferences:true`, preview only) and feed the "Cited in" lists.
 
 Paths and commands come from trazo.toml (see trazo.project); the
 defaults are the paper template's layout, used in the notes below.
@@ -210,7 +210,7 @@ VIEWER_SCRIPTS = (
     "preview-source.js", "preview-diff.js", "preview-edits.js", "preview-build.js", "preview-new-comments.js",
     "preview-captions.js", "preview-caption-editors.js", "preview-export.js", "preview-export-picker.js",
     "preview-figures.js", "preview-lightbox.js", "preview-submission.js", "preview-writing.js", "preview-paragraphs.js",
-    "preview-format.js", "preview-mentions.js", "preview-history.js", "preview.js",
+    "preview-format.js", "preview-mentions.js", "preview-history.js", "preview-update.js", "preview.js",
 )
 WATCHED = tuple(PROJECT.config["preview"]["watch"])
 PANDOC_FLAGS = [
