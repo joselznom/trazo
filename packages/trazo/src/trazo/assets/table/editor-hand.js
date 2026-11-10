@@ -107,9 +107,10 @@
       const notice = $("#te-banner");
       const undo = async () => {
         const r = await E.api("/__table/convert", { op: "undo", ...made });
-        if (r.ok && !r.data.warning) location.href = E.App.returnUrl || `/${made.doc}.html`;
-        else if (r.ok) notes.banner(`Undone: the Markdown is back in the text. ${r.data.warning}`, "err");
-        else notes.failed(r.data, "Not undone");
+        if (!r.ok) { notes.failed(r.data, "Not undone"); return; }
+        // The table is gone: acknowledge any warning, then go back to the text.
+        if (r.data.warning) alert(`Undone: the Markdown is back in the text. ${r.data.warning}`);
+        location.href = E.App.returnUrl || `/${made.doc}.html`;
       };
       notice.className = "te-banner";
       notice.replaceChildren(h("div", { class: "te-grow",
