@@ -58,9 +58,8 @@ save makes the next save a 409 instead of overwriting it.
   displaced file is not parked, so late writes through an open file are lost.
 - Post-publication housekeeping: when parking fails (a full disk, a read-only
   folder) the save is published and answers 200 with a `warning`, shown by
-  every editor that saves a source; the table and diagram editors' replies carry
-  it and the `trazo table` and `trazo diagram` commands print it, but those two
-  editors do not show it (their scripts are over the file-size limit). The replaced text stays in undo history,
+  every editor that saves a source or a spec and printed by the `trazo table`
+  and `trazo diagram` commands. The replaced text stays in undo history,
   and the replaced file stays beside the source as a `.swap` for the same 600
   seconds (measured from its ctime, which the exchange updates: checked on
   APFS, not on Linux), so a writer holding it open still writes into a kept
@@ -103,8 +102,8 @@ write; the undo keeps its natural window, so it loses less before the fix:
 | Table undo, no exchange | 2 | 11 | 500 |
 
 A spec collision answers the editors' existing 409 (the table editor's
-"changed on disk" banner, the diagram editor's Keep mine and Load theirs); the
-reply names the copy, which the editors do not show. A diagram save now answers
+"changed on disk" banner, the diagram editor's Keep mine and Load theirs), and
+both banners say where the copy of the unsaved edit is. A diagram save now answers
 the sha256 of the bytes it wrote, as a source save does. A new spec (a table
 typed by hand, `base_sha256` null for a diagram) is still created with a plain
 rename: there is no existing file to exchange with. Undoing such a creation

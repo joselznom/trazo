@@ -1,4 +1,5 @@
-/* Diagram editor: the short notice (toast) and the banner above the canvas.
+/* Diagram editor: the short notice (toast) and the banner above the canvas,
+ * with what a save says about other programs' writes (trazo.source_publish).
  * editor.js calls DiagramNotices(h) with its element builder. */
 (function () {
   "use strict";
@@ -32,6 +33,28 @@
       for (const btn of b.querySelectorAll(".buttons button:not(.btn)")) btn.className = "btn small";
       b.hidden = false;
     }
-    return { toast, showBanner };
+    // After a save: `warning` is trouble after the file was written; true when shown.
+    function warned(data) {
+      if (data.warning) showBanner("error", data.warning, []);
+      return !!data.warning;
+    }
+
+    // `file` changed on disk while the page has edits; `actions` are the editor's
+    // keepMine, loadTheirs and downloadMine. A 409's `kept`: another program wrote
+    // the file during the save, and a copy holds this page's version.
+    function showConflict(file, conflict, actions) {
+      showBanner("error",
+        `${file} changed on disk while this page also has edits. `
+        + "Nothing was overwritten.", [
+          "Keep mine writes this page over the file, using the hash that is on disk now.",
+          "Load theirs discards the unsaved edits in this page and reloads the file.",
+          ...(conflict && conflict.kept ? [`This page's version is also kept at ${conflict.kept.join(", ")}.`] : []),
+        ], [
+          h("button", { type: "button", class: "btn small primary", onclick: () => actions.keepMine() }, "Keep mine"),
+          h("button", { type: "button", onclick: () => actions.loadTheirs() }, "Load theirs"),
+          h("button", { type: "button", onclick: actions.downloadMine }, "Download my version"),
+        ]);
+    }
+    return { toast, showBanner, warned, showConflict };
   };
 })();

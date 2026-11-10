@@ -1,4 +1,5 @@
-// Table editor: short notices (flash) and the banner above the table.
+// Table editor: short notices (flash) and the banner above the table, with
+// what a save says about other programs' writes (trazo.source_publish).
 // editor.js calls TableEditor.messages(h) with its element builder.
 (function () {
   "use strict";
@@ -31,6 +32,14 @@
         h("button", { type: "button", class: "te-icon", "aria-label": "Dismiss", text: "✕", onclick: () => banner(null) }));
       el.hidden = false;
     }
-    return { flash, banner };
+    // After a save or an undo: `warning` is trouble after the file was written.
+    function warned(data) { if (data.warning) banner(data.warning, "err"); }
+    // A 409. `kept`: another program wrote the file during the save, and these copies hold the edits.
+    function conflict(data, reload) {
+      const kept = data.kept ? ` A copy of them is at ${data.kept.join(", ")}.` : "";
+      banner(`This table changed on disk since it was loaded (another edit or an agent). Your last edits are not saved.${kept}`, "err",
+        [h("button", { type: "button", class: "pv-btn sm", text: "Reload (lose my edits)", onclick: reload })]);
+    }
+    return { flash, banner, warned, conflict };
   };
 })();

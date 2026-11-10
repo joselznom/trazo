@@ -83,7 +83,7 @@
     return node;
   }
 
-  const { toast, showBanner } = DiagramNotices(h);
+  const { toast, showBanner, warned, ...notices } = DiagramNotices(h);
 
   function s(name, attrs, parent) {
     const node = document.createElementNS(SVG_NS, name);
@@ -3373,7 +3373,7 @@
       S.disk = { sha: res.data.sha256, json };
       S.blocked = null;
       $("#banner").hidden = true;
-      if (!auto) toast("Saved");
+      if (!warned(res.data) && !auto) toast("Saved");
       scheduleCheck();
     } else if (res.status === 409) {
       S.blocked = "conflict";
@@ -3395,16 +3395,7 @@
   }
 
   function showConflict() {
-    showBanner("error",
-      `${PATHS.diagrams}/${S.name}.json changed on disk while this page also has edits. `
-      + "Nothing was overwritten.", [
-        "Keep mine writes this page over the file, using the hash that is on disk now.",
-        "Load theirs discards the unsaved edits in this page and reloads the file.",
-      ], [
-        h("button", { type: "button", class: "btn small primary", onclick: () => keepMine() }, "Keep mine"),
-        h("button", { type: "button", onclick: () => loadTheirs() }, "Load theirs"),
-        h("button", { type: "button", onclick: downloadMine }, "Download my version"),
-      ]);
+    notices.showConflict(`${PATHS.diagrams}/${S.name}.json`, S.conflict, { keepMine, loadTheirs, downloadMine });
   }
 
   async function keepMine() {
@@ -3419,6 +3410,7 @@
       S.conflict = null;
       $("#banner").hidden = true;
       toast("Kept your version");
+      warned(res.data);
       updateStatus();
       scheduleCheck();
     } else if (res.status === 409) {

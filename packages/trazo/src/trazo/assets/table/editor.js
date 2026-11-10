@@ -64,7 +64,7 @@
     $("#te-ftext").textContent = text.startsWith("Saved") ? "Saved automatically · ⌘Z undoes" : text;
     $("#te-fdot").className = "te-dot" + (error ? " err" : busy || pending.size ? " warn" : "");
   }
-  const { flash, banner } = T.messages(h);
+  const { flash, banner, warned, conflict } = T.messages(h);
 
   // ---------------------------------------------------------------- spec helpers
   // Spec path of a leaf of the model: <id>, <group>.<leaf>, or <pivot>.<leaf>
@@ -226,12 +226,12 @@
         if (!$("#te-banner").classList.contains("err")) banner(null);
         accept(r.data);
         setSave(`Saved · ${opts.shared ? st.shared.file : st.file}`);
+        warned(r.data);
         loadList();
       } else if (r.status === 409) {
         blocked = true;
         setSave("Not saved: changed elsewhere", true);
-        banner("This table changed on disk since it was loaded (another edit or an agent). Your last edits are not saved.", "err",
-          [h("button", { type: "button", class: "pv-btn sm", text: "Reload (lose my edits)", onclick: reloadAfterConflict })]);
+        conflict(r.data, reloadAfterConflict);
       } else if (r.status === 422) {
         setSave("Not saved: fix the errors", true);
         showIssues(r.data.issues || [], r.data.error);
@@ -626,6 +626,7 @@
     if (r.ok) {
       blocked = false;
       banner(null);
+      warned(r.data);
       accept(r.data);
       flash(r.data.undone.replace(/^undone: /, "Undone: ").replace(/; next undo: .*$/, ""));
       setSave(`Saved · ${st.file}`);
