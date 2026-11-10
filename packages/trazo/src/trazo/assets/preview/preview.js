@@ -153,7 +153,13 @@
       const status = all.documents[doc];
       const before = versions;
       versions = Object.fromEntries(docNames.map((n) => [n, all.documents[n] ? all.documents[n].version : 0]));
-      if (loaded === null) loaded = { ...versions };
+      if (loaded === null) {
+        loaded = { ...versions };
+        // The version this page was served at: a build that landed before
+        // this first answer must still reload it.
+        const served = document.querySelector('meta[name="trazo-version"]')?.content;
+        if (served) loaded[doc] = Number(served);
+      }
       resolveStatus();
       // Do not reload while a comment is being written or edited, or with the
       // caret in the text, even if nothing is typed yet. The server
