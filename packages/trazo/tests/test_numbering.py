@@ -1,13 +1,16 @@
 """Supplementary numbering survives preview, references and selected exports."""
 
+import hashlib
 import io
 import re
 import shutil
+import tempfile
 import threading
 import unittest
 import xml.etree.ElementTree as ET
 import zipfile
 from html import unescape
+from pathlib import Path
 from unittest import mock
 
 import _support
@@ -250,6 +253,42 @@ class BetweenDocuments(unittest.TestCase):
         self.assertEqual(built[:2], ["manuscript", "manuscript"])
         self.assertEqual(sorted(set(built)), sorted(PROJECT.documents))
         self.assertIn("Saved while the preview opened", (preview.OUT_DIR / "manuscript.html").read_text())
+
+    def test_a_page_holds_its_reload_until_the_pass_that_read_its_save_ends(self):
+        folder = tempfile.TemporaryDirectory()
+        self.addCleanup(folder.cleanup)
+        for name, value in (("EDITS_PATH", Path(folder.name) / "edits.json"),
+                            ("FILE_HISTORY_PATH", Path(folder.name) / "file_history.json"),
+                            ("WATCHER", {"synced": 0.0, "written": 0.0, "rebuild": set(), "outputs": []})):
+            patcher = mock.patch.object(preview, name, value)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+        for name in ("manuscript", "supplementary"):
+            self.assertTrue(preview.build(name), preview.STATE[name]["error"])
+        file, build, held = "manuscript/main/98_cross.md", preview.build, []
+
+        def save(words):  # as the page saves, through /__source
+            text = (_support.ROOT / file).read_text()
+            preview.change_source({"file": file, "text": text + f"\n{words}\n",
+                                   "base_sha256": hashlib.sha256(text.encode()).hexdigest()})
+
+        def building(name):  # the second save lands after the first pass read the sources
+            done = build(name)
+            if name == "manuscript" and len(held) == 1:
+                save("Saved during its build.")
+            return done
+
+        def tick(_):  # the watcher's wait: what a page polling now is told
+            with preview.LOCK:
+                held.append(preview.building())
+            if len(held) == 1:
+                save("Saved from the page.")
+            return len(held) == 3
+
+        with mock.patch.object(preview, "build", side_effect=building):
+            preview.watch(stop_event=mock.Mock(**{"wait.side_effect": tick}))
+        self.assertEqual(held, [False, True, False])
+        self.assertIn("Saved during its build.", (preview.OUT_DIR / "manuscript.html").read_text())
 
     def test_an_edit_while_the_watcher_starts_rebuilds_every_page(self):
         for name in ("manuscript", "supplementary"):

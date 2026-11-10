@@ -304,6 +304,8 @@ def watch(interval=0.5, stop_event=None, previous=None, numbers=None, failure=""
             if busy and not waiting:
                 print("[preview] tables: waiting for another build of this project", flush=True)
             waiting = busy
+            if not busy:  # the pages show the sources read at `checked`: a page holds no reload for them
+                preview.WATCHER["synced"] = checked
         except Exception as exc:  # keep watching; every page says why it is old
             # Nothing of this pass is lost: table work that failed stays pending, and
             # the retry rebuilds the pages that failed (every page after a watcher failure).
