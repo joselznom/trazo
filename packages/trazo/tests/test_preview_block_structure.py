@@ -200,7 +200,7 @@ class StructureTests(SaveCase):
             self.assertEqual(preview.latest_change("manuscript")["kind"], "file")
 
     def test_a_change_to_comments_of_other_documents_is_not_undone_here(self):
-        comment = {"op": "add", "quote": "Text", "para": "x", "section": "", "comment": "Look", "kind": "underline"}
+        comment = {"op": "add", "quote": "Text", "para": "x", "section": "", "comment": "Look", "kind": "highlight"}
         with patch.object(preview, "COMMENTS_PATH", self.folder / "comments.json"), \
                 patch.object(preview, "HISTORY_PATH", self.folder / "history.json"):
             first = preview.change_comments({**comment, "doc": "supplementary"})["comments"][0]["id"]

@@ -121,8 +121,10 @@ def status():
                                if not p.is_relative_to(ASSETS_DIR)}, sort_keys=True).encode())
     with preview.LOCK:
         outputs = list(preview.WATCHER["outputs"])
+        # A page holds its reload while a file written from the preview is not built yet.
+        building = preview.WATCHER.get("written", 0.0) > preview.WATCHER["synced"]
     return {"documents": docs, "comments": preview.comments_stamp(), "docx": preview.docx_status(),
-            "outputs": outputs,
+            "outputs": outputs, "building": building,
             "diagrams": diagrams, "tables": tables, "catalog": revision, "inputs": inputs,
             "review": review.revision(),
             "assets": fingerprint(p for p in ASSETS_DIR.rglob("*") if p.is_file())}

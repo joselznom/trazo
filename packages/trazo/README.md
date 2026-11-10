@@ -124,9 +124,9 @@ Click an article image (or press Enter when
 focused) to enlarge it; Esc closes the viewer. After saving source, the
 preview keeps the visible paragraph and the Source selection and scroll.
 
-Text selection offers **Comment** (for the agent) and **Underline**, a
+Text selection offers **Comment** (for the agent) and **Highlight**, a
 reading mark for the author: not a comment, left out of the agent's list,
-and the Markdown and Word output are unchanged. Select or click underlined
+and the Markdown and Word output are unchanged. Select or click highlighted
 text to remove it. The **Comments** tab shows **Active** comments (open, or
 to check after the agent's reply) in document order, and **Resolved** ones,
 the last resolved first, with **Show in text**, **Reopen**, **Delete all
@@ -139,7 +139,7 @@ right one of several identical quotes is found) so navigation
 can follow a rewritten paragraph; ambiguous or deleted targets remain
 unlocated. When the quoted text is gone, the card keeps the original quote
 and a marker in the margin shows its paragraph (one strip for each of open,
-to check and underline; click in the paragraph to remove its underline).
+to check and highlight; click in the paragraph to remove its highlight).
 Older comments retain exact-quote matching and their original quotes; a
 complete rewrite without stored context cannot be recovered safely.
 

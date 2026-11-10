@@ -19,7 +19,8 @@
     pick: ICON('<rect x="2.5" y="2.5" width="4" height="4" rx="1"/><rect x="2.5" y="9.5" width="4" height="4" rx="1"/><path d="M9 4.5h4.5M9 11.5h4.5"/>'),
     trash: ICON('<path d="M3 4.5h10M6.5 4.5V3h3v1.5M4.5 4.5l.6 8.5h5.8l.6-8.5"/>'),
     comment: ICON('<path d="M3 3.5h10v7H7l-3 2.5v-2.5H3z"/>'),
-    underline: ICON('<path d="M5 2.5v5a3 3 0 0 0 6 0v-5M4 13.5h8"/>'),
+    highlight: ICON('<path d="M9.8 2.6l3.6 3.6-5.6 5.6H4.2V8.2zM6.5 6l3.5 3.5M2.5 14h5"/>'),
+    unhighlight: ICON('<path d="M9.8 2.6l3.6 3.6-5.6 5.6H4.2V8.2zM2 2l12 12"/>'),
   };
   const MOD = /Mac|iPhone|iPad/.test(navigator.platform) ? "⌘" : "Ctrl+";
   const app = h("div", { class: "pv-app-root" });

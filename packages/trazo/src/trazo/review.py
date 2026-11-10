@@ -99,8 +99,8 @@ def main(argv=None):
     args = parser.parse_args(argv)
     try:
         if args.command == "comments":
-            # Underlines are the author's reading marks, not comments.
-            items = [c for c in payload()["comments"] if c.get("kind") != "underline"
+            # Highlights are the author's reading marks, not comments.
+            items = [c for c in payload()["comments"] if c.get("kind") != "highlight"
                      and (args.all or c.get("status") == "open")]
             if args.json:
                 print(json.dumps(items, indent=2, ensure_ascii=False))
