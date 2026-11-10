@@ -249,7 +249,10 @@ def _rebuild_pages(names: set[str]) -> None:
     """Have the watcher rebuild the pages built from the files `names`,
     whose baseline changed although the files did not."""
     from . import preview
-    rebuild = {doc for doc in preview.DOCS if names & set(page_files(doc))}
+    try:
+        rebuild = {doc for doc in preview.DOCS if names & set(page_files(doc))}
+    except (OSError, ValueError):  # an unreadable file: its page shows the error, and a published save goes on
+        rebuild = set(preview.DOCS)
     with preview.LOCK:
         cast(set[str], preview.WATCHER["rebuild"]).update(rebuild)
 
