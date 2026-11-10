@@ -118,6 +118,11 @@ Internal changes (tests, CI, refactoring) stay out.
   the preview, Ctrl+C or a cancelled agent call also ends the programs they
   started. `TRAZO_PANDOC_TIMEOUT`, `TRAZO_UV_TIMEOUT` and
   `PREVIEW_TABLES_TIMEOUT` set other limits in seconds.
+- The word counts no longer fail on a manuscript whose `::: abstract` block
+  holds a raw HTML `<header>`; clearing a table note whose closing `:::` line
+  ends in a stray carriage return or non-breaking space removes it instead of
+  answering "server error"; and a comment change sent without a comment id is
+  refused as an invalid request instead of "no comment with id None".
 
 ### Removed
 

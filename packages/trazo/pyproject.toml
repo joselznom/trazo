@@ -34,8 +34,8 @@ select = ["E", "F", "I", "UP"]
 ignore = ["E501", "E731"]
 
 [tool.mypy]
-# Reports only (`make typecheck`); nothing blocks on it yet. A module that comes back clean
-# joins the strict override below, so it cannot regress.
+# `make typecheck` reports every module and blocks nothing. A module that comes back clean
+# joins the strict override below, and CI's `make typecheck-strict` fails on its errors.
 files = ["src"]
 python_version = "3.12"
 check_untyped_defs = true
