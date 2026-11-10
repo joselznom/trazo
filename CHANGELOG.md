@@ -91,6 +91,9 @@ Internal changes (tests, CI, refactoring) stay out.
 
 ### Fixed
 
+- A save from the preview no longer stays, now and then, on the page as an
+  edit to review instead of your text: a build that read it while it was
+  being saved runs again.
 - A preview page no longer keeps an older text when a build lands while it
   loads: it reloads to the new one.
 - A corrupt manuscript undo history is preserved in a separate file and shown as
