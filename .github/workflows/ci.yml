@@ -43,6 +43,10 @@ jobs:
       matrix:
         # Users run trazo on macOS; Linux is quicker to set up and catches the rest.
         os: [ubuntu-latest, macos-latest]
+        # The package tests take the longest, so they run in three parts (make test-package
+        # SHARD=I/N) and the template's tests beside them, each on a machine of its own. A
+        # part runs one module at a time: two made the tests that wait on a deadline fail.
+        suite: [package 1/3, package 2/3, package 3/3, template]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -81,12 +85,15 @@ jobs:
         run: |
           git config --global user.email ci@example.com
           git config --global user.name ci
-      # Each test target runs even when an earlier one failed, so one run shows every failure.
       - name: Package tests
-        run: make test-package
+        if: startsWith(matrix.suite, 'package')
+        env:
+          SUITE: ${{ matrix.suite }}
+        run: make test-package SHARD="${SUITE#package }"
       - name: Template variants, built and verified with this trazo
-        if: ${{ !cancelled() }}
+        if: matrix.suite == 'template'
         run: make test-template
+      # Runs even when the variants failed, so one run shows every failure.
       - name: Update between template versions
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && matrix.suite == 'template' }}
         run: make test-update
