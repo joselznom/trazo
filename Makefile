@@ -36,8 +36,13 @@ typecheck:
 typecheck-strict:
 	$(TRAZO_PYTHON) scripts/typecheck-strict.py
 
+# The package's unit tests, one process per test module (scripts/test-package.py chooses how
+# many at a time; JOBS=N for another number). The same tests as one
+# `python -m unittest discover -s tests`. SHARD=I/N runs the I-th of N parts, as CI does.
+JOBS ?=
+SHARD ?=
 test-package:
-	cd "$(TRAZO_DIR)" && uv run --quiet python -m unittest discover -s tests
+	cd "$(TRAZO_DIR)" && uv run --quiet python "$(CURDIR)/scripts/test-package.py" . $(if $(JOBS),--jobs $(JOBS)) $(if $(SHARD),--shard $(SHARD))
 
 # Check the template variants stored in trazo, that `trazo new`
 # equals `copier copy` and that its paper builds and previews without git.
@@ -147,7 +152,7 @@ help:
 	@echo "make lint            ruff check on trazo and scripts/acceptance"
 	@echo "make typecheck       mypy on trazo (reports only)"
 	@echo "make typecheck-strict  fail on mypy errors in the strict modules (CI runs it)"
-	@echo "make test-package    trazo unit tests"
+	@echo "make test-package    trazo unit tests, a process per module (JOBS=N at a time, SHARD=I/N one part)"
 	@echo "make test-template   render the template (with and without the example), verify builds"
 	@echo "make test-update     update a v0.6.0 trazo new paper to HEAD, verify; trazo update between tags"
 	@echo "make test-acceptance  unit tests of the acceptance harness"

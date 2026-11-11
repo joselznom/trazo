@@ -32,7 +32,7 @@ git clone https://github.com/joselznom/trazo.git
 cd trazo
 make hooks           # once per clone: check each commit, test it before it is pushed
 make lint            # ruff on trazo and on the acceptance harness
-make test-package    # trazo unit tests
+make test-package    # trazo unit tests, a process per module (JOBS=1: one at a time)
 make test-template   # make each template variant with trazo new, verify
 make test-update     # update between trazo template versions, verify
 make test-linux      # the same CI steps in a Debian container (Docker)
