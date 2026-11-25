@@ -22,9 +22,11 @@ BLANK_RUN = re.compile(r"\n(?:[ \t\r]*\n)+")
 SEPARATED = re.compile(r"\n[ \t\r]*\n[ \t\r]*$")
 CAPTION = re.compile(r" {0,3}(?:Table:|:)\s")
 PIPE_RULE = re.compile(r" {0,3}\|?\s*:?-+:?\s*(?:\|\s*:?-+:?\s*)+\|?\s*$")
-MATH = re.compile(r"\$\$[\s\S]*?\$\$\s*(?:\{[^{}]*\})?")
-ATTRIBUTES = re.compile(r"\s*(?:\{[^{}]*\})?")
-CAPTION_TEXT = re.compile(r"( {0,3}(?:Table:|:)\s+)([\s\S]*?)(\s*\{[^{}]*\})?")
+ATTRIBUTE = r"""(?:[#.][^\s{}"'=]+|[\w-]+=(?:"[^"]*"|'[^']*'|[^\s{}"']+))"""
+ATTRIBUTE_LIST = rf"\{{\s*{ATTRIBUTE}(?:\s+{ATTRIBUTE})*\s*\}}"
+MATH = re.compile(rf"\$\$[\s\S]*?\$\$\s*(?:{ATTRIBUTE_LIST})?")
+ATTRIBUTES = re.compile(rf"\s*(?:{ATTRIBUTE_LIST})?")
+CAPTION_TEXT = re.compile(rf"( {{0,3}}(?:Table:|:)\s+)([\s\S]*?)(\s*{ATTRIBUTE_LIST})?")
 LABEL = re.compile(r"\{[^{}]*#((?:fig|tbl|eq):[^\s{}]+)")
 
 

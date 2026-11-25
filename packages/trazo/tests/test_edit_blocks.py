@@ -73,6 +73,11 @@ class TakeBlocksTests(unittest.TestCase):
         base = "![A flow.](a.png)\n`some\ncode`\n"
         self.assertEqual(pending(base, base.replace("a.png", "b.png")), [("a", "b")])
 
+    def test_braces_that_are_no_attributes_stay_caption_text(self):
+        for caption in ("Set {A, B}", "Set {A, B} {#tbl:set}"):
+            table = TABLE + f"\nTable: {caption}\n"
+            self.assertEqual(pending(table, table.replace("{A, B}", "{A, C}")), [("B", "C")])
+
     def test_a_rule_before_a_paragraph_is_no_table(self):
         base = "-----  -----\nOld text here.\n"
         self.assertEqual(pending(base, base.replace("Old", "New")), [("Old", "New")])
