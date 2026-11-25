@@ -186,7 +186,7 @@ class WritingTests(WritingCase):
                 self.wait_for("!document.querySelector('.pv-write-bar')")
                 self.assertEqual(self.source(), result)
 
-    def test_a_struck_edit_hides_while_writing_and_a_mark_opens_its_bar(self):
+    def test_a_struck_edit_dims_while_writing_and_a_mark_opens_its_bar(self):
         self.build("A plain sentence with a word.\n")
         preview.edits_payload("manuscript")  # the baseline
         self.build("A plain sentence with some word.\n")
@@ -195,11 +195,43 @@ class WritingTests(WritingCase):
         self.wait_for("!document.querySelector('.pv-edit-bar').hidden")
         self.assertFalse(self.evaluate("!!document.querySelector('.pv-writing')"))
         self.write_in("plain")
-        self.assertEqual(self.evaluate("getComputedStyle(document.querySelector('.pv-writing .pv-edit-del')).display"), "none")
+        self.assertLess(float(self.evaluate("getComputedStyle(document.querySelector('.pv-writing .pv-edit-del')).opacity")), 1)
         self.type("very ")
         self.leave()
         self.wait_for("document.querySelector('.pv-save-state').textContent === 'Saved'")
         self.assertEqual([e["new"] for e in preview.edits_payload("manuscript")["edits"]], ["some"])
+
+    def test_a_click_from_a_paragraph_with_a_struck_edit_lands_where_it_was_aimed(self):
+        removed = " Removed words that the agent took out of this sentence." * 4
+        self.build(TEXT.replace("fields.", "fields." + removed))
+        preview.edits_payload("manuscript")  # the baseline
+        self.build()
+        struck = "(() => { const box = document.querySelector('.pv-edit-del').getBoundingClientRect(); return [box.top, box.height]; })()"
+        shown = self.evaluate(struck)
+        self.write_in("fox")
+        self.assertEqual(self.evaluate(struck), shown)
+        aimed = self.word_at("plain")
+        self.mouse("mousePressed", *aimed)
+        self.assertEqual(self.word_at("plain"), aimed)
+        self.mouse("mouseReleased", *aimed)
+        self.wait_for("writing?.el.textContent.includes('plain')")
+        self.assertEqual(self.evaluate(struck), shown)
+        self.type("XYZ ")
+        self.leave()
+        self.wait_for("document.querySelector('.pv-save-state').textContent === 'Saved'")
+        self.assertIn("XYZ", next(line for line in self.source().splitlines() if line.startswith("A second")))
+
+    def test_backspace_beside_struck_text_keeps_it_and_deletes_the_letter_before_it(self):
+        self.build("A plain sentence with a big word.\n")
+        preview.edits_payload("manuscript")  # the baseline
+        self.build("A plain sentence with one word.\n")
+        self.write_in("plain")
+        self.evaluate("getSelection().collapse(document.querySelector('.pv-writing'), [...document.querySelector('.pv-writing').childNodes].indexOf(document.querySelector('.pv-writing .pv-edit-del')) + 1)")
+        self.key("Backspace", 8)
+        self.assertEqual(self.evaluate("document.querySelector('.pv-writing .pv-edit-del')?.textContent"), "a big")
+        self.leave()
+        self.wait_for("document.querySelector('.pv-save-state').textContent === 'Saved'")
+        self.assertEqual(self.source(), "A plain sentence withone word.\n")
 
     def test_the_page_takes_a_build_with_the_caret_in_the_text(self):
         self.build()

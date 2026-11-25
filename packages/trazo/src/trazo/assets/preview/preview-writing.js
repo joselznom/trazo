@@ -374,6 +374,25 @@
     }
   });
   page.addEventListener("input", () => { if (writing) fab.hidden = true; });
+  function besideCaret(back) {
+    const { focusNode: node, focusOffset: at } = getSelection();
+    if (node.nodeType !== 3) return node.childNodes[back ? at - 1 : at] || null;
+    if (back ? at > 0 : at < node.data.length) return null;
+    let next = node;
+    while (next !== writing.el && !(back ? next.previousSibling : next.nextSibling)) next = next.parentNode;
+    return next === writing.el ? null : back ? next.previousSibling : next.nextSibling;
+  }
+  page.addEventListener("beforeinput", (e) => {
+    if (!writing || !e.inputType.startsWith("delete") || !getSelection().isCollapsed) return;
+    const back = e.inputType.includes("Backward"), struck = besideCaret(back);
+    if (!struck?.matches?.(".pv-edit-del")) return;
+    e.preventDefault();
+    const range = document.createRange();
+    if (back) range.setStartBefore(struck); else range.setStartAfter(struck);
+    getSelection().collapse(range.startContainer, range.startOffset);
+    if (e.inputType === "deleteContentBackward") document.execCommand("delete");
+    else if (e.inputType === "deleteContentForward") document.execCommand("forwardDelete");
+  });
   document.addEventListener("keydown", (e) => {
     if (writing && !writing.joining && e.key === "Escape") {
       e.preventDefault();
