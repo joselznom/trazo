@@ -216,6 +216,11 @@ class MarksTests(unittest.TestCase):
         self.assertEqual(text.count("pv-new"), 2)
         self.assertNotIn("data-edit", text.split("\n")[0])  # the heading
 
+    def test_a_paragraph_added_after_another_marks_only_itself(self):
+        # The blank line between them is half before the edit and half in it.
+        found, text = self.marked("Intro.\n", "Intro.\n\nNew paragraph.\n")
+        self.assertEqual(text, f'Intro.\n\n[]{{.pv-blk .pv-new data-edit="{found[0].id}"}}New paragraph.\n')
+
     def test_deleted_text_shows_as_written(self):
         found, text = self.marked("Keep *this* {{v:n}} [@first].\n", "Keep.\n")
         self.assertIn(r"[\*this\* \{\{v\:n\}\} \[\@first\]]{.pv-edit-del", text)

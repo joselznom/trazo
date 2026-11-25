@@ -368,8 +368,9 @@ def edit_marks(current: str, found: list[Edit]) -> list[tuple[int, int, str]]:
             continue
         marks = []
         new_blocks = _blocks_inserted(current, e.c0, e.c1) if new_text else []
-        if new_text and not old_text and (e.c0 == 0 or re.search(r"\n[ \t\r]*\n[ \t]*$", current[:e.c0])):
-            new_blocks = list(dict.fromkeys([e.c0 + len(e.new) - len(e.new.lstrip()), *new_blocks]))  # it starts a block too
+        first = e.c0 + len(e.new) - len(e.new.lstrip())
+        if new_text and not old_text and re.search(r"(?:^|\n[ \t\r]*\n)[ \t]*$", current[:first]):
+            new_blocks = list(dict.fromkeys([first, *new_blocks]))  # it starts a block too
         for start in new_blocks:
             at = lines.block_mark_at(start)
             if at is not None:
