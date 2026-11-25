@@ -55,6 +55,8 @@
     nav = notes.filter((x) => x.c.status === "open" || x.c.status === "review").sort(docOrder);
     const when = (c) => c.resolved || c.created || "";
     const done = notes.filter((x) => x.c.status === "done").sort((a, b) => when(b.c).localeCompare(when(a.c)));
+    const activeGroups = groupsOf(nav);
+    nav = activeGroups.flatMap((g) => g.items);
     const shown = cfilter === "active" ? nav : done;
     for (const key of Object.keys(drafts)) {
       if (!comments.some((x) => x.id === key.split(":")[0])) delete drafts[key];
@@ -95,13 +97,52 @@
     } else if (cfilter === "active") {
       if (!nav.length && !done.length) empty("No comments", inFigs ? "Comments on figure captions and tables appear here." : "Select text in the document to add one.");
       else if (!nav.length) empty("Nothing to handle", "Every comment is resolved.");
-      for (const x of nav) panel.append(card(x.c, x.hit, x));
+      listGroups(activeGroups);
     } else {
       if (!done.length) empty("No resolved comments");
-      for (const x of done) panel.append(card(x.c, x.hit, x));
+      listGroups(groupsOf(done));
     }
     if (!inFigs) renderIndex();
   }
+
+  // Comments by the top-level section they are in now, or by document in the
+  // Figures & Tables view; folded groups are kept until the page reloads.
+  const foldedGroups = new Set();
+  function groupsOf(list) {
+    const groups = new Map();
+    for (const x of list) {
+      const [at, title] = view === "figures" ? [docIndex(x.c.doc), DOCS[x.c.doc] || x.c.doc]
+        : x.unit ? [units.indexOf(x.unit), titleOf(x.unit)] : x.hit ? [-1, "Front matter"] : [Infinity, "Not found in the text"];
+      const key = `${view === "figures" ? "figures" : doc}:${title}`;
+      if (!groups.has(key)) groups.set(key, { key, title, at, items: [] });
+      groups.get(key).items.push(x);
+    }
+    return [...groups.values()].sort((a, b) => a.at - b.at);
+  }
+  const inUse = (id) => id === navId || editing?.id === id || Object.keys(drafts).some((key) => key.split(":")[0] === id);
+  function listGroups(groups) {
+    for (const g of groups) {
+      const open = groups.length < 2 || !foldedGroups.has(g.key) || g.items.some((x) => inUse(x.c.id));
+      if (groups.length > 1) {
+        const k = counts(g.items);
+        panel.append(h("button", { type: "button", class: "pv-cgroup" + (g.at === Infinity ? " lost" : ""),
+          "aria-expanded": String(open), "data-group": g.key },
+        h("span", { class: "pv-caret", "aria-hidden": "true" }), h("span", { class: "pv-lbl", text: g.title }),
+        h("span", { class: "pv-bd" + (k.open ? "" : k.review ? " review" : " done"), text: String(g.items.length) })));
+      }
+      if (open) for (const x of g.items) panel.append(card(x.c, x.hit, x));
+    }
+  }
+  panel.addEventListener("click", (e) => {
+    const head = e.target.closest("[data-group]");
+    if (!head) return;
+    if (head.getAttribute("aria-expanded") === "true") {
+      foldedGroups.add(head.dataset.group);
+      for (let el = head.nextElementSibling; el && !el.matches("[data-group]"); el = el.nextElementSibling)
+        if (el.dataset.id === navId) navId = null;
+    } else foldedGroups.delete(head.dataset.group);
+    renderComments();
+  });
 
   // Jump to the next/previous open or to-check comment in this view.
   function step(dir) {
