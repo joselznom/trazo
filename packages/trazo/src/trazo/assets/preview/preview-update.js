@@ -153,11 +153,11 @@
     if (!plan) return "reload";
     const tracked = new Set(plan.groups.flatMap((group) => group.old.map((r) => outerOf(r.el))));
     const holds = heldBlocks(), work = [];
-    let held = false;
+    const held = [];
     for (const group of plan.groups) for (const run of group.runs) {
       const where = nodesOf(group, run, tracked);
       if (!where) return "reload";
-      if (holds(where.nodes)) { held = true; continue; }
+      if (holds(where.nodes)) { held.push(...group.els.slice(run[2], run[3])); continue; }
       if (where.unknown) return "reload";
       work.push({ group, run, ...where });
     }
@@ -167,7 +167,7 @@
       console.error(e);
       return "reload";
     }
-    return held ? "partial" : "done";
+    return held.length ? "partial" : "done";
   }
 
   function applyUpdate(next, plan, work, held) {
@@ -220,7 +220,7 @@
     if (stamp && here) here.content = stamp.content;
     renderComments();
     renderWords();
-    pageEdits = held ? editsShownAfter(editIdsIn(next)) : editIdsIn(next);
+    pageEdits = editsShownAfter(editIdsIn(next), held);
     loadEdits();
     refreshCleanSources();
 

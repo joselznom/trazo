@@ -150,6 +150,19 @@ class EditMarksTests(PreviewBrowserTestCase):
         self.wait_for("document.getElementById('ref-x').getBoundingClientRect().top < innerHeight")
         self.assertTrue(self.evaluate("document.querySelector('.pv-edit-bar').hidden"))
 
+    def test_the_selected_edit_stays_selected_when_the_list_changes(self):
+        self.open()
+        self.wait_for("!document.querySelector('.pv-edits').hidden")
+        self.evaluate("document.querySelector('[data-edit-step=\"1\"]').click()")
+        self.evaluate("document.querySelector('[data-edit-step=\"1\"]').click()")
+        self.wait_for("!document.querySelector('.pv-edit-bar').hidden")
+        self.edits = EDITS[1:]  # the first edit is gone from the file
+        self.evaluate("loadEdits()")
+        self.wait_for("document.querySelector('.pv-edits-toggle .n').textContent === '2'")
+        self.key("a", 65)
+        self.wait_for("document.querySelector('.pv-edits-toggle .n').textContent === '1'")
+        self.assertEqual(self.calls, [self.asked("accept", "e2")])
+
     def test_reject_all_asks_first(self):
         self.open()
         self.wait_for("!document.querySelector('.pv-edits').hidden")

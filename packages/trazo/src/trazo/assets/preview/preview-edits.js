@@ -76,14 +76,24 @@
     try { return new Set(JSON.parse(root.querySelector("#pv-edit-ids").textContent)); } catch (e) { return null; }
   };
   let pageEdits = editIdsIn(document);
-  // After an update that kept the paragraph being written as it was: the
-  // built edits marked on the page or listed before.
-  const editsShownAfter = (built) => built && new Set([...built].filter((id) => pageEdits?.has(id) || marksOf(id).length));
+  // After an update that kept the blocks `held` (the paragraph being written) as they were:
+  // the built edits, those of held blocks only while the page still marks them.
+  function editsShownAfter(built, held) {
+    const inHeld = new Set(held.flatMap((el) => $$("[data-edit]", el).map((mark) => mark.dataset.edit)));
+    return built && new Set([...built].filter((id) => !inHeld.has(id) || marksOf(id).length));
+  }
   async function loadEdits() {
+    const selected = edits[editAt];
     try {
       const { ok, payload } = await postJson(`/__edits?doc=${encodeURIComponent(doc)}`);
       edits = ok && Array.isArray(payload.edits) ? payload.edits.filter((e) => !pageEdits || pageEdits.has(e.id)) : [];
     } catch (e) { edits = []; }
+    if (selected) {
+      const at = edits.findIndex((e) => editKey(e) === editKey(selected));
+      if (at < 0 || (editAnchor !== editsToggle && !marksOf(selected.id).length)) hideEditBar();
+      else if (editAnchor?.isConnected) editAt = at;
+      else selectEdit(at, false);
+    }
     renderEditsUi();
     if (commentsReady) renderComments();  // review cards offer Reject when edits are near
   }
