@@ -3241,12 +3241,12 @@
     $("#draft-badge").hidden = !isDraft();
     if (!S.exporting) {
       const exported = $("#export-state");
-      const failed = S.exportFailures?.[S.name];
-      const state = dirty ? "stale" : failed ? "failed" : S.exportState;
+      const lines = S.exportFailures?.get(S.name);
+      const state = dirty ? "stale" : lines ? "failed" : S.exportState;
       exported.hidden = !S.diagram || !state || state === "draft";
-      exported.textContent = state === "current" ? "Export current" : failed ? "Export failed" : state === "error" ? "Export blocked" : "Export pending";
-      exported.className = "status" + (state === "current" ? "" : failed ? " error" : " dirty");
-      exported.title = failed ? failed.join("\n") : "";
+      exported.textContent = state === "current" ? "Export current" : lines ? "Export failed" : state === "error" ? "Export blocked" : "Export pending";
+      exported.className = "status" + (state === "current" ? "" : lines ? " error" : " dirty");
+      exported.title = lines ? lines.join("\n") : "";
     }
     const exp = document.querySelector('[data-action="exportDiagram"]');
     exp.title = isDraft() ? "Draft: not exported. Mark it ready in the Design panel to export."

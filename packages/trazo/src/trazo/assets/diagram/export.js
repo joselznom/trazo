@@ -9,12 +9,14 @@
     const timers = new Map();
     const pending = new Set();
     const conflicted = new Set();
-    S.exportFailures = {};
+    S.exportFailures = new Map();
 
     function exportAfterSave() {
       const name = S.name;
       clearTimeout(timers.get(name));
       timers.delete(name);
+      pending.delete(name);
+      conflicted.delete(name);
       if (isDraft()) return;
       timers.set(name, setTimeout(() => {
         timers.delete(name);
@@ -34,6 +36,7 @@
           exportDiagram(true, name);
           return;
         }
+        conflicted.delete(name);
       }
     }
 
@@ -48,7 +51,7 @@
     function failed(quiet, name, message, lines) {
       if (!quiet) showBanner("error", message, lines);
       else {
-        S.exportFailures[name] = [message, ...lines];
+        S.exportFailures.set(name, [message, ...lines]);
         updateStatus();
       }
     }
@@ -61,7 +64,7 @@
         return;
       }
       S.exporting = true;
-      delete S.exportFailures[name];
+      S.exportFailures.delete(name);
       updateStatus();
       const sha = name === S.name ? S.disk.sha : null;
       const res = await request("POST", `export/${encodeURIComponent(name)}`);
