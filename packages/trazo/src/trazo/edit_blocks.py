@@ -36,6 +36,12 @@ class Chunk(NamedTuple):
     kind: Kind | None
 
 
+class Piece(NamedTuple):
+    text: str
+    old: int | None  # its place among the chunks of base, of current
+    new: int | None
+
+
 def take_blocks(base: str, current: str) -> str:
     """`base` with the figures, tables and equations of `current`."""
     if base == current:
@@ -43,40 +49,49 @@ def take_blocks(base: str, current: str) -> str:
     old, new = _chunks(base), _chunks(current)
     if not any(c.kind for c in old + new):
         return base
-    out: list[str] = []
+    out: list[Piece] = []
     matcher = SequenceMatcher(None, [c.text.strip() for c in old], [c.text.strip() for c in new], autojunk=False)
     for tag, i1, i2, j1, j2 in matcher.get_opcodes():
         if tag == "equal":
-            out += [c.text for c in old[i1:i2]]
+            out += [Piece(old[i].text, i, j1 + i - i1) for i in range(i1, i2)]
             continue
-        prose = [c.text for c in old[i1:i2] if not c.kind]
-        blocks = [c for c in old[i1:i2] if c.kind]
-        for chunk in new[j1:j2]:
-            if not chunk.kind:
+        prose = [Piece(old[i].text, i, None) for i in range(i1, i2) if not old[i].kind]
+        blocks = [old[i] for i in range(i1, i2) if old[i].kind]
+        claimed = {_label(c) for c in new[j1:j2] if c.kind}
+        for j in range(j1, j2):
+            if not new[j].kind:
                 if prose:
                     out.append(prose.pop(0))
                 continue
-            reviewed = _same_block(chunk, blocks)
+            reviewed = _same_block(new[j], blocks, claimed)
             if reviewed:
                 blocks.remove(reviewed)
-            out.append(_with_reviewed_caption(chunk, reviewed))
+            out.append(Piece(_with_reviewed_caption(new[j], reviewed), None, j))
         out += prose
     return _joined(out)
 
 
-def _same_block(block: Chunk, blocks: list[Chunk]) -> Chunk | None:
-    label = LABEL.search(block.masked)
+def _label(chunk: Chunk) -> str | None:
+    found = LABEL.search(chunk.masked)
+    return found[1] if found else None
+
+
+def _same_block(block: Chunk, blocks: list[Chunk], claimed: set[str | None]) -> Chunk | None:
     same = [c for c in blocks if c.kind == block.kind]
-    if label:
-        return next((c for c in same if (found := LABEL.search(c.masked)) and found[1] == label[1]), None)
-    return next((c for c in same if not LABEL.search(c.masked)), None)
+    label = _label(block)
+    return (next((c for c in same if label and _label(c) == label), None)
+            or next((c for c in same if _label(c) not in claimed), None))
 
 
 def _chunks(text: str) -> list[Chunk]:
     masked = markdown_context(text)
-    cuts = [0, *(m.end() for m in BLANK_RUN.finditer(text) if masked[m.start()] == masked[m.end() - 1] == "\n"),
-            len(text)]
-    pieces = [(text[a:b], masked[a:b]) for a, b in zip(cuts, cuts[1:]) if a < b]
+    cuts = {0, len(text), *(m.end() for m in BLANK_RUN.finditer(text)
+                            if masked[m.start()] == masked[m.end() - 1] == "\n")}
+    starts = [0, *(m.end() for m in re.finditer("\n", text))]
+    code = [bool(text[a:b].strip()) and not masked[a:b].strip() for a, b in zip(starts, [*starts[1:], len(text)])]
+    cuts |= {starts[i] for i in range(1, len(starts)) if code[i] != code[i - 1]}
+    edges = sorted(cuts)
+    pieces = [(text[a:b], masked[a:b]) for a, b in zip(edges, edges[1:]) if a < b]
     kinds = [_kind(m) if m.count("\n") == t.count("\n") else None for t, m in pieces]
     for i, kind in enumerate(kinds):
         if kind == "caption" and not _beside_a_table(kinds, i):
@@ -123,9 +138,12 @@ def _table_rows(lines: list[str]) -> range | None:
                       if i and (TABLE_ROW.match(line) or RULE.match(line))), len(lines))
     end = next((i for i in range(start + 1, len(lines)) if CAPTION.match(lines[i])), len(lines))
     rows = lines[start:end]
-    if not rows or (re.fullmatch(r"[-\s]+", rows[0]) and not TABLE_RULE.match(rows[0])):
+    if not rows:
         return None
-    if (TABLE_ROW.match(rows[0]) or TABLE_RULE.match(rows[0])
+    headless = len(rows) > 2 and bool(TABLE_RULE.match(rows[0]) and TABLE_RULE.match(rows[-1]))
+    if re.fullmatch(r"[-\s]+", rows[0]) and not headless:
+        return None
+    if (TABLE_ROW.match(rows[0]) or headless
             or (len(rows) > 1 and (RULE.match(rows[1]) or PIPE_RULE.match(rows[1])))):
         return range(start, end)
     return None
@@ -150,10 +168,12 @@ def _with_reviewed_caption(block: Chunk, reviewed: Chunk | None) -> str:
     return block.text[:lead] + "\n".join(lines) + block.text[lead + len(core):]
 
 
-def _joined(chunks: list[str]) -> str:
+def _joined(pieces: list[Piece]) -> str:
     out = ""
-    for chunk in chunks:
-        if out and not SEPARATED.search(out):
+    for before, piece in zip([None, *pieces], pieces):
+        next_to = before is not None and any(
+            a is not None and b == a + 1 for a, b in ((before.old, piece.old), (before.new, piece.new)))
+        if out and not next_to and not SEPARATED.search(out):
             out += "\n" if out.endswith("\n") else "\n\n"
-        out += chunk
+        out += piece.text
     return out

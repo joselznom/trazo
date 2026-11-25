@@ -42,9 +42,20 @@ class TakeBlocksTests(unittest.TestCase):
         current = f"{FIGURE}\n{other.replace('Old', 'New')}"
         self.assertEqual(pending(other, current), [("Old", "New")])
 
-    def test_code_right_after_a_figure_stays_reviewed(self):
+    def test_a_figure_with_a_new_label_keeps_its_caption_reviewed(self):
+        old = "![Old caption.](a.png){#fig:a}\n"
+        self.assertEqual(pending(old, "![New caption.](a.png){#fig:b}\n"), [("Old", "New")])
+
+    def test_code_next_to_a_figure_stays_reviewed_and_the_figure_does_not(self):
         base = f"{FIGURE}```\nprint(1)\n```\n"
         self.assertEqual(pending(base, base.replace("print(1)", "print(2)")), [("1", "2")])
+        base = f"```\nprint(1)\n```\n{FIGURE}"
+        self.assertEqual(pending(base, base.replace("flow.png", "flow2.png")), [])
+        self.assertEqual(take_blocks(base, base.replace("flow.png", "flow2.png")), base.replace("flow.png", "flow2.png"))
+
+    def test_a_rule_before_a_paragraph_is_no_table(self):
+        base = "-----  -----\nOld text here.\n"
+        self.assertEqual(pending(base, base.replace("Old", "New")), [("Old", "New")])
 
     def test_a_paragraph_added_with_a_figure_stays_pending_alone(self):
         found = pending("One.\n\nTwo.\n", f"One.\n\nSee @fig:flow.\n\n{FIGURE}\nTwo.\n")
