@@ -130,6 +130,19 @@ class EditsTests(unittest.TestCase):
         self.assertNotIn("Two", merged)
         self.assertEqual("".join(e.new for e in edit_diff.edits(merged, fixed)).count("Two second text."), 1)
 
+    def test_an_authors_change_to_a_pending_word_keeps_the_space_before_it(self):
+        # The agent inserted "quick " and the author made it "quickly": the
+        # baseline takes the author's word with its space, and nothing stays pending.
+        merged = edit_diff.merge("The quick brown fox jumps.", "The brown fox jumps.", "The quickly brown fox jumps.")
+        self.assertEqual(merged, "The quickly brown fox jumps.")
+        self.assertEqual(edit_diff.edits(merged, "The quickly brown fox jumps."), [])
+        merged = edit_diff.merge("The brown quick fox.", "The brown fox.", "The brown quickly fox.")
+        self.assertEqual(merged, "The brown quickly fox.")
+
+    def test_editing_a_word_the_agent_changed_accepts_the_agents_change(self):
+        merged = edit_diff.merge("The red fox.\n", "The brown fox.\n", "The redder fox.\n")
+        self.assertEqual(merged, "The redder fox.\n")
+
     def test_the_same_edit_in_two_files_has_two_ids(self):
         [a], [b] = edit_diff.edits("x y\n", "x z\n", "a.md"), edit_diff.edits("x y\n", "x z\n", "b.md")
         self.assertNotEqual(a.id, b.id)

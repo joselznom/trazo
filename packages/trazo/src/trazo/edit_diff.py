@@ -156,12 +156,16 @@ def reject(current: str, chosen: list[Edit]) -> str:
 
 
 def _kept(before: str, start: int, end: int, removed: list[tuple[int, int, str, bool]]) -> str:
-    """before[start:end] without the parts `removed` deletes."""
+    """before[start:end] without the parts `removed` deletes, except the
+    spaces inside a line, which keep the words around them apart."""
     out, at = [], start
     for b0, b1, _, _ in sorted(removed):
         if b1 <= at or b0 >= end:
             continue
         out.append(before[at:max(at, b0)])
+        gone = before[max(at, b0):min(b1, end)]
+        if not gone.strip() and "\n" not in gone:
+            out.append(gone)
         at = max(at, b1)
     out.append(before[at:end] if at < end else "")
     return "".join(out)
