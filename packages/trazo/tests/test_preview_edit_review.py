@@ -152,6 +152,27 @@ class EditReviewTests(unittest.TestCase):
         with self.assertRaises(preview.CommentError):
             preview.change_edits({"op": "undo"})
 
+    def test_undoing_an_accept_keeps_the_authors_later_correction(self):
+        self.pending()
+        self.agent_edits("We studied", "We followed")
+        answer = preview.change_edits({"op": "accept", "edits": self.pending()})
+        source = preview.get_source(INTRO)
+        preview.change_source({"file": INTRO, "text": source["text"].replace("followed", "monitored"),
+                               "base_sha256": source["sha256"]})
+        self.assertEqual(preview.change_edits({"op": "undo", "expect": answer["accept_id"]}), {"undone": 0})
+        self.assertEqual(self.pending(), [])
+
+    def test_the_list_holds_the_edits_the_last_build_marked(self):
+        self.pending()
+        self.agent_edits("We studied", "We followed")
+        self.build_page()
+        [shown] = self.pending()
+        self.agent_edits("We followed", "We tracked")  # not built yet: no page shows it
+        self.assertEqual(self.pending(), [])
+        self.assertEqual(preview.change_edits({"op": "accept", "edits": [shown]})["done"], 0)
+        self.build_page()
+        self.assertEqual([e["new"] for e in self.pending()], ["tracked"])
+
     def test_only_the_last_accept_can_be_undone(self):
         self.pending()
         self.agent_edits("We studied", "We followed")

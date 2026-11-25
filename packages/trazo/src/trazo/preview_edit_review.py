@@ -20,7 +20,8 @@ pending edits around them. Nothing records who made an edit: an edit made
 outside the preview is pending like any other.
 
 GET /__edits?doc=NAME lists a document's pending edits (file, id, line,
-old and new text, when the preview first saw it); POST /__edits {op:
+old and new text, when the preview first saw it), once a build of the page
+has seen the file: then only those that build marked; POST /__edits {op:
 accept|reject, edits: [{file, id}]} accepts or rejects some and answers how
 many were done and which changed since the page was built (missed), and an
 accept its `accept_id`; POST /__edits {op: undo, expect?: accept_id} undoes
@@ -148,7 +149,7 @@ def reader() -> tuple[Callable[[Path], str] | None, Callable[[], None]]:
             for name, ids in seen.items():
                 before = times.get(name, {})
                 after = {i: before.get(i, stamp) for i in ids}
-                if after != before:
+                if name not in times or after != before:
                     times[name], changed = after, True
             if changed:
                 save(current)
@@ -173,10 +174,12 @@ def edits_payload(doc: str | None) -> dict[str, Any]:
     for name in page_files(doc):
         if name not in files:
             continue
-        times = store["seen"].get(name, {})
+        times = store["seen"].get(name)
         for e in pending(store, name, exact_text(files[name])):
+            if times is not None and e.id not in times:
+                continue
             out.append({"file": name, "id": e.id, "line": e.line, "old": e.old, "new": e.new,
-                        "seen": times.get(e.id, "")})
+                        "seen": (times or {}).get(e.id, "")})
     return {"doc": doc, "edits": out}
 
 
@@ -228,7 +231,8 @@ def change_edits(request: Any) -> dict[str, Any]:
             if op == "accept":
                 after = edit_diff.accept(base, chosen)
                 undo["files"][name] = [store["files"].get(name, ""), after]
-                undo["seen"][name] = store["seen"].get(name, {})
+                if name in store["seen"]:
+                    undo["seen"][name] = store["seen"][name]
                 store["files"][name] = after
                 continue
             new = edit_diff.reject(text, chosen).encode("utf-8")
@@ -247,7 +251,7 @@ def change_edits(request: Any) -> dict[str, Any]:
                 done -= len(chosen)
                 missed += [{"file": asked, "id": e.id} for e in chosen]
         if op == "accept" and done:
-            store["accepted"] = {**undo, "count": done}
+            store["accepted"] = undo
             save(store)
     if op == "accept" and done:
         _rebuild_pages({paths[asked][1] for asked in by_file})
@@ -264,17 +268,21 @@ def undo_accept(request: dict[str, Any]) -> dict[str, Any]:
             raise RequestError("nothing to undo")
         if "expect" in request and str(last.get("at")) != str(request["expect"]):
             raise Conflict("the edits were accepted again since; undo that accept first")
+        undone = 0
         for name, (before, after) in last["files"].items():
-            store["files"][name] = _unaccepted(store["files"].get(name, ""), before, after)
-            store["seen"][name] = {**last.get("seen", {}).get(name, {}), **store["seen"].get(name, {})}
+            now = store["files"].get(name, "")
+            store["files"][name] = _unaccepted(now, before, after)
+            undone += len(edit_diff.edits(store["files"][name], now))
+            if name in last.get("seen", {}):
+                store["seen"][name] = {**last["seen"][name], **store["seen"].get(name, {})}
         del store["accepted"]
         save(store)
     _rebuild_pages(set(last["files"]))
-    return {"undone": last.get("count", 0)}
+    return {"undone": undone}
 
 
 def _unaccepted(now: str, before: str, after: str) -> str:
-    return before if now == after else edit_diff.merge(after, now, before)
+    return before if now == after else edit_diff.merge(after, before, now)
 
 
 def absorb(name: str, before: str, after: str) -> None:

@@ -185,8 +185,9 @@
 
   async function acceptEdits(list) {
     const payload = await applyEdits("accept", list);
-    if (payload?.accept_id && !payload.missing)
-      toast(`${plural(payload.done, "change")} accepted`, { label: "Undo", run: () => undoAccept(payload.accept_id) });
+    if (!payload?.accept_id) return;
+    const stale = payload.missing ? `; ${plural(payload.missing, "change")} changed since the page was built and stayed` : "";
+    toast(`${plural(payload.done, "change")} accepted${stale}`, { label: "Undo", run: () => undoAccept(payload.accept_id) });
   }
   function rejectEdits(list) {
     const which = list.length === edits.length ? "all " : "";
