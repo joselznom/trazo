@@ -108,6 +108,8 @@
   function groupOf(x) {
     if (view === "figures") return [docIndex(x.c.doc), DOCS[x.c.doc] || x.c.doc];
     if (x.unit) return [units.indexOf(x.unit), titleOf(x.unit)];
+    const top = x.hit && topSections.find((s) => s.contains(x.hit.el));
+    if (top) return [-0.5, titleOf(top)];
     if (x.hit) return [-1, "Front matter"];
     return [Infinity, "Not found in the text"];
   }

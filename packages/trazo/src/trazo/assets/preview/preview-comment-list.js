@@ -259,11 +259,13 @@
     const active = document.activeElement;
     const focus = active && active.tagName === "TEXTAREA" && panel.contains(active)
       ? { id: active.dataset.cid, at: active.selectionStart } : null;
+    const group = panel.contains(active) ? active.dataset.group : undefined;
     draw();
     if (focus) {
       const area = $(`textarea[data-cid="${focus.id}"]`, panel);
       if (area) { area.focus(); area.setSelectionRange(focus.at, focus.at); }
     }
+    if (group !== undefined) $(`[data-group="${CSS.escape(group)}"]`, panel)?.focus();
   }
 
   // Comments of the Figures & Tables view: those anchored in a figure

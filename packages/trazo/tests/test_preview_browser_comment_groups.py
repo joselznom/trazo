@@ -27,8 +27,9 @@ class CommentGroupTests(PreviewBrowserTestCase):
 
     def open_comments(self, query=""):
         self.open(query)
-        self.evaluate("document.querySelector('[data-side=right]').click()")
         self.wait_for("document.querySelector('.pv-card')")
+        self.evaluate("document.querySelector('.pv-side.right.open') || document.querySelector('[data-side=right]').click()")
+        self.wait_for("document.querySelector('.pv-side.right.open')")
 
     def fold(self, title):
         self.evaluate(f"[...document.querySelectorAll('.pv-cgroup')].find(b => b.textContent.startsWith({json.dumps(title)})).click()")
@@ -55,6 +56,32 @@ class CommentGroupTests(PreviewBrowserTestCase):
             order.append(self.evaluate("document.querySelector('.pv-card.current .pv-text').textContent"))
         self.assertEqual(order, ["Before the first section", "In the introduction", "Moved to methods",
                                  "Later in methods", "Text gone, section kept", "Text and section gone"])
+
+    def test_a_paragraph_under_the_only_top_heading_is_in_that_section(self):
+        page = preview.OUT_DIR / "manuscript.html"
+        page.write_text(page.read_text().replace(
+            '<section class="level1" id="methods"><h1>Methods</h1>',
+            '<section class="level1" id="methods"><h1>Methods</h1><p>Opening of methods.</p>'
+            '<section class="level2" id="scan"><h2>Scanning</h2><p>Scanner words.</p></section>'
+            '<section class="level2" id="stats"><h2>Statistics</h2><p>Statistics words.</p></section>'
+        ).replace('<section class="level1" id="intro">', '<div id="intro">').replace("</section><section", "</div><section", 1))
+        self.add("Opening of methods.", "Under the top heading", para="Methods ¶1")
+        self.add("Statistics words.", "In a subsection", "Statistics", "Statistics ¶1")
+        self.open_comments()
+        self.assertEqual(self.evaluate(LIST), ["# Methods", "Under the top heading", "# Statistics", "In a subsection"])
+
+    def test_a_header_folded_from_the_keyboard_keeps_the_focus(self):
+        self.add("Another paragraph.", "In the introduction", "Introduction", "Introduction ¶2")
+        self.add("More methods text.", "Later in methods", para="Methods ¶2")
+        self.open_comments()
+        self.evaluate("document.querySelectorAll('.pv-cgroup')[1].focus()")
+        self.evaluate("renderComments()")
+        self.assertTrue(self.evaluate("document.activeElement.matches('.pv-cgroup')"))
+        for kind in ("keyDown", "keyUp"):
+            self.chrome.call("Input.dispatchKeyEvent", {"type": kind, "key": "Enter", "code": "Enter", "windowsVirtualKeyCode": 13,
+                                                        **({"text": "\r"} if kind == "keyDown" else {})}, self.session)
+        self.wait_for("document.activeElement.matches('.pv-cgroup[aria-expanded=false]')")
+        self.assertEqual(self.evaluate("document.activeElement.textContent"), "Methods1")
 
     def test_one_section_shows_no_headers(self):
         self.add("Another paragraph.", "Only here", "Introduction", "Introduction ¶2")
@@ -110,7 +137,6 @@ class CommentGroupTests(PreviewBrowserTestCase):
             next(c for c in stored if c["id"] == ids[text])["resolved"] = f"2026-01-0{i + 1} 10:00:00"
         preview.COMMENTS_PATH.write_text(json.dumps(stored))
         self.open()
-        self.evaluate("document.querySelector('[data-side=right]').click()")
         self.evaluate("document.querySelector('[data-filter=resolved]').click()")
         self.wait_for("document.querySelector('.pv-card.done')")
         self.assertEqual(self.evaluate(LIST), ["# Introduction", "Intro late", "Intro early",
