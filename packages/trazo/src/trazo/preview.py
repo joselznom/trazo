@@ -209,7 +209,8 @@ PREVIEW_ASSETS = ASSETS_DIR / "preview"
 VIEWER_SCRIPTS = (
     "preview-page.js", "preview-wordmark.js", "preview-shell.js", "preview-layout.js", "preview-navigation.js",
     "preview-comment-anchors.js", "preview-comment-list.js", "preview-comment-highlights.js",
-    "preview-source.js", "preview-diff.js", "preview-edits.js", "preview-build.js", "preview-new-comments.js",
+    "preview-source.js", "preview-diff.js", "preview-edits.js", "preview-edit-batches.js", "preview-build.js",
+    "preview-new-comments.js",
     "preview-captions.js", "preview-caption-editors.js", "preview-export.js", "preview-export-picker.js",
     "preview-figures.js", "preview-lightbox.js", "preview-submission.js", "preview-writing.js", "preview-paragraphs.js",
     "preview-format.js", "preview-mentions.js", "preview-history.js", "preview-update.js", "preview.js",

@@ -250,7 +250,8 @@ def mark_written():
 
 def latest_change(doc):
     """What Cmd+Z outside the text undoes in a document: the most recent of a
-    save and a comment change, each with its own undo. {kind: file|comment|"", file}."""
+    save, a comment change and an accept of edits, each with its own undo.
+    {kind: file|comment|accept|"", file, id: the accept's}."""
     from . import preview
     from .preview_comments import PreviewComments, PreviewHistory
     files = set(preview_edit_review.page_files(doc))
@@ -258,11 +259,18 @@ def latest_change(doc):
         saves = [e for e in read_file_history() if e.get("file") in files]
         history = PreviewHistory(preview.HISTORY_PATH).load()
         comments = [history[i] for i in PreviewComments().history_of(history, doc)]
+        accepted = (preview_edit_review.load() or {}).get("accepted")
+    accepts = [accepted] if isinstance(accepted, dict) and files & set(accepted.get("files", {})) else []
     # `at` tells apart two changes of one second; older entries have only `time`.
-    latest = [(entries[-1].get("time", ""), entries[-1].get("at", 0)) if entries else ("", 0) for entries in (saves, comments)]
-    if saves and latest[0] >= latest[1]:
-        return {"kind": "file", "file": saves[-1].get("file", "")}
-    return {"kind": "comment" if comments else "", "file": ""}
+    found = [(entries[-1].get("time", ""), entries[-1].get("at", 0), -priority, kind, entries[-1])
+             for priority, (kind, entries) in enumerate((("file", saves), ("comment", comments), ("accept", accepts)))
+             if entries]
+    if not found:
+        return {"kind": "", "file": ""}
+    *_, kind, entry = max(found, key=lambda change: change[:3])
+    if kind == "accept":
+        return {"kind": "accept", "file": "", "id": str(entry.get("at", ""))}
+    return {"kind": kind, "file": entry.get("file", "") if kind == "file" else ""}
 
 
 def read_include_from(path_text, source_file):

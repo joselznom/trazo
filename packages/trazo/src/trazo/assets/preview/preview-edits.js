@@ -3,8 +3,10 @@
 // page: .pv-edit-ins (inserted), .pv-edit-del (deleted, shown as written) and empty
 // .pv-blk spans at the start of a new or changed block. Here: the Edits
 // control in the view bar (count, previous and next, show marks, accept or
-// reject all), a small bar to accept or reject the selected edit, and the
-// edits a review comment's card accepts or rejects (editsNear).
+// reject all), a small bar to accept or reject the selected edit (and go to
+// the reference it holds), the undo of an accept, and the edits a review
+// comment's card accepts or rejects (editsNear). The banner and the batches
+// are in preview-edit-batches.js.
 // The parts of the viewer are classic scripts loaded in the order of
 // trazo.preview.VIEWER_SCRIPTS; their top-level names are shared globals.
   if (!window.PreviewModel) throw new Error("preview-model.js did not load");  // see preview-page.js
@@ -33,6 +35,7 @@
     `<button type="button" class="pv-icon-btn sm" data-edit-step="1" aria-label="Next edit" title="Next edit">${ICONS.down}</button>` +
     `<div class="pv-edits-menu" id="pv-edits-menu" role="menu" aria-label="Edits" hidden>` +
     `<button type="button" role="menuitemcheckbox" data-edit-op="marks"><span class="ck">✓</span>Show marks</button>` +
+    `<div class="pv-edits-batches" role="group" aria-label="Batches" hidden></div>` +
     `<hr><button type="button" role="menuitem" data-edit-op="accept-all"><span class="ck"></span><span class="t"></span></button>` +
     `<button type="button" role="menuitem" class="danger" data-edit-op="reject-all"><span class="ck"></span><span class="t"></span></button></div>`;
   zoomBar.prepend(editsUi);
@@ -40,8 +43,10 @@
   const editBar = h("div", { class: "pv-edit-bar", role: "toolbar", "aria-label": "Selected edit", hidden: true });
   editBar.innerHTML = `<button type="button" class="ok" data-edit-op="accept" aria-label="Accept">${checkIcon}</button>` +
     `<button type="button" class="no" data-edit-op="reject" aria-label="Reject">${ICONS.close}</button>` +
+    `<button type="button" class="go" data-edit-op="go" hidden></button>` +
     `<div class="pv-edit-was" hidden></div>`;
   document.body.append(editBar);
+  let selectedLink = null;
 
   let showMarks = prefs.editMarks !== false;
   function renderEditsUi() {
@@ -55,6 +60,7 @@
     $(".ck", marks).textContent = showMarks ? "✓" : "";
     document.documentElement.classList.toggle("pv-edits-off", !showMarks);
     if (!n) hideEditBar();
+    renderEditBanner();
   }
   function setMarks(on) {
     showMarks = on;
@@ -64,22 +70,46 @@
   }
   const closeEditsMenu = () => { editsMenu.hidden = true; editsToggle.setAttribute("aria-expanded", "false"); };
 
+  // The ids of the edits the page's build marked (trazo.preview_render): an
+  // edit written since waits for the page that shows it.
+  const editIdsIn = (root) => {
+    try { return new Set(JSON.parse(root.querySelector("#pv-edit-ids").textContent)); } catch (e) { return null; }
+  };
+  let pageEdits = editIdsIn(document);
+  // After an update that kept some blocks as they were (the paragraph being
+  // written): the built edits marked on the page or listed before; the rest
+  // wait for the update that installs every block.
+  const editsShownAfter = (built, held) =>
+    !held || !built ? built : new Set([...built].filter((id) => pageEdits?.has(id) || marksOf(id).length));
   async function loadEdits() {
+    let found;
     try {
       const { ok, payload } = await postJson(`/__edits?doc=${encodeURIComponent(doc)}`);
-      edits = ok && Array.isArray(payload.edits) ? payload.edits : [];
-    } catch (e) { edits = []; }
+      found = ok && Array.isArray(payload.edits) ? payload.edits.filter((e) => !pageEdits || pageEdits.has(e.id)) : [];
+    } catch (e) { found = []; }
+    const selected = edits[editAt];
+    edits = found;
+    if (selected) {
+      const at = edits.findIndex((e) => editKey(e) === editKey(selected));
+      if (at < 0 || (editAnchor !== editsToggle && !marksOf(selected.id).length)) hideEditBar();
+      else if (editAnchor?.isConnected) editAt = at;
+      else selectEdit(at, false);
+    }
     renderEditsUi();
     if (commentsReady) renderComments();  // review cards offer Reject when edits are near
   }
 
-  const changedAt = (seen) => !seen ? "" : seen.slice(0, 10) === new Date().toLocaleDateString("sv")
-    ? `Changed ${seen.slice(11, 16)}` : `Changed ${seen.slice(0, 16)}`;
+  function seenTime(seen) {
+    const [day, clock] = seen.split(" "), minute = clock.slice(0, 5);
+    return day === new Date().toLocaleDateString("sv") ? minute : `${day} ${minute}`;
+  }
+  const changedAt = (seen) => (seen ? `Changed ${seenTime(seen)}` : "");
   function hideEditBar() {
     editBar.hidden = true;
     for (const el of $$(".pv-edit-cur", page)) el.classList.remove("pv-edit-cur");
     editAt = -1;
     editAnchor = null;
+    selectedLink = null;
   }
   function placeEditBar() {
     const anchor = editAnchor;
@@ -92,10 +122,7 @@
   scroller.addEventListener("scroll", () => { if (!editBar.hidden) placeEditBar(); }, { passive: true });
   window.addEventListener("resize", () => { if (!editBar.hidden) placeEditBar(); });
 
-  // Select an edit: mark it, scroll to it and show its bar. An edit with no
-  // mark in the page (a table cell, a figure alone in its paragraph) opens
-  // the Source tab at its line instead.
-  function selectEdit(i, scroll) {
+  function selectEdit(i, scroll, link) {
     hideEditBar();
     const e = edits[i];
     if (!e) return;
@@ -117,12 +144,22 @@
       // A changed block has no inline marks: the bar shows what it was.
       was.hidden = marks.some((el) => el.matches(".pv-edit-ins, .pv-edit-del")) || !e.old.trim();
       was.textContent = was.hidden ? "" : `Was: ${clip(e.old)}`;
+      selectedLink = link || marks.filter((el) => el.matches(".pv-edit-ins")).map((el) => $("a[href^='#']", el)).find(Boolean) || null;
     }
+    const go = $('[data-edit-op="go"]', editBar), to = selectedLink ? linkLabel(selectedLink) : "";
+    go.hidden = !selectedLink;
+    go.textContent = `Go to ${to.length > 40 ? to.slice(0, 40) + "…" : to} ↗`;
     const when = changedAt(e.seen);
     $('[data-edit-op="accept"]', editBar).dataset.tip = `Accept (A)${when ? " · " + when : ""}`;
     $('[data-edit-op="reject"]', editBar).dataset.tip = `Reject (R)${when ? " · " + when : ""}`;
     if (scroll && marks.length) scrollToEl(marks[0], true, reduceMotion());
     requestAnimationFrame(placeEditBar);
+  }
+  const TARGET_KINDS = { fig: "Figure", tbl: "Table", eq: "Equation", sec: "Section", ref: "Reference" };
+  function linkLabel(a) {
+    const text = a.textContent.trim(), kind = TARGET_KINDS[a.getAttribute("href").slice(1).split(/[:-]/)[0]];
+    const numberOnly = /^[\d.,–-]+$/.test(text);
+    return numberOnly && kind ? `${kind} ${text}` : text;
   }
   function stepEdit(dir) {
     if (!edits.length) return;
@@ -166,6 +203,22 @@
     return payload;
   }
 
+  async function acceptEdits(list) {
+    const payload = await applyEdits("accept", list);
+    if (!payload?.accept_id) return;
+    const stale = payload.missing ? `; ${plural(payload.missing, "change")} changed since the page was built and stayed` : "";
+    toast(`${plural(payload.done, "change")} accepted${stale}`, { label: "Undo", run: () => undoAccept(payload.accept_id) });
+  }
+  function rejectEdits(list) {
+    const which = list.length === edits.length ? "all " : "";
+    if (confirm(`Reject ${which}${plural(list.length, "edit")}? The text goes back to how it was when you last reviewed it. Undo save in the Source tab brings back a file's edits.`))
+      applyEdits("reject", list, `Rejected ${plural(list.length, "edit")}`);
+  }
+  async function undoAccept(acceptId) {
+    const { ok, payload } = await postJson("/__edits", { op: "undo", ...(acceptId ? { expect: acceptId } : {}) });
+    toast(ok ? `${plural(payload.undone, "change")} back to review` : `Not undone: ${payload.error || "the server refused"}.`);
+  }
+
   // The edits a review comment is about: those in its paragraph and the new
   // paragraphs right after it.
   function editsNear(hit) {
@@ -188,24 +241,41 @@
     if (!op) return;
     closeEditsMenu();
     if (op === "marks") setMarks(!showMarks);
-    else if (op === "accept-all") applyEdits("accept", edits.slice(), `Accepted ${plural(edits.length, "edit")}`);
-    else if (op === "reject-all" && confirm(`Reject all ${plural(edits.length, "edit")}? The text goes back to how it was when you last reviewed it. Undo save in the Source tab brings back a file's edits.`))
-      applyEdits("reject", edits.slice(), `Rejected ${plural(edits.length, "edit")}`);
+    else if (op === "accept-all") acceptEdits(edits.slice());
+    else if (op === "reject-all") rejectEdits(edits.slice());
   });
   document.addEventListener("click", (ev) => { if (!editsUi.contains(ev.target)) closeEditsMenu(); });
   editBar.addEventListener("click", (ev) => {
     const op = ev.target.closest("[data-edit-op]")?.dataset.editOp, e = edits[editAt];
-    if (op && e) applyEdits(op, [e], op === "accept" ? "Edit accepted" : "Edit rejected");
+    if (op === "go" && selectedLink) { followLink(selectedLink); hideEditBar(); }
+    else if (op === "accept" && e) acceptEdits([e]);
+    else if (op === "reject" && e) applyEdits(op, [e], "Edit rejected");
   });
   for (const button of $$("button", editBar)) {
     button.addEventListener("mouseenter", () => { tipFor = button; tip.textContent = button.dataset.tip || ""; placeTip(button); });
     button.addEventListener("mouseleave", hideTip);
   }
-  // A click on a mark selects its edit (not when it ends a text selection).
+  function takeClickInMark(ev) {
+    const mark = showMarks && view === "doc" && ev.button === 0 && !ev.altKey && !ev.shiftKey
+      && ev.target.closest?.(".pv-edit-ins, .pv-edit-del");
+    if (!mark || !page.contains(mark)) return;
+    const link = ev.target.closest("a[href^='#']");
+    if (ev.metaKey || ev.ctrlKey) {
+      if (link && followLink(link)) { ev.preventDefault(); ev.stopPropagation(); }
+      return;
+    }
+    const at = edits.findIndex((e) => e.id === mark.dataset.edit);
+    if (at < 0 || !document.getSelection().isCollapsed) return;
+    ev.preventDefault();
+    ev.stopPropagation();
+    closeEditsMenu();
+    selectEdit(at, false, link);
+  }
+  app.addEventListener("click", takeClickInMark, true);
   page.addEventListener("click", (ev) => {
     if (!showMarks || ev.target.closest("a, button") || !document.getSelection().isCollapsed) return;
-    const mark = ev.target.closest(".pv-edit-ins, .pv-edit-del, [data-edit-block]");
-    const id = mark && (mark.dataset.edit || blockIds(mark)[0]);
+    const mark = ev.target.closest("[data-edit-block]");
+    const id = mark && blockIds(mark)[0];
     const at = id ? edits.findIndex((e) => e.id === id) : -1;
     if (at >= 0) selectEdit(at, false);
     else if (!editBar.hidden && !editBar.contains(ev.target)) hideEditBar();

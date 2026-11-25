@@ -29,6 +29,7 @@ class WritingCase(PreviewBrowserTestCase):
         self.chapter.write_text(text, encoding="utf-8")
         self.assertEqual(preview.render("manuscript", preview.OUT_DIR)[0], "")
         self.open()
+        self.wait_for("!JSON.parse(document.querySelector('#pv-edit-ids')?.textContent || '[]').length || edits.length > 0")
 
     def built_again(self, text):
         """The watcher's work after a change: the page built, `synced` past the write.

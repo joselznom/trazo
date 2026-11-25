@@ -5,11 +5,14 @@ The baseline, edits.json in the review folder, keeps each manuscript file
 it. The first preview of a paper with this version takes it from the files
 as they are, so nothing is pending then; a file added later starts empty, so
 all of it is pending. A pending edit is a difference between a file's
-baseline and its current text (trazo.edit_diff).
+baseline and its current text (trazo.edit_diff), except in figures, tables
+and display equations: the baseline takes those as they are when a page is
+built (trazo.edit_blocks), so they are never pending.
 
 The preview build marks the pending edits in the page (`reader`). The
 author accepts an edit (its new text goes into the baseline; the file does
-not change) or rejects it (its old text goes back into the file, recorded
+not change; the last accept can be undone, which puts back the baseline
+from before it) or rejects it (its old text goes back into the file, recorded
 in file_history.json as a save, so the Source tab's "Undo save" brings the
 edit back). The author's own saves from the preview (Source tab, caption
 editors) are accepted as they are saved (`absorb`), without accepting the
@@ -17,9 +20,14 @@ pending edits around them. Nothing records who made an edit: an edit made
 outside the preview is pending like any other.
 
 GET /__edits?doc=NAME lists a document's pending edits (file, id, line,
-old and new text, when the preview first saw it); POST /__edits {op:
+old and new text, when the preview first saw it); the page lists those of
+them its build marked (`reader`), so it never acts on an edit it does not
+show. POST /__edits {op:
 accept|reject, edits: [{file, id}]} accepts or rejects some and answers how
-many were done and which changed since the page was built (missed).
+many were done and which changed since the page was built (missed), and an
+accept its `accept_id`; POST /__edits {op: undo, expect?: accept_id} undoes
+the last accept (409 when `expect` names an older one) and answers how many
+edits are pending again (undone).
 
 The preview's paths and state stay in trazo.preview, and this code reads them from
 there when it runs (preview.NAME), so patching them on trazo.preview reaches it.
@@ -33,8 +41,8 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any, cast
 
-from . import edit_diff, preview_blocks
-from .local_server import RequestError
+from . import edit_blocks, edit_diff, preview_blocks
+from .local_server import Conflict, RequestError
 from .review_storage import StoreError, review_lock, write_json
 from .source_publish import publish
 
@@ -93,29 +101,39 @@ def ensure() -> dict[str, Any]:
     return store
 
 
+def baseline(store: dict[str, Any], name: str, text: str) -> str:
+    return edit_blocks.take_blocks(store["files"].get(name, ""), text)
+
+
 def pending(store: dict[str, Any], name: str, text: str) -> list[edit_diff.Edit]:
-    return edit_diff.edits(store["files"].get(name, ""), text, name)
+    return edit_diff.edits(baseline(store, name, text), text, name)
 
 
-def reader() -> tuple[Callable[[Path], str] | None, Callable[[], None]]:
-    """(read, done) for one page build: `read` gives a file's text with the
+def reader() -> tuple[Callable[[Path], str] | None, Callable[[], None], Callable[[], list[str]]]:
+    """(read, done, shown) for one page build: `read` gives a file's text with the
     marks of its pending edits and of its blocks (trazo.preview_blocks);
-    `done` records when each edit was first seen. An unreadable baseline leaves the page unmarked (read None)
-    rather than unbuilt."""
+    `shown` lists the ids of the edits read so far;
+    `done` records when each edit was first seen and puts the figures,
+    tables and equations of the files read into the baseline. An unreadable
+    baseline leaves the page unmarked (read None) rather than unbuilt."""
     try:
         store = ensure()
     except StoreError as exc:
         print(f"[preview] edits not marked: {exc}", flush=True)
-        return None, lambda: None
+        return None, lambda: None, list
     names = {path.resolve(): name for name, path in tracked().items()}
     seen: dict[str, list[str]] = {}
+    with_blocks: dict[str, str] = {}
 
     def read(path: Path) -> str:
         text = exact_text(Path(path))
         name = names.get(Path(path).resolve())
         if name is None:
             return text
-        found = pending(store, name, text)
+        base = baseline(store, name, text)
+        if base != store["files"].get(name, ""):
+            with_blocks[name] = base
+        found = edit_diff.edits(base, text, name)
         seen[name] = [e.id for e in found]
         return edit_diff.with_marks(text, edit_diff.edit_marks(text, found) + preview_blocks.marks(text, name))
 
@@ -127,6 +145,9 @@ def reader() -> tuple[Callable[[Path], str] | None, Callable[[], None]]:
                 return
             times = current["seen"]
             changed = False
+            for name, base in with_blocks.items():
+                if current["files"].get(name, "") == store["files"].get(name, ""):
+                    current["files"][name], changed = base, True
             for name, ids in seen.items():
                 before = times.get(name, {})
                 after = {i: before.get(i, stamp) for i in ids}
@@ -134,7 +155,7 @@ def reader() -> tuple[Callable[[Path], str] | None, Callable[[], None]]:
                     times[name], changed = after, True
             if changed:
                 save(current)
-    return read, done
+    return read, done, lambda: [i for ids in seen.values() for i in ids]
 
 
 def page_files(doc: str) -> list[str]:
@@ -164,7 +185,7 @@ def edits_payload(doc: str | None) -> dict[str, Any]:
 
 def _items(request: Any) -> tuple[str, dict[str, list[str]]]:
     if not isinstance(request, dict) or request.get("op") not in ("accept", "reject"):
-        raise RequestError("op must be accept or reject")
+        raise RequestError("op must be accept, reject or undo")
     items = request.get("edits")
     if not isinstance(items, list) or not items or len(items) > MAX_ITEMS:
         raise RequestError("edits must be a non-empty list of {file, id}")
@@ -179,15 +200,19 @@ def _items(request: Any) -> tuple[str, dict[str, list[str]]]:
 
 
 def change_edits(request: Any) -> dict[str, Any]:
-    """Accept or reject edits; those that changed since the page was built
-    are left as they are and listed as missed ({file, id}), as are those of
-    a file another program wrote while their rejection was being published
-    (source_publish keeps that version and the rejected text)."""
+    """Accept or reject edits, or undo the last accept; those that changed
+    since the page was built are left as they are and listed as missed
+    ({file, id}), as are those of a file another program wrote while their
+    rejection was being published (source_publish keeps that version and the
+    rejected text). An accept keeps the baselines it replaced for its undo."""
     from .preview_sources import read_file_history, read_source, save_file_history, sha256_of, source_path
+    if isinstance(request, dict) and request.get("op") == "undo":
+        return undo_accept(request)
     op, by_file = _items(request)
     paths = {name: source_path(name) for name in by_file}  # validates every name first
     ensure()
     done, missed, warnings = 0, [], []
+    undo: dict[str, Any] = {"at": time.time_ns(), "time": time.strftime("%Y-%m-%d %H:%M:%S"), "files": {}, "seen": {}}
     with review_lock():
         store = load()
         if store is None:
@@ -196,14 +221,19 @@ def change_edits(request: Any) -> dict[str, Any]:
         for asked, ids in by_file.items():
             path, name = paths[asked]
             data, text = read_source(path)
-            found = {e.id: e for e in pending(store, name, text)}
+            base = baseline(store, name, text)
+            found = {e.id: e for e in edit_diff.edits(base, text, name)}
             chosen = [found[i] for i in ids if i in found]
             missed += [{"file": asked, "id": i} for i in ids if i not in found]
             if not chosen:
                 continue
             done += len(chosen)
             if op == "accept":
-                store["files"][name] = edit_diff.accept(store["files"].get(name, ""), chosen)
+                after = edit_diff.accept(base, chosen)
+                undo["files"][name] = [base, after]
+                if name in store["seen"]:
+                    undo["seen"][name] = store["seen"][name]
+                store["files"][name] = after
                 continue
             new = edit_diff.reject(text, chosen).encode("utf-8")
             # Recorded before publishing, as a save is: a damaged history stops the
@@ -221,11 +251,38 @@ def change_edits(request: Any) -> dict[str, Any]:
                 done -= len(chosen)
                 missed += [{"file": asked, "id": e.id} for e in chosen]
         if op == "accept" and done:
+            store["accepted"] = undo
             save(store)
     if op == "accept" and done:
         _rebuild_pages({paths[asked][1] for asked in by_file})
     return {"done": done, "missing": len(missed), "missed": missed,
+            **({"accept_id": str(undo["at"])} if op == "accept" and done else {}),
             **({"warning": " ".join(warnings)} if warnings else {})}
+
+
+def undo_accept(request: dict[str, Any]) -> dict[str, Any]:
+    with review_lock():
+        store = load()
+        last = store.get("accepted") if store else None
+        if store is None or not isinstance(last, dict) or not isinstance(last.get("files"), dict):
+            raise RequestError("nothing to undo")
+        if "expect" in request and str(last.get("at")) != str(request["expect"]):
+            raise Conflict("the edits were accepted again since; undo that accept first")
+        undone = 0
+        for name, (before, after) in last["files"].items():
+            now = store["files"].get(name, "")
+            store["files"][name] = _unaccepted(now, before, after)
+            undone += len(edit_diff.edits(store["files"][name], now))
+            if name in last.get("seen", {}):
+                store["seen"][name] = {**last["seen"][name], **store["seen"].get(name, {})}
+        del store["accepted"]
+        save(store)
+    _rebuild_pages(set(last["files"]))
+    return {"undone": undone}
+
+
+def _unaccepted(now: str, before: str, after: str) -> str:
+    return before if now == after else edit_diff.merge(after, before, now)
 
 
 def absorb(name: str, before: str, after: str) -> None:
@@ -236,9 +293,9 @@ def absorb(name: str, before: str, after: str) -> None:
     store = load()
     if store is None:
         return  # the first baseline is taken from the files as they are
-    baseline = store["files"].get(name, "")
-    merged = edit_diff.merge(before, baseline, after)
-    if merged == baseline:
+    reviewed = store["files"].get(name, "")
+    merged = edit_diff.merge(before, reviewed, after)
+    if merged == reviewed:
         return  # the marks stay what any build of the file shows
     store["files"][name] = merged
     save(store)

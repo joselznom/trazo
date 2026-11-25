@@ -104,7 +104,7 @@ def render(name, out_dir, *, for_counts=False):
     out_dir.mkdir(parents=True, exist_ok=True)
     error, warnings, unavailable = "", [], ""
     # The served page marks the pending edits (preview_edit_review); counts do not.
-    read, seen = (None, None) if for_counts else preview_edit_review.reader()
+    read, seen, shown = (None, None, list) if for_counts else preview_edit_review.reader()
     try:
         files = doc_files(name)
         text = expand_files(sections, mark=not for_counts, document=name, read=read)
@@ -125,6 +125,7 @@ def render(name, out_dir, *, for_counts=False):
             f'window.PREVIEW_DIAGRAMS = {json.dumps(diagram_links())};\n'
             f'window.PREVIEW_TABLE_SPECS = {json.dumps(table_spec_labels())};\n'
             f'window.PREVIEW_TABLE_HAND = {json.dumps(hand_table_labels())};</script>\n'
+            f'<script type="application/json" id="pv-edit-ids">{json.dumps(shown())}</script>\n'
             '<script src="/__assets/app/app.js"></script>\n'
             f'<script src="/{preview.ASSET_URL}preview-model.js"></script>\n'
             + "".join(f'<script src="/{preview.ASSET_URL}{script}"></script>\n' for script in preview.VIEWER_SCRIPTS)

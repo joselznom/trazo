@@ -182,7 +182,7 @@ class SaveTests(SaveCase):
     def test_the_marks_leave_the_page_as_it_was(self):
         self.chapter.write_bytes(SYNTAX.read_bytes())
         marked = self.page()
-        with patch.object(preview_edit_review, "reader", lambda: (None, None)):
+        with patch.object(preview_edit_review, "reader", lambda: (None, None, list)):
             plain = self.page()
         self.assertEqual(self.outline(marked), self.outline(plain))
 
