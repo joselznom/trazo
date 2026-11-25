@@ -72,7 +72,7 @@ class CommentGroupTests(PreviewBrowserTestCase):
         self.key("j", 74)
         self.wait_for(f"document.querySelector('.pv-card.current')?.dataset.id === {json.dumps(later)}")
         self.assertEqual(self.evaluate("document.querySelectorAll('.pv-cgroup')[1].getAttribute('aria-expanded')"), "true")
-        self.key("j", 74)  # back to the introduction: the folded section closes again
+        self.key("j", 74)
         self.assertEqual(self.evaluate(LIST), ["# Introduction", "In the introduction", "# Methods"])
         self.click_text("#later")
         self.wait_for(f"document.querySelector('.pv-card.current')?.dataset.id === {json.dumps(later)}")
@@ -80,7 +80,7 @@ class CommentGroupTests(PreviewBrowserTestCase):
           const s = document.querySelector('[data-pane=comments] .pv-pane-scroll').getBoundingClientRect();
           return c.top >= s.top && c.bottom <= s.bottom; })()"""
         self.assertTrue(self.evaluate(visible))
-        self.fold("Methods")  # folding the current card's section folds it
+        self.fold("Methods")
         self.assertEqual(self.evaluate(LIST), ["# Introduction", "In the introduction", "# Methods"])
 
     def test_a_caption_comment_is_in_its_section_and_figures_group_by_document(self):

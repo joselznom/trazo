@@ -50,8 +50,6 @@
       b.title = `${kd.open} open, ${kd.review} to check`;
     }
 
-    // Active: open and to check, by section (groupsOf) and in document order
-    // within one (also the j / k order).
     // Resolved: the last resolved first.
     nav = notes.filter((x) => x.c.status === "open" || x.c.status === "review").sort(docOrder);
     const when = (c) => c.resolved || c.created || "";
@@ -106,8 +104,6 @@
     if (!inFigs) renderIndex();
   }
 
-  // Comments by the top-level section they are in now, or by document in the
-  // Figures & Tables view; folded groups are kept until the page reloads.
   const foldedGroups = new Set();
   function groupOf(x) {
     if (view === "figures") return [docIndex(x.c.doc), DOCS[x.c.doc] || x.c.doc];

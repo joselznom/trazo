@@ -204,7 +204,7 @@ class WritingTests(WritingCase):
     def test_a_click_from_a_paragraph_with_a_struck_edit_lands_where_it_was_aimed(self):
         removed = " Removed words that the agent took out of this sentence." * 4
         self.build(TEXT.replace("fields.", "fields." + removed))
-        preview.edits_payload("manuscript")  # the baseline
+        self.mark_reviewed()
         self.build()
         struck = "(() => { const box = document.querySelector('.pv-edit-del').getBoundingClientRect(); return [box.top, box.height]; })()"
         shown = self.evaluate(struck)
@@ -223,7 +223,7 @@ class WritingTests(WritingCase):
 
     def test_backspace_beside_struck_text_keeps_it_and_deletes_the_letter_before_it(self):
         self.build("A plain sentence with a big word.\n")
-        preview.edits_payload("manuscript")  # the baseline
+        self.mark_reviewed()
         self.build("A plain sentence with one word.\n")
         self.write_in("plain")
         self.evaluate("getSelection().collapse(document.querySelector('.pv-writing'), [...document.querySelector('.pv-writing').childNodes].indexOf(document.querySelector('.pv-writing .pv-edit-del')) + 1)")

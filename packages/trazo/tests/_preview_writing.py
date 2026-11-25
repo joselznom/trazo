@@ -40,6 +40,10 @@ class WritingCase(PreviewBrowserTestCase):
             preview.WATCHER["synced"] = time.time()
             return preview.STATE["manuscript"]["version"]
 
+    def mark_reviewed(self):
+        """Take the page's text as reviewed: later builds mark what changed since."""
+        preview.edits_payload("manuscript")
+
     def source(self):
         return self.chapter.read_text(encoding="utf-8")
 

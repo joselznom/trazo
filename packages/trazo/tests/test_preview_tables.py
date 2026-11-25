@@ -92,14 +92,17 @@ class PreviewTableTests(unittest.TestCase):
             events = []
             polls = 0
 
+            def save_in_table_editor():
+                spec.write_text("edited")
+                output.write_text("edited")
+
             def tick(_):
                 nonlocal polls
                 polls += 1
-                if polls == 1:  # what POST /__table writes
-                    spec.write_text("edited")
-                    output.write_text("edited")
+                if polls == 1:
+                    save_in_table_editor()
                 if polls > 3:
-                    return True  # stop the watcher
+                    return True
 
             def build(name):
                 if events[-1:] != ["build"]:
@@ -112,7 +115,6 @@ class PreviewTableTests(unittest.TestCase):
             with patch.object(preview, "ROOT", root), \
                  patch.object(preview, "regenerate_tables", side_effect=regenerate), \
                  patch.object(preview, "build", side_effect=build):
-                # Through stop_event, not a patched time.sleep: another thread's sleep would count as a pass.
                 preview.watch(stop_event=Mock(**{"wait.side_effect": tick}))
             self.assertEqual(events, ["build", "generate", "build"])
 
@@ -226,7 +228,7 @@ class PreviewTableFailureTests(unittest.TestCase):
     def test_a_table_saved_in_the_editor_shows_before_the_projects_tables_stage_ends(self) -> None:
         with tempfile.TemporaryDirectory() as folder:
             root = make_project(Path(folder).resolve())
-            stage = "import os, time\nt = time.time()\nwhile os.path.exists('slow') and not os.path.exists('done') and time.time() - t < 60: time.sleep(0.1)"
+            stage = "import os, time\nt = time.time()\nwhile os.path.exists('hold-stage') and not os.path.exists('release-stage') and time.time() - t < 60: time.sleep(0.1)"
             config = root / "trazo.toml"
             config.write_text("\n".join("tables = " + json.dumps(["python3", "-c", stage]) if row.startswith("tables = ") else row
                                         for row in config.read_text().splitlines()) + "\n")
@@ -257,13 +259,13 @@ class PreviewTableFailureTests(unittest.TestCase):
 
                 self.assertTrue(wait_until(lambda: status()["manuscript"]["ok"]), status())
                 shown = status()["manuscript"]["version"]
-                (root / "slow").touch()  # from here on the stage runs until the test ends
+                (root / "hold-stage").touch()
                 base = json.loads(call("/__table?label=results"))["sha256"]
                 call("/__table", {"label": "results", "base_sha256": base,
                                   "ops": [{"op": "set", "path": "columns.method.header", "value": "EditorHeader"}]})
                 self.assertTrue(wait_until(lambda: status()["manuscript"]["version"] > shown, timeout=20))
                 self.assertIn(b"EditorHeader", call("/manuscript.html"))
             finally:
-                (root / "done").touch()
+                (root / "release-stage").touch()
                 session.close()
 
