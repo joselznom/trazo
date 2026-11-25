@@ -56,21 +56,21 @@ def take_blocks(base: str, current: str) -> str:
         if tag == "equal":
             out += [Piece(old[i].text, i, j1 + i - i1) for i in range(i1, i2)]
             continue
-        prose = [Piece(old[i].text, i, None) for i in range(i1, i2) if not old[i].kind]
+        prose = [i for i in range(i1, i2) if not old[i].kind]
         blocks = [i for i in range(i1, i2) if old[i].kind]
         claimed = {_label(c) for c in new[j1:j2] if c.kind} - {None}
         for j in range(j1, j2):
             if not new[j].kind:
                 if prose:
-                    out.append(prose.pop(0))
+                    out.append(Piece(old[prose[0]].text, prose.pop(0), None))
                 continue
             at = _same_block(new[j], [old[i] for i in blocks], claimed)
             place = blocks.pop(at) if at is not None else None
             reviewed = old[place] if place is not None else None
-            while place is not None and prose and prose[0].old < place:
-                out.append(prose.pop(0))
+            while place is not None and prose and prose[0] < place:
+                out.append(Piece(old[prose[0]].text, prose.pop(0), None))
             out.append(Piece(_with_reviewed_caption(new[j], reviewed), None, j))
-        out += prose
+        out += [Piece(old[i].text, i, None) for i in prose]
     return _joined(out)
 
 
