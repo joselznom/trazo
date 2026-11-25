@@ -6,48 +6,62 @@
   "use strict";
   window.DiagramExport = function ({ S, $, api, save, updateStatus, toast, showBanner, isDraft, hasErrors, output }) {
     const QUIET_MS = 1500;
-    let quietTimer = 0;
-    let again = false;
+    const timers = new Map();
+    const waiting = new Set();
 
     function exportAfterSave() {
-      clearTimeout(quietTimer);
-      quietTimer = setTimeout(exportQuietly, QUIET_MS);
+      const name = S.name;
+      clearTimeout(timers.get(name));
+      timers.set(name, setTimeout(() => {
+        timers.delete(name);
+        exportQuietly(name, false);
+      }, QUIET_MS));
     }
 
-    function exportQuietly() {
-      if (!S.name || !S.diagram || isDraft() || S.blocked || JSON.stringify(S.diagram) !== S.disk.json || hasErrors()) return;
-      if (S.exporting) again = true;
-      else exportDiagram(true);
+    function exportQuietly(name, retried) {
+      const open = name === S.name;
+      if (open && (!S.diagram || isDraft() || S.blocked || JSON.stringify(S.diagram) !== S.disk.json || hasErrors())) return;
+      if (S.exporting) waiting.add(name);
+      else exportDiagram(true, name, retried);
     }
 
-    async function exportDiagram(quiet = false) {
-      if (!S.name || S.exporting) return;
-      if (S.diagram && JSON.stringify(S.diagram) !== S.disk.json) await save(false);
-      if (S.blocked || (S.diagram && JSON.stringify(S.diagram) !== S.disk.json)) {
+    async function request(method, url) {
+      try {
+        return await api(method, url, method === "POST" ? {} : undefined);
+      } catch (err) {
+        return { ok: false, status: 0, data: { error: String(err) } };
+      }
+    }
+
+    async function exportDiagram(quiet = false, name = S.name, retried = false) {
+      if (!name || S.exporting) return;
+      if (!quiet && S.diagram && JSON.stringify(S.diagram) !== S.disk.json) await save(false);
+      if (!quiet && (S.blocked || (S.diagram && JSON.stringify(S.diagram) !== S.disk.json))) {
         toast("Save the diagram before exporting", "warning");
         return;
       }
       S.exporting = true;
       S.exportFailed = null;
       updateStatus();
-      const sha = S.disk.sha;
-      const res = await api("POST", `export/${encodeURIComponent(S.name)}`, {});
+      const sha = name === S.name ? S.disk.sha : null;
+      const res = await request("POST", `export/${encodeURIComponent(name)}`);
       if (res.status === 409) {
-        S.exporting = false;
-        if (quiet) again = true;
-        else toast("An export is already running", "info");
-        pollExport(quiet, sha);
+        if (!quiet) toast("An export is already running", "info");
+        else if (!retried) waiting.add(name);
+        pollExport({ quiet, name, sha, ours: false });
         return;
       }
       if (!res.ok) {
         S.exporting = false;
-        updateStatus();
         const error = `Export did not start: ${(res.data && res.data.error) || `HTTP ${res.status}`}`;
-        if (quiet) failedQuietly(S.name, [error]);
-        else showBanner("error", error, []);
+        if (quiet) failedQuietly(name, [error]);
+        else {
+          updateStatus();
+          showBanner("error", error, []);
+        }
         return;
       }
-      pollExport(quiet, sha);
+      pollExport({ quiet, name, sha, ours: true });
     }
 
     function failedQuietly(name, lines) {
@@ -55,9 +69,9 @@
       updateStatus();
     }
 
-    async function pollExport(quiet, sha) {
-      const res = await api("GET", "export");
-      const st = (res.ok && res.data) || { state: "error", messages: ["No export status"] };
+    async function pollExport(job) {
+      const res = await request("GET", "export");
+      const st = (res.ok && res.data) || { state: "error", messages: [`No export status: ${(res.data && res.data.error) || `HTTP ${res.status}`}`] };
       const el = $("#export-state");
       if (el) {
         const running = st.state === "running";
@@ -67,23 +81,25 @@
       }
       if (st.state === "running") {
         clearTimeout(S.exportTimer);
-        S.exportTimer = setTimeout(() => pollExport(quiet, sha), 800);
+        S.exportTimer = setTimeout(() => pollExport(job), 800);
         return;
       }
       S.exporting = false;
       updateStatus();
       if (st.state === "error") {
         const lines = Array.isArray(st.messages) ? st.messages.slice(-8) : [];
-        if (quiet) failedQuietly(st.name, lines);
-        else showBanner("error", `Export failed${st.exit_code != null ? ` (exit ${st.exit_code})` : ""}.`, lines);
+        if (!job.quiet) showBanner("error", `Export failed${st.exit_code != null ? ` (exit ${st.exit_code})` : ""}.`, lines);
+        else if (job.ours) failedQuietly(job.name, lines);
       } else if (st.state === "ok") {
-        if (!quiet) toast(`Exported SVG, PDF and PNG to ${output}`);
+        if (!job.quiet) toast(`Exported SVG, PDF and PNG to ${output}`);
         clearTimeout(S.exportTimer);
         S.exportTimer = setTimeout(() => { if (el && !S.exporting) el.hidden = true; }, 4000);
       }
-      if (again || (quiet && S.disk.sha !== sha)) {
-        again = false;
-        exportAfterSave();
+      if (job.quiet && job.ours && job.name === S.name && S.disk.sha !== job.sha && !timers.has(job.name)) waiting.add(job.name);
+      const next = waiting.values().next().value;
+      if (next) {
+        waiting.delete(next);
+        exportQuietly(next, true);
       }
     }
 

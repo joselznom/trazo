@@ -2,6 +2,7 @@
 
 import json
 import unittest
+from unittest import mock
 
 import _support
 from _preview_browser import PreviewBrowserTestCase
@@ -37,6 +38,16 @@ class DiagramExportTests(PreviewBrowserTestCase):
         self.assertEqual(diagram.export_state(self.path), "current")
         self.assertIn("Exported after the save", (diagram.EXTERNAL_DIR / "example.svg").read_text())
         self.assertFalse(self.evaluate("toasts.some(t => t.includes('Exported'))"))
+
+    def test_an_export_already_running_is_retried_once(self):
+        from trazo import diagram_editor
+        from trazo.local_server import Conflict
+        self.open_diagram()
+        with mock.patch.object(diagram_editor, "start_export", side_effect=Conflict("an export is already running")) as start:
+            self.edit_text("Saved while another export runs")
+            self.evaluate("new Promise(resolve => setTimeout(resolve, 5000))")
+        self.assertEqual(start.call_count, 2)
+        self.assertFalse(self.evaluate("DiagramEditor.state.exporting"))
 
     def test_a_draft_is_not_exported(self):
         data = json.loads((_support.ROOT / "figures/diagrams/example.json").read_text())
