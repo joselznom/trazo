@@ -268,4 +268,3 @@ class PreviewTableFailureTests(unittest.TestCase):
             finally:
                 (root / "release-stage").touch()
                 session.close()
-

@@ -206,6 +206,7 @@ class WritingTests(WritingCase):
         self.build(TEXT.replace("fields.", "fields." + removed))
         self.mark_reviewed()
         self.build()
+        self.wait_for_banners()
         struck = "(() => { const box = document.querySelector('.pv-edit-del').getBoundingClientRect(); return [box.top, box.height]; })()"
         shown = self.evaluate(struck)
         self.write_in("fox")

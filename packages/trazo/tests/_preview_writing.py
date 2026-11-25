@@ -40,6 +40,10 @@ class WritingCase(PreviewBrowserTestCase):
             preview.WATCHER["synced"] = time.time()
             return preview.STATE["manuscript"]["version"]
 
+    def wait_for_banners(self):
+        """Wait for the page's first status, which draws the banners above the page and moves its text."""
+        self.wait_for("loaded !== null")
+
     def mark_reviewed(self):
         """Take the page's text as reviewed: later builds mark what changed since."""
         preview.edits_payload("manuscript")
