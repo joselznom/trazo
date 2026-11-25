@@ -2334,58 +2334,6 @@
     exportDiagram: { label: "Export", keys: "", run: () => exportDiagram(), can: () => !!S.name && !isDraft() },
   };
 
-  async function exportDiagram() {
-    if (!S.name || S.exporting) return;
-    if (S.diagram && JSON.stringify(S.diagram) !== S.disk.json) await save(false);
-    if (S.blocked || (S.diagram && JSON.stringify(S.diagram) !== S.disk.json)) {
-      toast("Save the diagram before exporting", "warning");
-      return;
-    }
-    S.exporting = true;
-    updateStatus();
-    const res = await api("POST", `export/${encodeURIComponent(S.name)}`, {});
-    if (res.status === 409) {
-      S.exporting = false;
-      toast("An export is already running", "info");
-      pollExport();
-      return;
-    }
-    if (!res.ok) {
-      S.exporting = false;
-      updateStatus();
-      showBanner("error", `Export did not start: ${(res.data && res.data.error) || `HTTP ${res.status}`}`, []);
-      return;
-    }
-    pollExport();
-  }
-
-  async function pollExport() {
-    const res = await api("GET", "export");
-    const st = (res.ok && res.data) || { state: "error", messages: ["No export status"] };
-    const el = $("#export-state");
-    if (el) {
-      const running = st.state === "running";
-      el.hidden = st.state === "idle";
-      el.textContent = running ? `Exporting ${st.name || ""}…` : st.state === "ok" ? "Exported" : st.state === "error" ? "Export failed" : "";
-      el.className = "status" + (st.state === "error" ? " error" : running ? " saving" : "");
-    }
-    if (st.state === "running") {
-      clearTimeout(S.exportTimer);
-      S.exportTimer = setTimeout(pollExport, 800);
-      return;
-    }
-    S.exporting = false;
-    updateStatus();
-    if (st.state === "error") {
-      const lines = Array.isArray(st.messages) ? st.messages.slice(-8) : [];
-      showBanner("error", `Export failed${st.exit_code != null ? ` (exit ${st.exit_code})` : ""}.`, lines);
-    } else if (st.state === "ok") {
-      toast(`Exported SVG, PDF and PNG to ${PATHS.diagram_output}`);
-      clearTimeout(S.exportTimer);
-      S.exportTimer = setTimeout(() => { if (el && !S.exporting) el.hidden = true; }, 4000);
-    }
-  }
-
   function run(name, ...args) {
     const action = ACTIONS[name];
     if (!action || !S.diagram && !["help"].includes(name)) return;
@@ -3293,10 +3241,12 @@
     $("#draft-badge").hidden = !isDraft();
     if (!S.exporting) {
       const exported = $("#export-state");
-      const state = dirty ? "stale" : S.exportState;
+      const failed = S.exportFailed?.name === S.name && S.exportFailed.lines;
+      const state = dirty ? "stale" : failed ? "failed" : S.exportState;
       exported.hidden = !S.diagram || !state || state === "draft";
-      exported.textContent = state === "current" ? "Export current" : state === "error" ? "Export blocked" : "Export pending";
-      exported.className = "status" + (state === "current" ? "" : " dirty");
+      exported.textContent = state === "current" ? "Export current" : failed ? "Export failed" : state === "error" ? "Export blocked" : "Export pending";
+      exported.className = "status" + (state === "current" ? "" : failed ? " error" : " dirty");
+      exported.title = failed ? failed.join("\n") : "";
     }
     const exp = document.querySelector('[data-action="exportDiagram"]');
     exp.title = isDraft() ? "Draft: not exported. Mark it ready in the Design panel to export."
@@ -3322,6 +3272,9 @@
   const API = "/__diagrams/";
 
   const api = (method, url, body) => App.api(API + url, body, method);
+
+  const { exportDiagram, exportAfterSave } = DiagramExport({ S, $, api, save, updateStatus, toast, showBanner, isDraft,
+    hasErrors: () => displayedIssues().some((i) => i.level === "error"), output: PATHS.diagram_output });
 
   function scheduleAutosave() {
     clearTimeout(S.saveTimer);
@@ -3375,6 +3328,7 @@
       $("#banner").hidden = true;
       if (!warned(res.data) && !auto) toast("Saved");
       scheduleCheck();
+      exportAfterSave();
     } else if (res.status === 409) {
       S.blocked = "conflict";
       S.conflict = res.data;
@@ -3413,6 +3367,7 @@
       warned(res.data);
       updateStatus();
       scheduleCheck();
+      exportAfterSave();
     } else if (res.status === 409) {
       S.blocked = "conflict";
       S.conflict = res.data;
