@@ -67,7 +67,7 @@
   // The scripts with what the viewer read at load (titles, files, diagrams, table
   // specs, form counts); an MCP App view also has the viewer's own inlined.
   const loadedConfig = (root) => [...root.querySelectorAll("script:not([src])")]
-    .filter((s) => s.type === "application/json" || s.textContent.startsWith("window.PREVIEW_DOC = "))
+    .filter((s) => (s.type === "application/json" && s.id !== "pv-edit-ids") || s.textContent.startsWith("window.PREVIEW_DOC = "))
     .map((s) => s.textContent).join("\n");
   // The served page's counts, the last statement of its first script (trazo.server.decorate_page).
   function countsIn(next) {
@@ -162,7 +162,7 @@
       work.push({ group, run, ...where });
     }
     try {
-      applyUpdate(next, plan, work);
+      applyUpdate(next, plan, work, held);
     } catch (e) {
       console.error(e);
       return "reload";
@@ -170,7 +170,7 @@
     return held ? "partial" : "done";
   }
 
-  function applyUpdate(next, plan, work) {
+  function applyUpdate(next, plan, work, held) {
     // The paragraph being written, or the first block in view that stays, keeps its place on the screen.
     const box = scroller.getBoundingClientRect(), top = box.top;
     const replaced = work.flatMap((w) => w.nodes);
@@ -220,7 +220,7 @@
     if (stamp && here) here.content = stamp.content;
     renderComments();
     renderWords();
-    pageEdits = editIdsIn(next);
+    pageEdits = held ? editsShownAfter(editIdsIn(next)) : editIdsIn(next);
     loadEdits();
     refreshCleanSources();
 

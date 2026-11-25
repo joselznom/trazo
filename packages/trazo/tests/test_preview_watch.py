@@ -64,14 +64,14 @@ class WatcherWakeTests(unittest.TestCase):
         absorb, reader, read = preview_edit_review.absorb, preview_edit_review.reader, threading.Event()
 
         def reading():  # a page build reads the file and the baseline through it
-            marked, seen = reader()
+            marked, seen, shown = reader()
 
             def read_marked(path):
                 found = marked(path)
                 if Path(path).resolve() == source.resolve():
                     read.set()
                 return found
-            return read_marked, seen
+            return read_marked, seen, shown
 
         def read_first(*args):  # the file is published: a pass reads it before it is accepted
             watcher["wake"]()

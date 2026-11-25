@@ -76,6 +76,9 @@
     try { return new Set(JSON.parse(root.querySelector("#pv-edit-ids").textContent)); } catch (e) { return null; }
   };
   let pageEdits = editIdsIn(document);
+  // After an update that kept the paragraph being written as it was: the
+  // built edits marked on the page or listed before.
+  const editsShownAfter = (built) => built && new Set([...built].filter((id) => pageEdits?.has(id) || marksOf(id).length));
   async function loadEdits() {
     try {
       const { ok, payload } = await postJson(`/__edits?doc=${encodeURIComponent(doc)}`);
