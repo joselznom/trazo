@@ -77,6 +77,10 @@ class TakeBlocksTests(unittest.TestCase):
         for caption in ("Set {A, B}", "Set {A, B} {#tbl:set}"):
             table = TABLE + f"\nTable: {caption}\n"
             self.assertEqual(pending(table, table.replace("{A, B}", "{A, C}")), [("B", "C")])
+        figure = "![A flow.](a.png){#fig:x data.foo=1}\n"
+        self.assertEqual(pending(figure, figure.replace("a.png", "b.png")), [])
+        text = "![A flow.](a.png){#image,name}\n"
+        self.assertEqual(pending(text, text.replace("a.png", "b.png")), [("a", "b")])
 
     def test_a_rule_before_a_paragraph_is_no_table(self):
         base = "-----  -----\nOld text here.\n"

@@ -153,11 +153,11 @@
     if (!plan) return "reload";
     const tracked = new Set(plan.groups.flatMap((group) => group.old.map((r) => outerOf(r.el))));
     const holds = heldBlocks(), work = [];
-    const held = [];
+    let held = false;
     for (const group of plan.groups) for (const run of group.runs) {
       const where = nodesOf(group, run, tracked);
       if (!where) return "reload";
-      if (holds(where.nodes)) { held.push(...group.els.slice(run[2], run[3])); continue; }
+      if (holds(where.nodes)) { held = true; continue; }
       if (where.unknown) return "reload";
       work.push({ group, run, ...where });
     }
@@ -167,7 +167,7 @@
       console.error(e);
       return "reload";
     }
-    return held.length ? "partial" : "done";
+    return held ? "partial" : "done";
   }
 
   function applyUpdate(next, plan, work, held) {

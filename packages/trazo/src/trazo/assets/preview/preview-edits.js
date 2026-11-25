@@ -76,18 +76,19 @@
     try { return new Set(JSON.parse(root.querySelector("#pv-edit-ids").textContent)); } catch (e) { return null; }
   };
   let pageEdits = editIdsIn(document);
-  // After an update that kept the blocks `held` (the paragraph being written) as they were:
-  // the built edits, those of held blocks only while the page still marks them.
-  function editsShownAfter(built, held) {
-    const inHeld = new Set(held.flatMap((el) => $$("[data-edit]", el).map((mark) => mark.dataset.edit)));
-    return built && new Set([...built].filter((id) => !inHeld.has(id) || marksOf(id).length));
-  }
+  // After an update that kept some blocks as they were (the paragraph being
+  // written): the built edits marked on the page or listed before; the rest
+  // wait for the update that installs every block.
+  const editsShownAfter = (built, held) =>
+    !held || !built ? built : new Set([...built].filter((id) => pageEdits?.has(id) || marksOf(id).length));
   async function loadEdits() {
-    const selected = edits[editAt];
+    let found;
     try {
       const { ok, payload } = await postJson(`/__edits?doc=${encodeURIComponent(doc)}`);
-      edits = ok && Array.isArray(payload.edits) ? payload.edits.filter((e) => !pageEdits || pageEdits.has(e.id)) : [];
-    } catch (e) { edits = []; }
+      found = ok && Array.isArray(payload.edits) ? payload.edits.filter((e) => !pageEdits || pageEdits.has(e.id)) : [];
+    } catch (e) { found = []; }
+    const selected = edits[editAt];
+    edits = found;
     if (selected) {
       const at = edits.findIndex((e) => editKey(e) === editKey(selected));
       if (at < 0 || (editAnchor !== editsToggle && !marksOf(selected.id).length)) hideEditBar();

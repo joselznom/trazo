@@ -22,7 +22,7 @@ BLANK_RUN = re.compile(r"\n(?:[ \t\r]*\n)+")
 SEPARATED = re.compile(r"\n[ \t\r]*\n[ \t\r]*$")
 CAPTION = re.compile(r" {0,3}(?:Table:|:)\s")
 PIPE_RULE = re.compile(r" {0,3}\|?\s*:?-+:?\s*(?:\|\s*:?-+:?\s*)+\|?\s*$")
-ATTRIBUTE = r"""(?:[#.][^\s{}"'=]+|[\w-]+=(?:"[^"]*"|'[^']*'|[^\s{}"']+))"""
+ATTRIBUTE = r"""(?:[#.][\w:.-]+|[\w.:-]+=(?:"[^"]*"|'[^']*'|[^\s{}"']+))"""
 ATTRIBUTE_LIST = rf"\{{\s*{ATTRIBUTE}(?:\s+{ATTRIBUTE})*\s*\}}"
 MATH = re.compile(rf"\$\$[\s\S]*?\$\$\s*(?:{ATTRIBUTE_LIST})?")
 ATTRIBUTES = re.compile(rf"\s*(?:{ATTRIBUTE_LIST})?")
