@@ -3,7 +3,7 @@ into the review's baseline as it is, and only the prose around it stays pending.
 
 `take_blocks(base, current)` is `base` with the blocks of `current` that are a
 figure (an image alone in its paragraph), a pipe, grid or simple table with
-its caption, a `$$` equation or an `!include` line, in place of those of
+its caption or a `$$` equation, in place of those of
 `base` it changed, added or removed. A figure or table in both keeps the
 caption of `base`: caption text is prose, reviewed word by word. Prose and
 code stay as `base` has them. The preview cannot reject a block's change.
@@ -15,7 +15,7 @@ import re
 from difflib import SequenceMatcher
 from typing import Literal, NamedTuple
 
-from .expand import INCLUDE_PREFIX, TABLE_ROW
+from .expand import TABLE_ROW, TABLE_RULE
 from .preview_edits import RULE, closing, markdown_context
 
 BLANK_RUN = re.compile(r"\n(?:[ \t\r]*\n)+")
@@ -24,9 +24,10 @@ CAPTION = re.compile(r" {0,3}(?:Table:|:)\s")
 PIPE_RULE = re.compile(r" {0,3}\|?\s*:?-+:?\s*(?:\|\s*:?-+:?\s*)+\|?\s*$")
 MATH = re.compile(r"\$\$[\s\S]*?\$\$\s*(?:\{[^{}]*\})?")
 ATTRIBUTES = re.compile(r"\s*(?:\{[^{}]*\})?")
+LABEL = re.compile(r"\{[^{}]*#((?:fig|tbl|eq):[^\s{}]+)")
 
 
-Kind = Literal["figure", "table", "caption", "math", "include"]
+Kind = Literal["figure", "table", "caption", "math"]
 
 
 class Chunk(NamedTuple):
@@ -55,7 +56,7 @@ def take_blocks(base: str, current: str) -> str:
                 if prose:
                     out.append(prose.pop(0))
                 continue
-            reviewed = next((c for c in blocks if c.kind == chunk.kind), None)
+            reviewed = _same_block(chunk, blocks)
             if reviewed:
                 blocks.remove(reviewed)
             out.append(_with_reviewed_caption(chunk, reviewed))
@@ -63,11 +64,20 @@ def take_blocks(base: str, current: str) -> str:
     return _joined(out)
 
 
+def _same_block(block: Chunk, blocks: list[Chunk]) -> Chunk | None:
+    label = LABEL.search(block.masked)
+    same = [c for c in blocks if c.kind == block.kind]
+    if label:
+        return next((c for c in same if (found := LABEL.search(c.masked)) and found[1] == label[1]), None)
+    return next((c for c in same if not LABEL.search(c.masked)), None)
+
+
 def _chunks(text: str) -> list[Chunk]:
-    masked = "".join("\n" if ch == "\n" else m for ch, m in zip(text, markdown_context(text)))
-    cuts = [0, *(m.end() for m in BLANK_RUN.finditer(masked)), len(text)]
+    masked = markdown_context(text)
+    cuts = [0, *(m.end() for m in BLANK_RUN.finditer(text) if masked[m.start()] == masked[m.end() - 1] == "\n"),
+            len(text)]
     pieces = [(text[a:b], masked[a:b]) for a, b in zip(cuts, cuts[1:]) if a < b]
-    kinds = [_kind(m) for _, m in pieces]
+    kinds = [_kind(m) if m.count("\n") == t.count("\n") else None for t, m in pieces]
     for i, kind in enumerate(kinds):
         if kind == "caption" and not _beside_a_table(kinds, i):
             kinds[i] = None
@@ -82,8 +92,6 @@ def _kind(masked: str) -> Kind | None:
     core = masked.strip()
     if not core:
         return None
-    if core.startswith(INCLUDE_PREFIX) and "\n" not in core:
-        return "include"
     if core.count("$$") == 2 and MATH.fullmatch(core):
         return "math"
     if _figure_caption_span(masked):
@@ -115,15 +123,16 @@ def _table_rows(lines: list[str]) -> range | None:
                       if i and (TABLE_ROW.match(line) or RULE.match(line))), len(lines))
     end = next((i for i in range(start + 1, len(lines)) if CAPTION.match(lines[i])), len(lines))
     rows = lines[start:end]
-    if not rows or re.fullmatch(r"[-\s]+", rows[0]):
+    if not rows or (re.fullmatch(r"[-\s]+", rows[0]) and not TABLE_RULE.match(rows[0])):
         return None
-    if TABLE_ROW.match(rows[0]) or (len(rows) > 1 and (RULE.match(rows[1]) or PIPE_RULE.match(rows[1]))):
+    if (TABLE_ROW.match(rows[0]) or TABLE_RULE.match(rows[0])
+            or (len(rows) > 1 and (RULE.match(rows[1]) or PIPE_RULE.match(rows[1])))):
         return range(start, end)
     return None
 
 
 def _with_reviewed_caption(block: Chunk, reviewed: Chunk | None) -> str:
-    if reviewed is None or block.kind in ("math", "include"):
+    if reviewed is None or block.kind == "math":
         return block.text
     if block.kind == "caption":
         return reviewed.text

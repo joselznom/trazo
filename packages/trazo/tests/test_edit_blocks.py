@@ -18,7 +18,7 @@ def pending(base, current):
 class TakeBlocksTests(unittest.TestCase):
     def test_a_new_figure_table_or_equation_is_no_edit(self):
         for block in (FIGURE, TABLE + "\nTable: Counts. {#tbl:t}\n", "$$ a = b $$ {#eq:x}\n",
-                      "!include tables/output/md/summary.md\n"):
+                      "-----  -----\n12     13\n-----  -----\n"):
             with self.subTest(block=block):
                 self.assertEqual(pending("One.\n\nTwo.\n", f"One.\n\n{block}\nTwo.\n"), [])
                 self.assertEqual(pending("Intro.\n", f"Intro.\n\n{block}"), [])
@@ -36,6 +36,15 @@ class TakeBlocksTests(unittest.TestCase):
         self.assertEqual(pending(table, table.replace("Counts", "All counts").replace("2", "3")), [("Counts", "All counts")])
         inside = TABLE + "Table: Counts. {#tbl:t}\n"
         self.assertEqual(pending(inside, inside.replace("Counts", "All counts").replace("2", "3")), [("Counts", "All counts")])
+
+    def test_a_new_figure_before_one_with_a_new_caption_leaves_that_caption_pending(self):
+        other = "![Old caption.](a.png){#fig:a}\n"
+        current = f"{FIGURE}\n{other.replace('Old', 'New')}"
+        self.assertEqual(pending(other, current), [("Old", "New")])
+
+    def test_code_right_after_a_figure_stays_reviewed(self):
+        base = f"{FIGURE}```\nprint(1)\n```\n"
+        self.assertEqual(pending(base, base.replace("print(1)", "print(2)")), [("1", "2")])
 
     def test_a_paragraph_added_with_a_figure_stays_pending_alone(self):
         found = pending("One.\n\nTwo.\n", f"One.\n\nSee @fig:flow.\n\n{FIGURE}\nTwo.\n")
