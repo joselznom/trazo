@@ -50,7 +50,8 @@
       b.title = `${kd.open} open, ${kd.review} to check`;
     }
 
-    // Active: open and to check, in document order (also the j / k order).
+    // Active: open and to check, by section (groupsOf) and in document order
+    // within one (also the j / k order).
     // Resolved: the last resolved first.
     nav = notes.filter((x) => x.c.status === "open" || x.c.status === "review").sort(docOrder);
     const when = (c) => c.resolved || c.created || "";
@@ -108,12 +109,17 @@
   // Comments by the top-level section they are in now, or by document in the
   // Figures & Tables view; folded groups are kept until the page reloads.
   const foldedGroups = new Set();
+  function groupOf(x) {
+    if (view === "figures") return [docIndex(x.c.doc), DOCS[x.c.doc] || x.c.doc];
+    if (x.unit) return [units.indexOf(x.unit), titleOf(x.unit)];
+    if (x.hit) return [-1, "Front matter"];
+    return [Infinity, "Not found in the text"];
+  }
   function groupsOf(list) {
-    const groups = new Map();
+    const groups = new Map(), scope = view === "figures" ? "figures" : doc;
     for (const x of list) {
-      const [at, title] = view === "figures" ? [docIndex(x.c.doc), DOCS[x.c.doc] || x.c.doc]
-        : x.unit ? [units.indexOf(x.unit), titleOf(x.unit)] : x.hit ? [-1, "Front matter"] : [Infinity, "Not found in the text"];
-      const key = `${view === "figures" ? "figures" : doc}:${title}`;
+      const [at, title] = groupOf(x);
+      const key = `${scope}:${title}`;
       if (!groups.has(key)) groups.set(key, { key, title, at, items: [] });
       groups.get(key).items.push(x);
     }

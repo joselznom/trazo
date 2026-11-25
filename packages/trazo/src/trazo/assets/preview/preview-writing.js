@@ -378,9 +378,10 @@
     const { focusNode: node, focusOffset: at } = getSelection();
     if (node.nodeType !== 3) return node.childNodes[back ? at - 1 : at] || null;
     if (back ? at > 0 : at < node.data.length) return null;
+    const beside = (n) => (back ? n.previousSibling : n.nextSibling);
     let next = node;
-    while (next !== writing.el && !(back ? next.previousSibling : next.nextSibling)) next = next.parentNode;
-    return next === writing.el ? null : back ? next.previousSibling : next.nextSibling;
+    while (next !== writing.el && !beside(next)) next = next.parentNode;
+    return next === writing.el ? null : beside(next);
   }
   page.addEventListener("beforeinput", (e) => {
     if (!writing || !e.inputType.startsWith("delete") || !getSelection().isCollapsed) return;
