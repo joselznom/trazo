@@ -108,6 +108,19 @@ class EditMarksTests(PreviewBrowserTestCase):
         self.wait_for("document.querySelector('.pv-toast')?.textContent === '1 change back to review'")
         self.assertEqual(self.calls[-1], {"op": "undo", "expect": "7"})
 
+    def test_accept_all_takes_only_the_edits_the_page_was_built_with(self):
+        page = preview.OUT_DIR / "manuscript.html"
+        page.write_text(page.read_text().replace(  # before the viewer's scripts, as a build writes it
+            '<script src="/__assets/preview/preview-model.js">',
+            '<script type="application/json" id="pv-edit-ids">["e1", "e2"]</script>'
+            '<script src="/__assets/preview/preview-model.js">'))
+        self.open()
+        self.wait_for("!document.querySelector('.pv-edit-banner').hidden")
+        self.assertEqual(self.evaluate("document.querySelector('.pv-edit-banner b').textContent"), "2 changes to review")
+        self.evaluate("document.querySelector('[data-banner-op=accept]').click()")
+        self.wait_for("document.querySelector('.pv-edit-banner').hidden")
+        self.assertEqual(self.calls, [self.asked("accept", "e1", "e2")])
+
     def test_a_click_on_a_reference_in_an_insertion_selects_it_and_its_bar_goes_there(self):
         self.edits = EDITS + [{"file": INTRO, "id": "e4", "line": 5, "old": "", "new": "See [@x].", "seen": ""}]
         self.review_comment()

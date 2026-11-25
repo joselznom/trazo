@@ -132,7 +132,7 @@ class EditReviewTests(unittest.TestCase):
                 preview.change_edits(request)
 
     def build_page(self):
-        read, done = preview_edit_review.reader()
+        read, done, _ = preview_edit_review.reader()
         marked = read(self.path)
         done()
         return marked
@@ -162,16 +162,13 @@ class EditReviewTests(unittest.TestCase):
         self.assertEqual(preview.change_edits({"op": "undo", "expect": answer["accept_id"]}), {"undone": 0})
         self.assertEqual(self.pending(), [])
 
-    def test_the_list_holds_the_edits_the_last_build_marked(self):
+    def test_undoing_an_accept_counts_only_the_edits_it_brings_back(self):
         self.pending()
         self.agent_edits("We studied", "We followed")
-        self.build_page()
-        [shown] = self.pending()
-        self.agent_edits("We followed", "We tracked")  # not built yet: no page shows it
-        self.assertEqual(self.pending(), [])
-        self.assertEqual(preview.change_edits({"op": "accept", "edits": [shown]})["done"], 0)
-        self.build_page()
-        self.assertEqual([e["new"] for e in self.pending()], ["tracked"])
+        [edit] = self.pending()
+        self.agent_edits("[@smith2020].\n", "[@smith2020].\n\n![A flow.](f.png){#fig:flow}\n")
+        answer = preview.change_edits({"op": "accept", "edits": [edit]})
+        self.assertEqual(preview.change_edits({"op": "undo", "expect": answer["accept_id"]}), {"undone": 1})
 
     def test_only_the_last_accept_can_be_undone(self):
         self.pending()
@@ -213,6 +210,7 @@ class EditReviewTests(unittest.TestCase):
         self.assertTrue(preview.build("manuscript"), preview.STATE["manuscript"]["error"])
         page = " ".join((preview.OUT_DIR / "manuscript.html").read_text(encoding="utf-8").split())
         self.assertIn(f'<span class="pv-edit-ins" data-edit="{edit["id"]}">followed</span>', page)
+        self.assertIn(f'<script type="application/json" id="pv-edit-ids">["{edit["id"]}"]</script>', page)
         self.assertIn(f'<span class="pv-edit-del" data-edit="{edit["id"]}">studied</span>', page)
         [seen] = self.pending()
         self.assertRegex(seen["seen"], r"^\d{4}-\d\d-\d\d \d\d:\d\d:\d\d$")

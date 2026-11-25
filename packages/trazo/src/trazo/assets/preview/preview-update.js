@@ -220,6 +220,7 @@
     if (stamp && here) here.content = stamp.content;
     renderComments();
     renderWords();
+    pageEdits = editIdsIn(next);
     loadEdits();
     refreshCleanSources();
 

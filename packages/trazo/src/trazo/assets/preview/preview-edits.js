@@ -70,10 +70,16 @@
   }
   const closeEditsMenu = () => { editsMenu.hidden = true; editsToggle.setAttribute("aria-expanded", "false"); };
 
+  // The ids of the edits the page's build marked (trazo.preview_render): an
+  // edit written since waits for the page that shows it.
+  const editIdsIn = (root) => {
+    try { return new Set(JSON.parse(root.querySelector("#pv-edit-ids").textContent)); } catch (e) { return null; }
+  };
+  let pageEdits = editIdsIn(document);
   async function loadEdits() {
     try {
       const { ok, payload } = await postJson(`/__edits?doc=${encodeURIComponent(doc)}`);
-      edits = ok && Array.isArray(payload.edits) ? payload.edits : [];
+      edits = ok && Array.isArray(payload.edits) ? payload.edits.filter((e) => !pageEdits || pageEdits.has(e.id)) : [];
     } catch (e) { edits = []; }
     renderEditsUi();
     if (commentsReady) renderComments();  // review cards offer Reject when edits are near

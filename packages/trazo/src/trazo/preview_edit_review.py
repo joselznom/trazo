@@ -20,8 +20,9 @@ pending edits around them. Nothing records who made an edit: an edit made
 outside the preview is pending like any other.
 
 GET /__edits?doc=NAME lists a document's pending edits (file, id, line,
-old and new text, when the preview first saw it), once a build of the page
-has seen the file: then only those that build marked; POST /__edits {op:
+old and new text, when the preview first saw it); the page lists those of
+them its build marked (`reader`), so it never acts on an edit it does not
+show. POST /__edits {op:
 accept|reject, edits: [{file, id}]} accepts or rejects some and answers how
 many were done and which changed since the page was built (missed), and an
 accept its `accept_id`; POST /__edits {op: undo, expect?: accept_id} undoes
@@ -108,9 +109,10 @@ def pending(store: dict[str, Any], name: str, text: str) -> list[edit_diff.Edit]
     return edit_diff.edits(baseline(store, name, text), text, name)
 
 
-def reader() -> tuple[Callable[[Path], str] | None, Callable[[], None]]:
-    """(read, done) for one page build: `read` gives a file's text with the
+def reader() -> tuple[Callable[[Path], str] | None, Callable[[], None], Callable[[], list[str]]]:
+    """(read, done, shown) for one page build: `read` gives a file's text with the
     marks of its pending edits and of its blocks (trazo.preview_blocks);
+    `shown` lists the ids of the edits read so far;
     `done` records when each edit was first seen and puts the figures,
     tables and equations of the files read into the baseline. An unreadable
     baseline leaves the page unmarked (read None) rather than unbuilt."""
@@ -118,7 +120,7 @@ def reader() -> tuple[Callable[[Path], str] | None, Callable[[], None]]:
         store = ensure()
     except StoreError as exc:
         print(f"[preview] edits not marked: {exc}", flush=True)
-        return None, lambda: None
+        return None, lambda: None, list
     names = {path.resolve(): name for name, path in tracked().items()}
     seen: dict[str, list[str]] = {}
     with_blocks: dict[str, str] = {}
@@ -149,11 +151,11 @@ def reader() -> tuple[Callable[[Path], str] | None, Callable[[], None]]:
             for name, ids in seen.items():
                 before = times.get(name, {})
                 after = {i: before.get(i, stamp) for i in ids}
-                if name not in times or after != before:
+                if after != before:
                     times[name], changed = after, True
             if changed:
                 save(current)
-    return read, done
+    return read, done, lambda: [i for ids in seen.values() for i in ids]
 
 
 def page_files(doc: str) -> list[str]:
@@ -174,12 +176,10 @@ def edits_payload(doc: str | None) -> dict[str, Any]:
     for name in page_files(doc):
         if name not in files:
             continue
-        times = store["seen"].get(name)
+        times = store["seen"].get(name, {})
         for e in pending(store, name, exact_text(files[name])):
-            if times is not None and e.id not in times:
-                continue
             out.append({"file": name, "id": e.id, "line": e.line, "old": e.old, "new": e.new,
-                        "seen": (times or {}).get(e.id, "")})
+                        "seen": times.get(e.id, "")})
     return {"doc": doc, "edits": out}
 
 
@@ -230,7 +230,7 @@ def change_edits(request: Any) -> dict[str, Any]:
             done += len(chosen)
             if op == "accept":
                 after = edit_diff.accept(base, chosen)
-                undo["files"][name] = [store["files"].get(name, ""), after]
+                undo["files"][name] = [base, after]
                 if name in store["seen"]:
                     undo["seen"][name] = store["seen"][name]
                 store["files"][name] = after
