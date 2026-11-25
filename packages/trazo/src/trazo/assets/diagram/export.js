@@ -7,22 +7,34 @@
   window.DiagramExport = function ({ S, $, api, save, updateStatus, toast, showBanner, isDraft, hasErrors, output }) {
     const QUIET_MS = 1500;
     const timers = new Map();
-    const waiting = new Set();
+    const pending = new Set();
+    const conflicted = new Set();
+    S.exportFailures = {};
 
     function exportAfterSave() {
       const name = S.name;
       clearTimeout(timers.get(name));
+      timers.delete(name);
+      if (isDraft()) return;
       timers.set(name, setTimeout(() => {
         timers.delete(name);
-        exportQuietly(name, false);
+        pending.add(name);
+        exportPending();
       }, QUIET_MS));
     }
 
-    function exportQuietly(name, retried) {
-      const open = name === S.name;
-      if (open && (!S.diagram || isDraft() || S.blocked || JSON.stringify(S.diagram) !== S.disk.json || hasErrors())) return;
-      if (S.exporting) waiting.add(name);
-      else exportDiagram(true, name, retried);
+    const ready = (name) => name !== S.name
+      || (S.diagram && !isDraft() && !S.blocked && JSON.stringify(S.diagram) === S.disk.json && !hasErrors());
+
+    function exportPending() {
+      if (S.exporting) return;
+      for (const name of pending) {
+        pending.delete(name);
+        if (ready(name)) {
+          exportDiagram(true, name);
+          return;
+        }
+      }
     }
 
     async function request(method, url) {
@@ -33,7 +45,15 @@
       }
     }
 
-    async function exportDiagram(quiet = false, name = S.name, retried = false) {
+    function failed(quiet, name, message, lines) {
+      if (!quiet) showBanner("error", message, lines);
+      else {
+        S.exportFailures[name] = [message, ...lines];
+        updateStatus();
+      }
+    }
+
+    async function exportDiagram(quiet = false, name = S.name) {
       if (!name || S.exporting) return;
       if (!quiet && S.diagram && JSON.stringify(S.diagram) !== S.disk.json) await save(false);
       if (!quiet && (S.blocked || (S.diagram && JSON.stringify(S.diagram) !== S.disk.json))) {
@@ -41,32 +61,29 @@
         return;
       }
       S.exporting = true;
-      S.exportFailed = null;
+      delete S.exportFailures[name];
       updateStatus();
       const sha = name === S.name ? S.disk.sha : null;
       const res = await request("POST", `export/${encodeURIComponent(name)}`);
       if (res.status === 409) {
         if (!quiet) toast("An export is already running", "info");
-        else if (!retried) waiting.add(name);
+        else if (conflicted.has(name)) conflicted.delete(name);
+        else {
+          conflicted.add(name);
+          pending.add(name);
+        }
         pollExport({ quiet, name, sha, ours: false });
         return;
       }
+      conflicted.delete(name);
       if (!res.ok) {
         S.exporting = false;
-        const error = `Export did not start: ${(res.data && res.data.error) || `HTTP ${res.status}`}`;
-        if (quiet) failedQuietly(name, [error]);
-        else {
-          updateStatus();
-          showBanner("error", error, []);
-        }
+        updateStatus();
+        failed(quiet, name, `Export did not start: ${(res.data && res.data.error) || `HTTP ${res.status}`}`, []);
+        exportPending();
         return;
       }
       pollExport({ quiet, name, sha, ours: true });
-    }
-
-    function failedQuietly(name, lines) {
-      S.exportFailed = { name, lines };
-      updateStatus();
     }
 
     async function pollExport(job) {
@@ -86,21 +103,16 @@
       }
       S.exporting = false;
       updateStatus();
-      if (st.state === "error") {
+      if (st.state === "error" && (job.ours || !job.quiet)) {
         const lines = Array.isArray(st.messages) ? st.messages.slice(-8) : [];
-        if (!job.quiet) showBanner("error", `Export failed${st.exit_code != null ? ` (exit ${st.exit_code})` : ""}.`, lines);
-        else if (job.ours) failedQuietly(job.name, lines);
+        failed(job.quiet, job.name, `Export failed${st.exit_code != null ? ` (exit ${st.exit_code})` : ""}.`, lines);
       } else if (st.state === "ok") {
         if (!job.quiet) toast(`Exported SVG, PDF and PNG to ${output}`);
         clearTimeout(S.exportTimer);
         S.exportTimer = setTimeout(() => { if (el && !S.exporting) el.hidden = true; }, 4000);
       }
-      if (job.quiet && job.ours && job.name === S.name && S.disk.sha !== job.sha && !timers.has(job.name)) waiting.add(job.name);
-      const next = waiting.values().next().value;
-      if (next) {
-        waiting.delete(next);
-        exportQuietly(next, true);
-      }
+      if (job.quiet && job.ours && job.name === S.name && S.disk.sha !== job.sha && !timers.has(job.name)) pending.add(job.name);
+      exportPending();
     }
 
     return { exportDiagram, exportAfterSave };

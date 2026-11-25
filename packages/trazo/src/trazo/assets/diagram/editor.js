@@ -3241,7 +3241,7 @@
     $("#draft-badge").hidden = !isDraft();
     if (!S.exporting) {
       const exported = $("#export-state");
-      const failed = S.exportFailed?.name === S.name && S.exportFailed.lines;
+      const failed = S.exportFailures?.[S.name];
       const state = dirty ? "stale" : failed ? "failed" : S.exportState;
       exported.hidden = !S.diagram || !state || state === "draft";
       exported.textContent = state === "current" ? "Export current" : failed ? "Export failed" : state === "error" ? "Export blocked" : "Export pending";
