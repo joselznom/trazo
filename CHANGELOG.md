@@ -99,12 +99,23 @@ Internal changes (tests, CI, refactoring) stay out.
 - While you write in a paragraph, text marked as deleted stays in place,
   dimmed, instead of disappearing. A click in the next paragraph no longer
   lands somewhere else as the page shifts.
+- While edits wait for your review, a banner over the page says how many
+  there are, with **Next**, **Reject all** and **Accept all**. Edits the
+  agent made minutes apart form a batch: the banner and the **Edits** menu
+  list the batches, with their time and sections, to accept or reject one
+  alone. **Undo** in the notice, or ⌘Z, takes back the last accept.
+- Changes to figures, tables and display equations are no longer marked for
+  review: the preview takes them as they are. Their caption text is still
+  marked word by word.
+- A click on a reference or citation inside a change selects the change;
+  **Go to** in its bar, or ⌘-click (Ctrl-click), follows the link.
 
 ### Fixed
 
 - A table saved in the table editor shows in the preview at once in a
   project with its own tables stage; the stage still runs afterwards.
-
+- Correcting a word the agent had just added no longer joins it to the word
+  before it, which showed a false change to review.
 - A save from the preview no longer stays, now and then, on the page as an
   edit to review instead of your text: a build that read it while it was
   being saved runs again.

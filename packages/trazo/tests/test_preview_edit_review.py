@@ -49,8 +49,9 @@ class EditReviewTests(unittest.TestCase):
         self.agent_edits("We studied", "We followed")
         text = self.path.read_text(encoding="utf-8")
         [edit] = self.pending()
-        self.assertEqual(preview.change_edits({"op": "accept", "edits": [edit]}),
-                         {"done": 1, "missing": 0, "missed": []})
+        answer = preview.change_edits({"op": "accept", "edits": [edit]})
+        self.assertRegex(answer.pop("accept_id"), r"^\d+$")  # what its undo names
+        self.assertEqual(answer, {"done": 1, "missing": 0, "missed": []})
         self.assertEqual(self.path.read_text(encoding="utf-8"), text)
         self.assertEqual(self.pending(), [])
         self.assertEqual(preview.WATCHER["rebuild"], {"manuscript"})
@@ -129,6 +130,60 @@ class EditReviewTests(unittest.TestCase):
                         {"op": "accept", "edits": [{"file": "../x.md", "id": "a"}]}):
             with self.subTest(request=request), self.assertRaises(preview.CommentError):
                 preview.change_edits(request)
+
+    def build_page(self):
+        read, done = preview_edit_review.reader()
+        marked = read(self.path)
+        done()
+        return marked
+
+    def test_undoing_an_accept_brings_its_edits_back_as_they_were_seen(self):
+        self.pending()
+        self.agent_edits("We studied", "We followed")
+        self.build_page()
+        [edit] = self.pending()
+        answer = preview.change_edits({"op": "accept", "edits": [edit]})
+        self.assertEqual(answer["done"], 1)
+        self.assertEqual(preview.latest_change("manuscript")["kind"], "accept")
+        self.build_page()  # the rebuilt page no longer has it
+        self.assertEqual(self.pending(), [])
+        self.assertEqual(preview.change_edits({"op": "undo", "expect": answer["accept_id"]}), {"undone": 1})
+        self.assertEqual(self.pending(), [edit])
+        with self.assertRaises(preview.CommentError):
+            preview.change_edits({"op": "undo"})  # only once
+
+    def test_only_the_last_accept_can_be_undone(self):
+        self.pending()
+        self.agent_edits("We studied", "We followed")
+        first = preview.change_edits({"op": "accept", "edits": self.pending()})
+        self.agent_edits("patients", "people")
+        second = preview.change_edits({"op": "accept", "edits": self.pending()})
+        with self.assertRaises(preview.Conflict):
+            preview.change_edits({"op": "undo", "expect": first["accept_id"]})
+        preview.change_edits({"op": "undo", "expect": second["accept_id"]})
+        self.assertEqual([(e["old"], e["new"]) for e in self.pending()], [("patients", "people")])
+
+    def test_an_accept_of_edits_that_changed_since_the_page_was_built_misses_them(self):
+        self.pending()
+        self.agent_edits("We studied", "We followed")
+        [edit] = self.pending()
+        self.agent_edits("We followed", "We tracked")
+        answer = preview.change_edits({"op": "accept", "edits": [edit]})
+        self.assertEqual(answer, {"done": 0, "missing": 1, "missed": [{"file": INTRO, "id": edit["id"]}]})
+        with self.assertRaises(preview.CommentError):
+            preview.change_edits({"op": "undo"})
+
+    def test_a_figure_added_with_a_paragraph_leaves_only_the_paragraph_pending(self):
+        self.pending()
+        self.agent_edits("[@smith2020].\n", "[@smith2020].\n\nSee @fig:flow.\n\n![A flow.](f.png){#fig:flow}\n")
+        [edit] = self.pending()
+        self.assertEqual(edit["new"].strip(), "See @fig:flow.")
+        self.assertNotIn("fig:flow}{", self.build_page())
+        self.assertIn("![A flow.](f.png){#fig:flow}", json.loads(preview.EDITS_PATH.read_text())["files"][INTRO])
+        # Rejecting the paragraph leaves the figure.
+        preview.change_edits({"op": "reject", "edits": [edit]})
+        self.assertIn("![A flow.](f.png)", self.path.read_text(encoding="utf-8"))
+        self.assertNotIn("See @fig:flow.", self.path.read_text(encoding="utf-8"))
 
     @unittest.skipUnless(shutil.which("pandoc"), "needs Pandoc")
     def test_the_page_marks_the_pending_edits_and_when_they_were_first_seen(self):

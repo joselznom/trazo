@@ -279,9 +279,10 @@
     if (notes.length) toast(notes.join(" "));
   }
 
-  // Outside the text, Cmd+Z undoes the latest change, a saved paragraph or a comment.
+  // Outside the text, Cmd+Z undoes the latest change: a saved paragraph, a comment or an accept of edits.
   async function undoLatest() {
     const { ok, payload } = await postJson(`/__undo?doc=${encodeURIComponent(doc)}`);
+    if (ok && payload.kind === "accept") { undoAccept(payload.id); return; }
     if (ok && payload.kind === "comment" && undoLabel) send({ op: "undo" }, `Undone: ${undoLabel}`);
     if (!ok) { toast(`Not undone: ${refusal(payload)}.`); return; }
     if (payload.kind !== "file") return;

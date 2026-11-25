@@ -52,17 +52,20 @@
   document.addEventListener("mousedown", hideTip);
   window.addEventListener("resize", hideTip);
 
-  // Links inside the page (references, "Figure 1") scroll within the page.
-  page.addEventListener("click", (e) => {
-    const a = e.target.closest("a[href^='#']");
-    if (!a || e.metaKey || e.ctrlKey || e.shiftKey) return;
+  // Links inside the page (references, "Figure 1") scroll within the page;
+  // false when `a` points elsewhere.
+  function followLink(a) {
     let id = a.getAttribute("href").slice(1);
     try { id = decodeURIComponent(id); } catch (err) { /* keep as is */ }
     const target = document.getElementById(id);
-    if (!target || !page.contains(target)) return;
-    e.preventDefault();
+    if (!target || !page.contains(target)) return false;
     scrollToEl(target, true);
     flash(target);
+    return true;
+  }
+  page.addEventListener("click", (e) => {
+    const a = e.target.closest("a[href^='#']");
+    if (a && !e.metaKey && !e.ctrlKey && !e.shiftKey && followLink(a)) e.preventDefault();
   });
 
   // ---------------------------------------------------------------- build
