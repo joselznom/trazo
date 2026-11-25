@@ -53,6 +53,8 @@ class DiagramExportTests(PreviewBrowserTestCase):
         data = json.loads((_support.ROOT / "figures/diagrams/example.json").read_text())
         data["meta"] = {**data.get("meta", {}), "draft": True}
         self.open_diagram(data)
+        for path in diagram.export_paths("example"):
+            path.unlink(missing_ok=True)
         self.edit_text("A draft stays unexported")
         self.evaluate("new Promise(resolve => setTimeout(resolve, 2500))")
         self.assertFalse(self.evaluate("DiagramEditor.state.exporting"))
