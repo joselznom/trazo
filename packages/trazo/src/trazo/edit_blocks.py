@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import re
 from difflib import SequenceMatcher
+from typing import NamedTuple
 
 from .expand import INCLUDE_PREFIX, TABLE_ROW
 from .preview_edits import RULE, closing, markdown_context
@@ -24,7 +25,11 @@ PIPE_RULE = re.compile(r" {0,3}\|?\s*:?-+:?\s*(?:\|\s*:?-+:?\s*)+\|?\s*$")
 MATH = re.compile(r"\$\$[\s\S]*?\$\$\s*(?:\{[^{}]*\})?")
 ATTRIBUTES = re.compile(r"\s*(?:\{[^{}]*\})?")
 
-Chunk = tuple[str, str, str | None]  # (text, its code and comments blanked, kind of block or None)
+
+class Chunk(NamedTuple):
+    text: str
+    plain: str  # the text with its code and comments blanked
+    kind: str | None  # of block, None for prose
 
 
 def take_blocks(base: str, current: str) -> str:
@@ -32,22 +37,22 @@ def take_blocks(base: str, current: str) -> str:
     if base == current:
         return base
     old, new = _chunks(base), _chunks(current)
-    if not any(kind for *_, kind in old + new):
+    if not any(c.kind for c in old + new):
         return base
     out: list[str] = []
-    matcher = SequenceMatcher(None, [c[0].strip() for c in old], [c[0].strip() for c in new], autojunk=False)
+    matcher = SequenceMatcher(None, [c.text.strip() for c in old], [c.text.strip() for c in new], autojunk=False)
     for tag, i1, i2, j1, j2 in matcher.get_opcodes():
         if tag == "equal":
-            out += [text for text, *_ in old[i1:i2]]
+            out += [c.text for c in old[i1:i2]]
             continue
-        prose = [text for text, _, kind in old[i1:i2] if not kind]
-        blocks = [c for c in old[i1:i2] if c[2]]
+        prose = [c.text for c in old[i1:i2] if not c.kind]
+        blocks = [c for c in old[i1:i2] if c.kind]
         for chunk in new[j1:j2]:
-            if not chunk[2]:
+            if not chunk.kind:
                 if prose:
                     out.append(prose.pop(0))
                 continue
-            pair = next((c for c in blocks if c[2] == chunk[2]), None)
+            pair = next((c for c in blocks if c.kind == chunk.kind), None)
             if pair:
                 blocks.remove(pair)
             out.append(_taken(chunk, pair))
@@ -65,7 +70,7 @@ def _chunks(text: str) -> list[Chunk]:
     for i, kind in enumerate(kinds):
         if kind == "caption" and "table" not in kinds[max(0, i - 1):i + 2:2]:
             kinds[i] = None
-    return [(t, p, k) for (t, p), k in zip(pieces, kinds)]
+    return [Chunk(t, p, k) for (t, p), k in zip(pieces, kinds)]
 
 
 def _kind(plain: str) -> str | None:
@@ -108,7 +113,7 @@ def _table_parts(lines: list[str]) -> tuple[int, int] | None:
                       if i and (TABLE_ROW.match(line) or RULE.match(line))), len(lines))
     end = next((i for i in range(start + 1, len(lines)) if CAPTION.match(lines[i])), len(lines))
     rows = lines[start:end]
-    if not rows or start < 0 or re.fullmatch(r"[-\s]+", rows[0]):
+    if not rows or re.fullmatch(r"[-\s]+", rows[0]):
         return None
     if TABLE_ROW.match(rows[0]) or (len(rows) > 1 and (RULE.match(rows[1]) or PIPE_RULE.match(rows[1]))):
         return start, end
@@ -121,14 +126,14 @@ def _taken(chunk: Chunk, pair: Chunk | None) -> str:
     if pair is None:
         return text
     if kind == "caption":
-        return pair[0]
+        return pair.text
     if kind == "figure":
-        new, old = _figure_caption(plain), _figure_caption(pair[1])
+        new, old = _figure_caption(plain), _figure_caption(pair.plain)
         assert new and old
-        return text[:new[0]] + pair[0][old[0]:old[1]] + text[new[1]:]
+        return text[:new[0]] + pair.text[old[0]:old[1]] + text[new[1]:]
     if kind == "table":
         lead, core = len(text) - len(text.lstrip()), text.strip()
-        new_lines, old_lines = core.split("\n"), pair[0].strip().split("\n")
+        new_lines, old_lines = core.split("\n"), pair.text.strip().split("\n")
         new_rows, old_rows = _table_parts(new_lines), _table_parts(old_lines)
         assert new_rows and old_rows
         head = old_lines[:old_rows[0]] if old_rows[0] and new_rows[0] else new_lines[:new_rows[0]]

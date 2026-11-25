@@ -129,9 +129,9 @@ def reader() -> tuple[Callable[[Path], str] | None, Callable[[], None]]:
         name = names.get(Path(path).resolve())
         if name is None:
             return text
-        base = baseline(store, name, text)
-        if base != store["files"].get(name, ""):
-            taken[name] = (store["files"].get(name, ""), base)
+        reviewed, base = store["files"].get(name, ""), baseline(store, name, text)
+        if base != reviewed:
+            taken[name] = (reviewed, base)
         found = edit_diff.edits(base, text, name)
         seen[name] = [e.id for e in found]
         return edit_diff.with_marks(text, edit_diff.edit_marks(text, found) + preview_blocks.marks(text, name))
@@ -184,7 +184,7 @@ def edits_payload(doc: str | None) -> dict[str, Any]:
 
 def _items(request: Any) -> tuple[str, dict[str, list[str]]]:
     if not isinstance(request, dict) or request.get("op") not in ("accept", "reject"):
-        raise RequestError("op must be accept or reject")
+        raise RequestError("op must be accept, reject or undo")
     items = request.get("edits")
     if not isinstance(items, list) or not items or len(items) > MAX_ITEMS:
         raise RequestError("edits must be a non-empty list of {file, id}")
@@ -220,14 +220,15 @@ def change_edits(request: Any) -> dict[str, Any]:
         for asked, ids in by_file.items():
             path, name = paths[asked]
             data, text = read_source(path)
-            found = {e.id: e for e in pending(store, name, text)}
+            base = baseline(store, name, text)
+            found = {e.id: e for e in edit_diff.edits(base, text, name)}
             chosen = [found[i] for i in ids if i in found]
             missed += [{"file": asked, "id": i} for i in ids if i not in found]
             if not chosen:
                 continue
             done += len(chosen)
             if op == "accept":
-                after = edit_diff.accept(baseline(store, name, text), chosen)
+                after = edit_diff.accept(base, chosen)
                 undo["files"][name] = [store["files"].get(name, ""), after]
                 undo["seen"][name] = store["seen"].get(name, {})
                 store["files"][name] = after
@@ -286,9 +287,9 @@ def absorb(name: str, before: str, after: str) -> None:
     store = load()
     if store is None:
         return  # the first baseline is taken from the files as they are
-    baseline = store["files"].get(name, "")
-    merged = edit_diff.merge(before, baseline, after)
-    if merged == baseline:
+    reviewed = store["files"].get(name, "")
+    merged = edit_diff.merge(before, reviewed, after)
+    if merged == reviewed:
         return  # the marks stay what any build of the file shows
     store["files"][name] = merged
     save(store)

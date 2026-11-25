@@ -30,7 +30,8 @@
       if (last && at - last.end < BATCH_GAP) { last.edits.push(e); last.end = at; }
       else out.push({ seen: e.seen, end: at, edits: [e] });
     }
-    for (const batch of out) batch.edits.sort((a, b) => edits.indexOf(a) - edits.indexOf(b));
+    const order = new Map(edits.map((e, i) => [e, i]));
+    for (const batch of out) batch.edits.sort((a, b) => order.get(a) - order.get(b));
     return out.reverse();
   }
   // The top-level sections a batch's marks are in, in page order.
@@ -47,8 +48,7 @@
   }
   function batchRows() {
     return [h("div", { class: "pv-batches-cap", text: "Batches" }), ...batches.map((batch, i) => {
-      const today = batch.seen.slice(0, 10) === new Date().toLocaleDateString("sv");
-      const label = `${plural(batch.edits.length, "change")} ${!batch.seen ? "just now" : `at ${batch.seen.slice(today ? 11 : 0, 16)}`}`;
+      const label = `${plural(batch.edits.length, "change")} ${batch.seen ? `at ${seenTime(batch.seen)}` : "just now"}`;
       return h("div", { class: "pv-batch", role: "group", "aria-label": label },
         h("div", { class: "t" }, label, h("small", { text: sectionsOf(batch.edits) })),
         h("button", { type: "button", class: "no", "data-batch-op": "reject", "data-batch": i, "aria-label": `Reject ${label}…`, title: "Reject…", text: "✕" }),
@@ -62,24 +62,26 @@
     editBanner.hidden = !n || view !== "doc";
     $(".msg b", editBanner).textContent = `${fmt(n)} change${n === 1 ? "" : "s"} to review`;
     batchesLink.hidden = batches.length < 2;
-    batchesLink.textContent = `in ${batches.length} batches ${batchesPop.hidden ? "▾" : "▴"}`;
+    labelBatches();
     menuBatches.hidden = batches.length < 2;
     menuBatches.replaceChildren(...(batches.length < 2 ? [] : [h("hr"), ...batchRows()]));
     if (batches.length < 2 || editBanner.hidden) closeBatches();
     else if (!batchesPop.hidden) batchesPop.replaceChildren(...batchRows());
   }
+  function labelBatches() {
+    batchesLink.setAttribute("aria-expanded", String(!batchesPop.hidden));
+    batchesLink.textContent = `in ${batches.length} batches ${batchesPop.hidden ? "▾" : "▴"}`;
+  }
   function closeBatches() {
     if (batchesPop.hidden) return;
     batchesPop.hidden = true;
-    batchesLink.setAttribute("aria-expanded", "false");
-    batchesLink.textContent = batchesLink.textContent.replace("▴", "▾");
+    labelBatches();
   }
   function openBatches() {
     batchesPop.replaceChildren(...batchRows());
     batchesPop.hidden = false;
     batchesPop.style.left = `${batchesLink.offsetLeft}px`;
-    batchesLink.setAttribute("aria-expanded", "true");
-    batchesLink.textContent = batchesLink.textContent.replace("▾", "▴");
+    labelBatches();
   }
 
   function batchClick(ev) {

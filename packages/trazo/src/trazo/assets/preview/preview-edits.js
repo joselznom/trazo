@@ -79,8 +79,9 @@
     if (commentsReady) renderComments();  // review cards offer Reject when edits are near
   }
 
-  const changedAt = (seen) => !seen ? "" : seen.slice(0, 10) === new Date().toLocaleDateString("sv")
-    ? `Changed ${seen.slice(11, 16)}` : `Changed ${seen.slice(0, 16)}`;
+  // A `seen` stamp ("YYYY-MM-DD HH:MM:SS"): its time today, else its date and time.
+  const seenTime = (seen) => seen.slice(seen.slice(0, 10) === new Date().toLocaleDateString("sv") ? 11 : 0, 16);
+  const changedAt = (seen) => (seen ? `Changed ${seenTime(seen)}` : "");
   function hideEditBar() {
     editBar.hidden = true;
     for (const el of $$(".pv-edit-cur", page)) el.classList.remove("pv-edit-cur");

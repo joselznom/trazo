@@ -266,11 +266,11 @@ def latest_change(doc):
     accepts = [accepted] if isinstance(accepted, dict) and files & set(accepted.get("files", {})) else []
     # `at` tells apart two changes of one second; older entries have only `time`.
     # On a tie the first kind wins.
-    found = [(entries[-1].get("time", ""), entries[-1].get("at", 0), -rank, kind, entries[-1])
-             for rank, (kind, entries) in enumerate((("file", saves), ("comment", comments), ("accept", accepts))) if entries]
+    found = [(entries[-1].get("time", ""), entries[-1].get("at", 0), kind, entries[-1])
+             for kind, entries in (("file", saves), ("comment", comments), ("accept", accepts)) if entries]
     if not found:
         return {"kind": "", "file": ""}
-    *_, kind, entry = max(found, key=lambda change: change[:3])
+    *_, kind, entry = max(found, key=lambda change: change[:2])
     if kind == "accept":
         return {"kind": "accept", "file": "", "id": str(entry.get("at", ""))}
     return {"kind": kind, "file": entry.get("file", "") if kind == "file" else ""}
