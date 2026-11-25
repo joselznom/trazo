@@ -242,13 +242,16 @@ def watch(interval=0.5, stop_event=None, previous=None, numbers=None, failure=""
     those that raised, after a PageFailed), so no change made before or
     during the failure is skipped. A tables stage that finds another build
     holding the lock is no failure: the pages are built with the tables they
-    have, and the stage runs again on the next tick."""
+    have, and the stage runs again on the next tick. When the table editor
+    already rendered a table, the pages show it first and the project's
+    tables stage runs on the next pass."""
     from . import preview
     previous = snapshot() if previous is None else previous
     # The numbers the pages used; unknown when sources changed during the
     # first builds or while reading them, so the first rebuild then covers
     # every page.
     tables_pending, render_pending = False, False
+    deferred = False
     # After a failure (`failure` is its message) the next complete pass rebuilds every page.
     shown = numbered() if numbers is None and not failure else numbers
     at_once = snapshot() != previous
@@ -293,7 +296,7 @@ def watch(interval=0.5, stop_event=None, previous=None, numbers=None, failure=""
                 continue
             with preview.LOCK:  # pages asked for although no source changed (accepted edits)
                 requested, preview.WATCHER["rebuild"] = cast(set[str], preview.WATCHER["rebuild"]), set()
-            if current == previous and not requested and not failure and not waiting:
+            if current == previous and not requested and not failure and not waiting and not deferred:
                 synced(checked)  # preview_start waits for it (trazo.preview_inputs)
                 continue
             changed = {p for p in current.keys() | previous.keys()
@@ -306,6 +309,7 @@ def watch(interval=0.5, stop_event=None, previous=None, numbers=None, failure=""
             if any(p.is_relative_to(folder) for p in changed for folder in specs):
                 render_pending = True
             rendered, regenerated, busy = False, False, False
+            deferred = tables_pending and not deferred and any(p.is_relative_to(outputs[0] / "md") for p in changed)
             if render_pending and not tables_pending:
                 if (done := stage(preview.render_spec_tables)) is False:
                     # The table error replaces the watcher's (and a lock wait), and its recovery rebuilds every page.
@@ -318,7 +322,7 @@ def watch(interval=0.5, stop_event=None, previous=None, numbers=None, failure=""
                     previous.update({p: stamp for p, stamp in snapshot().items()
                                      if p.is_relative_to(output_dir)})
                 busy = done is None
-            if tables_pending:
+            if tables_pending and not deferred:
                 if (done := stage(preview.regenerate_tables)) is False:
                     failure, failures, again, waiting = "", 0, [], False  # as for a failed render above
                     continue  # keep the error visible until the text is fixed

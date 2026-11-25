@@ -141,7 +141,7 @@ a.pv-tbl-edit { display: inline-block; text-decoration: none; }
 /* Writing on the page (preview-writing.js). */
 .pv-can-write { cursor: text; }
 .pv-writing { min-height: 1.5em; outline: none; }
-.pv-writing .pv-edit-del { display: none; }
+.pv-writing .pv-edit-del { opacity: 0.45; pointer-events: none; }
 .pv-writing .pv-atom { border-radius: 2px; background: var(--pv-hover); cursor: default; }
 .pv-write-failed { box-shadow: -3px 0 0 var(--pv-err); }
 .pv-write-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0.3em 0 1em; padding: 5px 8px; border: 1px solid var(--pv-line); border-radius: 7px; background: var(--pv-card); color: var(--pv-ink-2); font: 12.5px/1.4 var(--pv-sans); cursor: default; }

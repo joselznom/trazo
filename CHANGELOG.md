@@ -47,6 +47,11 @@ Internal changes (tests, CI, refactoring) stay out.
 - **Make editable** on a Markdown table turns it into a table typed by hand,
   with its caption, note and cross-references. A table that would lose
   something says why and keeps **Edit source** (#18).
+- The Comments list groups comments by the section their text is in now,
+  with a header and a count for each. Click a header to fold it; j and k
+  and a click on commented text open a folded section. Comments whose text
+  is gone sit under "Not found in the text", and the Figures & Tables view
+  groups them by document.
 
 ### Changed
 
@@ -88,8 +93,17 @@ Internal changes (tests, CI, refactoring) stay out.
   tells you where its number comes from. A label or format that other
   tables or the text also use asks whether to change it in this table only
   or everywhere. Technical settings move under **Advanced** (#15).
+- The diagram editor exports the figure on its own a moment after each
+  save, so the preview shows what you drew without pressing **Export**.
+  Drafts and diagrams with errors are not exported.
+- While you write in a paragraph, text marked as deleted stays in place,
+  dimmed, instead of disappearing. A click in the next paragraph no longer
+  lands somewhere else as the page shifts.
 
 ### Fixed
+
+- A table saved in the table editor shows in the preview at once in a
+  project with its own tables stage; the stage still runs afterwards.
 
 - A save from the preview no longer stays, now and then, on the page as an
   edit to review instead of your text: a build that read it while it was

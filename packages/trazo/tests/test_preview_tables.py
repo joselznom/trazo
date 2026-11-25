@@ -80,6 +80,44 @@ class PreviewTableTests(unittest.TestCase):
             self.assertEqual(generated, ["first edit", "second edit"])
             self.assertEqual(output.read_text(), "second edit")
 
+    def test_a_table_the_editor_rendered_builds_the_pages_before_the_generator_runs(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            spec = root / "tables/specs/results.json"
+            output = root / "tables/output/md/results.md"
+            spec.parent.mkdir(parents=True)
+            output.parent.mkdir(parents=True)
+            spec.write_text("original")
+            output.write_text("original")
+            events = []
+            polls = 0
+
+            def save_in_table_editor():
+                spec.write_text("edited")
+                output.write_text("edited")
+
+            def tick(_):
+                nonlocal polls
+                polls += 1
+                if polls == 1:
+                    save_in_table_editor()
+                if polls > 3:
+                    return True
+
+            def build(name):
+                if events[-1:] != ["build"]:
+                    events.append("build")
+
+            def regenerate():
+                events.append("generate")
+                return True
+
+            with patch.object(preview, "ROOT", root), \
+                 patch.object(preview, "regenerate_tables", side_effect=regenerate), \
+                 patch.object(preview, "build", side_effect=build):
+                preview.watch(stop_event=Mock(**{"wait.side_effect": tick}))
+            self.assertEqual(events, ["build", "generate", "build"])
+
     def test_failed_table_build_is_not_hidden_by_a_manuscript_edit(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
@@ -185,4 +223,48 @@ class PreviewTableFailureTests(unittest.TestCase):
                 self.assertIn(b"0.813", recovered)
                 self.assertEqual(status()["manuscript"]["error"], "")
             finally:
+                session.close()
+
+    def test_a_table_saved_in_the_editor_shows_before_the_projects_tables_stage_ends(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            root = make_project(Path(folder).resolve())
+            stage = "import os, time\nt = time.time()\nwhile os.path.exists('hold-stage') and not os.path.exists('release-stage') and time.time() - t < 60: time.sleep(0.1)"
+            config = root / "trazo.toml"
+            config.write_text("\n".join("tables = " + json.dumps(["python3", "-c", stage]) if row.startswith("tables = ") else row
+                                        for row in config.read_text().splitlines()) + "\n")
+            source = root / "manuscript/main/01_introduction.md"
+            source.write_text(source.read_text() + "\n!include ../../tables/output/md/results.md\n")
+            (root / "tables/output/md/results.md").write_text("Results before the editor.\n")
+            port = free_port()
+            session = Session(root.parent, port)
+            try:
+                start = session.tool("preview_start", project=str(root))
+                self.assertFalse(start["isError"], start["content"])
+                port = start["structuredContent"]["port"]
+
+                def call(path: str, body: dict | None = None) -> bytes:
+                    connection = http.client.HTTPConnection("127.0.0.1", port, timeout=10)
+                    try:
+                        connection.request("GET" if body is None else "POST", path, None if body is None else json.dumps(body),
+                                           {"Content-Type": "application/json"})
+                        response = connection.getresponse()
+                        data = response.read()
+                        self.assertEqual(response.status, 200, data)
+                        return data
+                    finally:
+                        connection.close()
+
+                def status() -> dict:
+                    return json.loads(call("/__status"))
+
+                self.assertTrue(wait_until(lambda: status()["manuscript"]["ok"]), status())
+                shown = status()["manuscript"]["version"]
+                (root / "hold-stage").touch()
+                base = json.loads(call("/__table?label=results"))["sha256"]
+                call("/__table", {"label": "results", "base_sha256": base,
+                                  "ops": [{"op": "set", "path": "columns.method.header", "value": "EditorHeader"}]})
+                self.assertTrue(wait_until(lambda: status()["manuscript"]["version"] > shown, timeout=20))
+                self.assertIn(b"EditorHeader", call("/manuscript.html"))
+            finally:
+                (root / "release-stage").touch()
                 session.close()
