@@ -156,17 +156,22 @@ def reject(current: str, chosen: list[Edit]) -> str:
 
 
 def _kept(before: str, start: int, end: int, removed: list[tuple[int, int, str, bool]]) -> str:
+    """before[start:end] without the parts `removed` deletes."""
     out, at = [], start
     for b0, b1, _, _ in sorted(removed):
         if b1 <= at or b0 >= end:
             continue
         out.append(before[at:max(at, b0)])
         gone = before[max(at, b0):min(b1, end)]
-        if not gone.strip() and "\n" not in gone:
+        if _word_spacing(gone):
             out.append(gone)
         at = max(at, b1)
     out.append(before[at:end] if at < end else "")
     return "".join(out)
+
+
+def _word_spacing(text: str) -> bool:
+    return not text.strip() and "\n" not in text
 
 
 def merge(before: str, ours: str, theirs: str) -> str:
@@ -343,6 +348,10 @@ def _blocks_inserted(text: str, c0: int, c1: int) -> list[int]:
     return starts
 
 
+def _starts_block(text: str, at: int) -> bool:
+    return bool(re.search(r"(?:^|\n[ \t\r]*\n)[ \t]*$", text[:at]))
+
+
 def edit_marks(current: str, found: list[Edit]) -> list[tuple[int, int, str]]:
     """The marks of `found` as (offset, order, text), where the order at one
     offset is closers 0, block marks 1, deletions 2, openers 3. An edit with
@@ -367,7 +376,7 @@ def edit_marks(current: str, found: list[Edit]) -> list[tuple[int, int, str]]:
         marks = []
         new_blocks = _blocks_inserted(current, e.c0, e.c1) if new_text else []
         first = e.c0 + len(e.new) - len(e.new.lstrip())
-        if new_text and not old_text and re.search(r"(?:^|\n[ \t\r]*\n)[ \t]*$", current[:first]):
+        if new_text and not old_text and _starts_block(current, first):
             new_blocks = list(dict.fromkeys([first, *new_blocks]))
         for start in new_blocks:
             at = lines.block_mark_at(start)

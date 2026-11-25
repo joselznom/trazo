@@ -46,7 +46,7 @@
     `<button type="button" class="go" data-edit-op="go" hidden></button>` +
     `<div class="pv-edit-was" hidden></div>`;
   document.body.append(editBar);
-  let goLink = null;
+  let selectedLink = null;
 
   let showMarks = prefs.editMarks !== false;
   function renderEditsUi() {
@@ -79,14 +79,17 @@
     if (commentsReady) renderComments();  // review cards offer Reject when edits are near
   }
 
-  const seenTime = (seen) => seen.slice(seen.slice(0, 10) === new Date().toLocaleDateString("sv") ? 11 : 0, 16);
+  function seenTime(seen) {
+    const [day, clock] = seen.split(" "), minute = clock.slice(0, 5);
+    return day === new Date().toLocaleDateString("sv") ? minute : `${day} ${minute}`;
+  }
   const changedAt = (seen) => (seen ? `Changed ${seenTime(seen)}` : "");
   function hideEditBar() {
     editBar.hidden = true;
     for (const el of $$(".pv-edit-cur", page)) el.classList.remove("pv-edit-cur");
     editAt = -1;
     editAnchor = null;
-    goLink = null;
+    selectedLink = null;
   }
   function placeEditBar() {
     const anchor = editAnchor;
@@ -121,10 +124,10 @@
       // A changed block has no inline marks: the bar shows what it was.
       was.hidden = marks.some((el) => el.matches(".pv-edit-ins, .pv-edit-del")) || !e.old.trim();
       was.textContent = was.hidden ? "" : `Was: ${clip(e.old)}`;
-      goLink = link || marks.filter((el) => el.matches(".pv-edit-ins")).map((el) => $("a[href^='#']", el)).find(Boolean) || null;
+      selectedLink = link || marks.filter((el) => el.matches(".pv-edit-ins")).map((el) => $("a[href^='#']", el)).find(Boolean) || null;
     }
-    const go = $('[data-edit-op="go"]', editBar), to = goLink ? referenceName(goLink) : "";
-    go.hidden = !goLink;
+    const go = $('[data-edit-op="go"]', editBar), to = selectedLink ? linkLabel(selectedLink) : "";
+    go.hidden = !selectedLink;
     go.textContent = `Go to ${to.length > 40 ? to.slice(0, 40) + "…" : to} ↗`;
     const when = changedAt(e.seen);
     $('[data-edit-op="accept"]', editBar).dataset.tip = `Accept (A)${when ? " · " + when : ""}`;
@@ -132,10 +135,11 @@
     if (scroll && marks.length) scrollToEl(marks[0], true, reduceMotion());
     requestAnimationFrame(placeEditBar);
   }
-  const KINDS = { fig: "Figure", tbl: "Table", eq: "Equation", sec: "Section", ref: "Reference" };
-  function referenceName(a) {
-    const text = a.textContent.trim(), kind = KINDS[a.getAttribute("href").slice(1).split(/[:-]/)[0]];
-    return /^[\d.,–-]+$/.test(text) && kind ? `${kind} ${text}` : text;
+  const TARGET_KINDS = { fig: "Figure", tbl: "Table", eq: "Equation", sec: "Section", ref: "Reference" };
+  function linkLabel(a) {
+    const text = a.textContent.trim(), kind = TARGET_KINDS[a.getAttribute("href").slice(1).split(/[:-]/)[0]];
+    const numberOnly = /^[\d.,–-]+$/.test(text);
+    return numberOnly && kind ? `${kind} ${text}` : text;
   }
   function stepEdit(dir) {
     if (!edits.length) return;
@@ -189,8 +193,8 @@
     if (confirm(`Reject ${which}${plural(list.length, "edit")}? The text goes back to how it was when you last reviewed it. Undo save in the Source tab brings back a file's edits.`))
       applyEdits("reject", list, `Rejected ${plural(list.length, "edit")}`);
   }
-  async function undoAccept(id) {
-    const { ok, payload } = await postJson("/__edits", { op: "undo", ...(id ? { expect: id } : {}) });
+  async function undoAccept(acceptId) {
+    const { ok, payload } = await postJson("/__edits", { op: "undo", ...(acceptId ? { expect: acceptId } : {}) });
     toast(ok ? `${plural(payload.undone, "change")} back to review` : `Not undone: ${payload.error || "the server refused"}.`);
   }
 
@@ -222,7 +226,7 @@
   document.addEventListener("click", (ev) => { if (!editsUi.contains(ev.target)) closeEditsMenu(); });
   editBar.addEventListener("click", (ev) => {
     const op = ev.target.closest("[data-edit-op]")?.dataset.editOp, e = edits[editAt];
-    if (op === "go" && goLink) { followLink(goLink); hideEditBar(); }
+    if (op === "go" && selectedLink) { followLink(selectedLink); hideEditBar(); }
     else if (op === "accept" && e) acceptEdits([e]);
     else if (op === "reject" && e) applyEdits(op, [e], "Edit rejected");
   });
@@ -230,7 +234,7 @@
     button.addEventListener("mouseenter", () => { tipFor = button; tip.textContent = button.dataset.tip || ""; placeTip(button); });
     button.addEventListener("mouseleave", hideTip);
   }
-  app.addEventListener("click", (ev) => {
+  function takeClickInMark(ev) {
     const mark = showMarks && view === "doc" && ev.button === 0 && !ev.altKey && !ev.shiftKey
       && ev.target.closest?.(".pv-edit-ins, .pv-edit-del");
     if (!mark || !page.contains(mark)) return;
@@ -245,7 +249,8 @@
     ev.stopPropagation();
     closeEditsMenu();
     selectEdit(at, false, link);
-  }, true);
+  }
+  app.addEventListener("click", takeClickInMark, true);
   page.addEventListener("click", (ev) => {
     if (!showMarks || ev.target.closest("a, button") || !document.getSelection().isCollapsed) return;
     const mark = ev.target.closest("[data-edit-block]");

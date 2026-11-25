@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import re
 from difflib import SequenceMatcher
-from typing import NamedTuple
+from typing import Literal, NamedTuple
 
 from .expand import INCLUDE_PREFIX, TABLE_ROW
 from .preview_edits import RULE, closing, markdown_context
@@ -26,10 +26,13 @@ MATH = re.compile(r"\$\$[\s\S]*?\$\$\s*(?:\{[^{}]*\})?")
 ATTRIBUTES = re.compile(r"\s*(?:\{[^{}]*\})?")
 
 
+Kind = Literal["figure", "table", "caption", "math", "include"]
+
+
 class Chunk(NamedTuple):
     text: str
-    plain: str
-    kind: str | None
+    masked: str
+    kind: Kind | None
 
 
 def take_blocks(base: str, current: str) -> str:
@@ -52,44 +55,48 @@ def take_blocks(base: str, current: str) -> str:
                 if prose:
                     out.append(prose.pop(0))
                 continue
-            pair = next((c for c in blocks if c.kind == chunk.kind), None)
-            if pair:
-                blocks.remove(pair)
-            out.append(_taken(chunk, pair))
+            reviewed = next((c for c in blocks if c.kind == chunk.kind), None)
+            if reviewed:
+                blocks.remove(reviewed)
+            out.append(_with_reviewed_caption(chunk, reviewed))
         out += prose
     return _joined(out)
 
 
 def _chunks(text: str) -> list[Chunk]:
-    plain = "".join("\n" if ch == "\n" else p for ch, p in zip(text, markdown_context(text)))
-    cuts = [0, *(m.end() for m in BLANK_RUN.finditer(plain)), len(text)]
-    pieces = [(text[a:b], plain[a:b]) for a, b in zip(cuts, cuts[1:]) if a < b]
-    kinds = [_kind(p) for _, p in pieces]
+    masked = "".join("\n" if ch == "\n" else m for ch, m in zip(text, markdown_context(text)))
+    cuts = [0, *(m.end() for m in BLANK_RUN.finditer(masked)), len(text)]
+    pieces = [(text[a:b], masked[a:b]) for a, b in zip(cuts, cuts[1:]) if a < b]
+    kinds = [_kind(m) for _, m in pieces]
     for i, kind in enumerate(kinds):
-        if kind == "caption" and "table" not in kinds[max(0, i - 1):i + 2:2]:
+        if kind == "caption" and not _beside_a_table(kinds, i):
             kinds[i] = None
-    return [Chunk(t, p, k) for (t, p), k in zip(pieces, kinds)]
+    return [Chunk(t, m, k) for (t, m), k in zip(pieces, kinds)]
 
 
-def _kind(plain: str) -> str | None:
-    core = plain.strip()
+def _beside_a_table(kinds: list[Kind | None], i: int) -> bool:
+    return any(0 <= j < len(kinds) and kinds[j] == "table" for j in (i - 1, i + 1))
+
+
+def _kind(masked: str) -> Kind | None:
+    core = masked.strip()
     if not core:
         return None
     if core.startswith(INCLUDE_PREFIX) and "\n" not in core:
         return "include"
     if core.count("$$") == 2 and MATH.fullmatch(core):
         return "math"
-    if _figure_caption(plain):
+    if _figure_caption_span(masked):
         return "figure"
     lines = core.split("\n")
-    if _table_parts(lines):
+    if _table_rows(lines):
         return "table"
     return "caption" if CAPTION.match(lines[0]) else None
 
 
-def _figure_caption(plain: str) -> tuple[int, int] | None:
-    lead = len(plain) - len(plain.lstrip())
-    core = plain.strip()
+def _figure_caption_span(masked: str) -> tuple[int, int] | None:
+    lead = len(masked) - len(masked.lstrip())
+    core = masked.strip()
     if not core.startswith("!["):
         return None
     end = closing(core, 1, "[", "]")
@@ -101,7 +108,7 @@ def _figure_caption(plain: str) -> tuple[int, int] | None:
     return lead + 2, lead + end
 
 
-def _table_parts(lines: list[str]) -> tuple[int, int] | None:
+def _table_rows(lines: list[str]) -> range | None:
     start = 0
     if CAPTION.match(lines[0]):
         start = next((i - 1 if RULE.match(line) else i for i, line in enumerate(lines)
@@ -111,30 +118,27 @@ def _table_parts(lines: list[str]) -> tuple[int, int] | None:
     if not rows or re.fullmatch(r"[-\s]+", rows[0]):
         return None
     if TABLE_ROW.match(rows[0]) or (len(rows) > 1 and (RULE.match(rows[1]) or PIPE_RULE.match(rows[1]))):
-        return start, end
+        return range(start, end)
     return None
 
 
-def _taken(chunk: Chunk, pair: Chunk | None) -> str:
-    text, plain, kind = chunk
-    if pair is None:
-        return text
-    if kind == "caption":
-        return pair.text
-    if kind == "figure":
-        new, old = _figure_caption(plain), _figure_caption(pair.plain)
+def _with_reviewed_caption(block: Chunk, reviewed: Chunk | None) -> str:
+    if reviewed is None or block.kind in ("math", "include"):
+        return block.text
+    if block.kind == "caption":
+        return reviewed.text
+    if block.kind == "figure":
+        new, old = _figure_caption_span(block.masked), _figure_caption_span(reviewed.masked)
         assert new and old
-        return text[:new[0]] + pair.text[old[0]:old[1]] + text[new[1]:]
-    if kind == "table":
-        lead, core = len(text) - len(text.lstrip()), text.strip()
-        new_lines, old_lines = core.split("\n"), pair.text.strip().split("\n")
-        new_rows, old_rows = _table_parts(new_lines), _table_parts(old_lines)
-        assert new_rows and old_rows
-        head = old_lines[:old_rows[0]] if old_rows[0] and new_rows[0] else new_lines[:new_rows[0]]
-        tail_old, tail_new = old_lines[old_rows[1]:], new_lines[new_rows[1]:]
-        lines = head + new_lines[new_rows[0]:new_rows[1]] + (tail_old if tail_old and tail_new else tail_new)
-        return text[:lead] + "\n".join(lines) + text[lead + len(core):]
-    return text
+        return block.text[:new[0]] + reviewed.text[old[0]:old[1]] + block.text[new[1]:]
+    lead, core = len(block.text) - len(block.text.lstrip()), block.text.strip()
+    new_lines, old_lines = core.split("\n"), reviewed.text.strip().split("\n")
+    new_rows, old_rows = _table_rows(new_lines), _table_rows(old_lines)
+    assert new_rows and old_rows
+    head = old_lines[:old_rows.start] if old_rows.start and new_rows.start else new_lines[:new_rows.start]
+    old_tail, new_tail = old_lines[old_rows.stop:], new_lines[new_rows.stop:]
+    lines = head + new_lines[new_rows.start:new_rows.stop] + (old_tail if old_tail and new_tail else new_tail)
+    return block.text[:lead] + "\n".join(lines) + block.text[lead + len(core):]
 
 
 def _joined(chunks: list[str]) -> str:

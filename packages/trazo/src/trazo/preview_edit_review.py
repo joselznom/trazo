@@ -120,16 +120,16 @@ def reader() -> tuple[Callable[[Path], str] | None, Callable[[], None]]:
         return None, lambda: None
     names = {path.resolve(): name for name, path in tracked().items()}
     seen: dict[str, list[str]] = {}
-    taken: dict[str, tuple[str, str]] = {}
+    with_blocks: dict[str, str] = {}
 
     def read(path: Path) -> str:
         text = exact_text(Path(path))
         name = names.get(Path(path).resolve())
         if name is None:
             return text
-        reviewed, base = store["files"].get(name, ""), baseline(store, name, text)
-        if base != reviewed:
-            taken[name] = (reviewed, base)
+        base = baseline(store, name, text)
+        if base != store["files"].get(name, ""):
+            with_blocks[name] = base
         found = edit_diff.edits(base, text, name)
         seen[name] = [e.id for e in found]
         return edit_diff.with_marks(text, edit_diff.edit_marks(text, found) + preview_blocks.marks(text, name))
@@ -142,9 +142,9 @@ def reader() -> tuple[Callable[[Path], str] | None, Callable[[], None]]:
                 return
             times = current["seen"]
             changed = False
-            for name, (reviewed, with_blocks) in taken.items():
-                if current["files"].get(name, "") == reviewed:
-                    current["files"][name], changed = with_blocks, True
+            for name, base in with_blocks.items():
+                if current["files"].get(name, "") == store["files"].get(name, ""):
+                    current["files"][name], changed = base, True
             for name, ids in seen.items():
                 before = times.get(name, {})
                 after = {i: before.get(i, stamp) for i in ids}
@@ -265,13 +265,16 @@ def undo_accept(request: dict[str, Any]) -> dict[str, Any]:
         if "expect" in request and str(last.get("at")) != str(request["expect"]):
             raise Conflict("the edits were accepted again since; undo that accept first")
         for name, (before, after) in last["files"].items():
-            now = store["files"].get(name, "")
-            store["files"][name] = before if now == after else edit_diff.merge(after, now, before)
+            store["files"][name] = _unaccepted(store["files"].get(name, ""), before, after)
             store["seen"][name] = {**last.get("seen", {}).get(name, {}), **store["seen"].get(name, {})}
         del store["accepted"]
         save(store)
     _rebuild_pages(set(last["files"]))
     return {"undone": last.get("count", 0)}
+
+
+def _unaccepted(now: str, before: str, after: str) -> str:
+    return before if now == after else edit_diff.merge(after, now, before)
 
 
 def absorb(name: str, before: str, after: str) -> None:

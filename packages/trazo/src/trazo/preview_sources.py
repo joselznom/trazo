@@ -259,17 +259,15 @@ def latest_change(doc):
         saves = [e for e in read_file_history() if e.get("file") in files]
         history = PreviewHistory(preview.HISTORY_PATH).load()
         comments = [history[i] for i in PreviewComments().history_of(history, doc)]
-        try:
-            accepted = (preview_edit_review.load() or {}).get("accepted")
-        except StoreError:
-            accepted = None
+        accepted = (preview_edit_review.load() or {}).get("accepted")
     accepts = [accepted] if isinstance(accepted, dict) and files & set(accepted.get("files", {})) else []
     # `at` tells apart two changes of one second; older entries have only `time`.
-    found = [(entries[-1].get("time", ""), entries[-1].get("at", 0), kind, entries[-1])
-             for kind, entries in (("file", saves), ("comment", comments), ("accept", accepts)) if entries]
+    found = [(entries[-1].get("time", ""), entries[-1].get("at", 0), -priority, kind, entries[-1])
+             for priority, (kind, entries) in enumerate((("file", saves), ("comment", comments), ("accept", accepts)))
+             if entries]
     if not found:
         return {"kind": "", "file": ""}
-    *_, kind, entry = max(found, key=lambda change: change[:2])
+    *_, kind, entry = max(found, key=lambda change: change[:3])
     if kind == "accept":
         return {"kind": "accept", "file": "", "id": str(entry.get("at", ""))}
     return {"kind": kind, "file": entry.get("file", "") if kind == "file" else ""}

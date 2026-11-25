@@ -33,7 +33,7 @@
     for (const batch of out) batch.edits.sort((a, b) => order.get(a) - order.get(b));
     return out.reverse();
   }
-  function sectionsOf(list) {
+  function topSectionNames(list) {
     const names = [];
     for (const e of list) {
       const mark = marksOf(e.id)[0];
@@ -48,7 +48,7 @@
     return [h("div", { class: "pv-batches-cap", text: "Batches" }), ...batches.map((batch, i) => {
       const label = `${plural(batch.edits.length, "change")} ${batch.seen ? `at ${seenTime(batch.seen)}` : "just now"}`;
       return h("div", { class: "pv-batch", role: "group", "aria-label": label },
-        h("div", { class: "t" }, label, h("small", { text: sectionsOf(batch.edits) })),
+        h("div", { class: "t" }, label, h("small", { text: topSectionNames(batch.edits) })),
         h("button", { type: "button", class: "no", "data-batch-op": "reject", "data-batch": i, "aria-label": `Reject ${label}…`, title: "Reject…", text: "✕" }),
         h("button", { type: "button", class: "ok", "data-batch-op": "accept", "data-batch": i, "aria-label": `Accept ${label}`, text: "✓ Accept" }));
     })];
