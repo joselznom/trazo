@@ -261,11 +261,10 @@ def latest_change(doc):
         comments = [history[i] for i in PreviewComments().history_of(history, doc)]
         try:
             accepted = (preview_edit_review.load() or {}).get("accepted")
-        except StoreError:  # the page reports a broken baseline
+        except StoreError:
             accepted = None
     accepts = [accepted] if isinstance(accepted, dict) and files & set(accepted.get("files", {})) else []
     # `at` tells apart two changes of one second; older entries have only `time`.
-    # On a tie the first kind wins.
     found = [(entries[-1].get("time", ""), entries[-1].get("at", 0), kind, entries[-1])
              for kind, entries in (("file", saves), ("comment", comments), ("accept", accepts)) if entries]
     if not found:

@@ -46,7 +46,7 @@
     `<button type="button" class="go" data-edit-op="go" hidden></button>` +
     `<div class="pv-edit-was" hidden></div>`;
   document.body.append(editBar);
-  let goLink = null;  // the reference in the selected edit
+  let goLink = null;
 
   let showMarks = prefs.editMarks !== false;
   function renderEditsUi() {
@@ -79,7 +79,6 @@
     if (commentsReady) renderComments();  // review cards offer Reject when edits are near
   }
 
-  // A `seen` stamp ("YYYY-MM-DD HH:MM:SS"): its time today, else its date and time.
   const seenTime = (seen) => seen.slice(seen.slice(0, 10) === new Date().toLocaleDateString("sv") ? 11 : 0, 16);
   const changedAt = (seen) => (seen ? `Changed ${seenTime(seen)}` : "");
   function hideEditBar() {
@@ -100,9 +99,6 @@
   scroller.addEventListener("scroll", () => { if (!editBar.hidden) placeEditBar(); }, { passive: true });
   window.addEventListener("resize", () => { if (!editBar.hidden) placeEditBar(); });
 
-  // Select an edit: mark it, scroll to it and show its bar, with the link it
-  // was clicked on or the first it inserts. An edit with no mark in the page
-  // (a definition list's marker, a fenced div) opens the Source tab at its line instead.
   function selectEdit(i, scroll, link) {
     hideEditBar();
     const e = edits[i];
@@ -136,7 +132,6 @@
     if (scroll && marks.length) scrollToEl(marks[0], true, reduceMotion());
     requestAnimationFrame(placeEditBar);
   }
-  // A numbered reference links only its number ("Figure 1"): the target's kind names it.
   const KINDS = { fig: "Figure", tbl: "Table", eq: "Equation", sec: "Section", ref: "Reference" };
   function referenceName(a) {
     const text = a.textContent.trim(), kind = KINDS[a.getAttribute("href").slice(1).split(/[:-]/)[0]];
@@ -184,7 +179,6 @@
     return payload;
   }
 
-  // Accept `list` with an Undo in the toast; reject it once the author confirms.
   async function acceptEdits(list) {
     const payload = await applyEdits("accept", list);
     if (payload?.accept_id && !payload.missing)
@@ -195,7 +189,6 @@
     if (confirm(`Reject ${which}${plural(list.length, "edit")}? The text goes back to how it was when you last reviewed it. Undo save in the Source tab brings back a file's edits.`))
       applyEdits("reject", list, `Rejected ${plural(list.length, "edit")}`);
   }
-  // The edits come back with the rebuilt page. `id` names the accept: a newer one is refused.
   async function undoAccept(id) {
     const { ok, payload } = await postJson("/__edits", { op: "undo", ...(id ? { expect: id } : {}) });
     toast(ok ? `${plural(payload.undone, "change")} back to review` : `Not undone: ${payload.error || "the server refused"}.`);
@@ -237,9 +230,6 @@
     button.addEventListener("mouseenter", () => { tipFor = button; tip.textContent = button.dataset.tip || ""; placeTip(button); });
     button.addEventListener("mouseleave", hideTip);
   }
-  // A click inside an inserted or deleted text selects its edit, before a
-  // comment's highlight or a link in it takes the click (not when it ends a
-  // text selection); with ⌘ (Ctrl) a link goes to its target at once.
   app.addEventListener("click", (ev) => {
     const mark = showMarks && view === "doc" && ev.button === 0 && !ev.altKey && !ev.shiftKey
       && ev.target.closest?.(".pv-edit-ins, .pv-edit-del");
@@ -256,7 +246,6 @@
     closeEditsMenu();
     selectEdit(at, false, link);
   }, true);
-  // A click on a changed block selects its edit; a link in it still goes to its target.
   page.addEventListener("click", (ev) => {
     if (!showMarks || ev.target.closest("a, button") || !document.getSelection().isCollapsed) return;
     const mark = ev.target.closest("[data-edit-block]");

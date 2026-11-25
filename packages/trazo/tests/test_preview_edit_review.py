@@ -50,7 +50,7 @@ class EditReviewTests(unittest.TestCase):
         text = self.path.read_text(encoding="utf-8")
         [edit] = self.pending()
         answer = preview.change_edits({"op": "accept", "edits": [edit]})
-        self.assertRegex(answer.pop("accept_id"), r"^\d+$")  # what its undo names
+        self.assertRegex(answer.pop("accept_id"), r"^\d+$")
         self.assertEqual(answer, {"done": 1, "missing": 0, "missed": []})
         self.assertEqual(self.path.read_text(encoding="utf-8"), text)
         self.assertEqual(self.pending(), [])
@@ -145,12 +145,12 @@ class EditReviewTests(unittest.TestCase):
         answer = preview.change_edits({"op": "accept", "edits": [edit]})
         self.assertEqual(answer["done"], 1)
         self.assertEqual(preview.latest_change("manuscript")["kind"], "accept")
-        self.build_page()  # the rebuilt page no longer has it
+        self.build_page()
         self.assertEqual(self.pending(), [])
         self.assertEqual(preview.change_edits({"op": "undo", "expect": answer["accept_id"]}), {"undone": 1})
         self.assertEqual(self.pending(), [edit])
         with self.assertRaises(preview.CommentError):
-            preview.change_edits({"op": "undo"})  # only once
+            preview.change_edits({"op": "undo"})
 
     def test_only_the_last_accept_can_be_undone(self):
         self.pending()
@@ -180,7 +180,6 @@ class EditReviewTests(unittest.TestCase):
         self.assertEqual(edit["new"].strip(), "See @fig:flow.")
         self.assertNotIn("fig:flow}{", self.build_page())
         self.assertIn("![A flow.](f.png){#fig:flow}", json.loads(preview.EDITS_PATH.read_text())["files"][INTRO])
-        # Rejecting the paragraph leaves the figure.
         preview.change_edits({"op": "reject", "edits": [edit]})
         self.assertIn("![A flow.](f.png)", self.path.read_text(encoding="utf-8"))
         self.assertNotIn("See @fig:flow.", self.path.read_text(encoding="utf-8"))

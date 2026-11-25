@@ -92,7 +92,6 @@ class EditMarksTests(PreviewBrowserTestCase):
         self.evaluate("document.querySelectorAll('.pv-batches-pop [data-batch-op=accept]')[1].click()")
         self.wait_for("document.querySelector('.pv-edit-banner b').textContent === '2 changes to review'")
         self.assertEqual(self.calls, [self.asked("accept", "e2")])
-        # The Edits menu lists the same batches.
         self.assertEqual(self.evaluate("document.querySelectorAll('.pv-edits-menu .pv-batch').length"), 2)
 
     def test_builds_minutes_apart_are_one_batch_and_accept_all_can_be_undone(self):
@@ -111,7 +110,7 @@ class EditMarksTests(PreviewBrowserTestCase):
 
     def test_a_click_on_a_reference_in_an_insertion_selects_it_and_its_bar_goes_there(self):
         self.edits = EDITS + [{"file": INTRO, "id": "e4", "line": 5, "old": "", "new": "See [@x].", "seen": ""}]
-        self.review_comment()  # a highlight's capture does not take the click either
+        self.review_comment()
         self.open()
         self.wait_for("!document.querySelector('.pv-edits').hidden")
         self.evaluate("document.getElementById('ref-x').style.marginTop = '200vh'")

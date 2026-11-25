@@ -28,8 +28,8 @@ ATTRIBUTES = re.compile(r"\s*(?:\{[^{}]*\})?")
 
 class Chunk(NamedTuple):
     text: str
-    plain: str  # the text with its code and comments blanked
-    kind: str | None  # of block, None for prose
+    plain: str
+    kind: str | None
 
 
 def take_blocks(base: str, current: str) -> str:
@@ -61,12 +61,10 @@ def take_blocks(base: str, current: str) -> str:
 
 
 def _chunks(text: str) -> list[Chunk]:
-    """`text` cut after each run of blank lines, each piece with its kind of block."""
     plain = "".join("\n" if ch == "\n" else p for ch, p in zip(text, markdown_context(text)))
     cuts = [0, *(m.end() for m in BLANK_RUN.finditer(plain)), len(text)]
     pieces = [(text[a:b], plain[a:b]) for a, b in zip(cuts, cuts[1:]) if a < b]
     kinds = [_kind(p) for _, p in pieces]
-    # A caption paragraph belongs to the table before or after it.
     for i, kind in enumerate(kinds):
         if kind == "caption" and "table" not in kinds[max(0, i - 1):i + 2:2]:
             kinds[i] = None
@@ -90,7 +88,6 @@ def _kind(plain: str) -> str | None:
 
 
 def _figure_caption(plain: str) -> tuple[int, int] | None:
-    """Where the caption is in a block that is an image alone, or None."""
     lead = len(plain) - len(plain.lstrip())
     core = plain.strip()
     if not core.startswith("!["):
@@ -105,8 +102,6 @@ def _figure_caption(plain: str) -> tuple[int, int] | None:
 
 
 def _table_parts(lines: list[str]) -> tuple[int, int] | None:
-    """(first row, end of rows) of a table block whose caption may sit right
-    above or under its rows, or None when it is no table."""
     start = 0
     if CAPTION.match(lines[0]):
         start = next((i - 1 if RULE.match(line) else i for i, line in enumerate(lines)
@@ -121,7 +116,6 @@ def _table_parts(lines: list[str]) -> tuple[int, int] | None:
 
 
 def _taken(chunk: Chunk, pair: Chunk | None) -> str:
-    """A block of `current`, with the caption of `pair`, its block in `base`."""
     text, plain, kind = chunk
     if pair is None:
         return text
@@ -144,7 +138,6 @@ def _taken(chunk: Chunk, pair: Chunk | None) -> str:
 
 
 def _joined(chunks: list[str]) -> str:
-    """The chunks in order, a blank line between each two."""
     out = ""
     for chunk in chunks:
         if out and not SEPARATED.search(out):

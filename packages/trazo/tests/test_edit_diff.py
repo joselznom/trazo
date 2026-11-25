@@ -131,8 +131,6 @@ class EditsTests(unittest.TestCase):
         self.assertEqual("".join(e.new for e in edit_diff.edits(merged, fixed)).count("Two second text."), 1)
 
     def test_an_authors_change_to_a_pending_word_keeps_the_space_before_it(self):
-        # The agent inserted "quick " and the author made it "quickly": the
-        # baseline takes the author's word with its space, and nothing stays pending.
         merged = edit_diff.merge("The quick brown fox jumps.", "The brown fox jumps.", "The quickly brown fox jumps.")
         self.assertEqual(merged, "The quickly brown fox jumps.")
         self.assertEqual(edit_diff.edits(merged, "The quickly brown fox jumps."), [])
@@ -217,7 +215,6 @@ class MarksTests(unittest.TestCase):
         self.assertNotIn("data-edit", text.split("\n")[0])  # the heading
 
     def test_a_paragraph_added_after_another_marks_only_itself(self):
-        # The blank line between them is half before the edit and half in it.
         found, text = self.marked("Intro.\n", "Intro.\n\nNew paragraph.\n")
         self.assertEqual(text, f'Intro.\n\n[]{{.pv-blk .pv-new data-edit="{found[0].id}"}}New paragraph.\n')
 

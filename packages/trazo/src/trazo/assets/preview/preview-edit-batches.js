@@ -8,7 +8,7 @@
   if (!window.PreviewModel) throw new Error("preview-model.js did not load");  // see preview-page.js
   // ---------------------------------------------------------------- edit batches
   const BATCH_GAP = 2 * 60 * 1000;
-  let batches = [];  // [{seen, edits}], newest first
+  let batches = [];
   const editBanner = h("div", { class: "pv-edit-banner", role: "region", "aria-label": "Changes to review", hidden: true });
   editBanner.innerHTML =
     `<div class="msg"><b></b> <button type="button" class="pv-batches-link" aria-haspopup="dialog" aria-expanded="false" aria-controls="pv-batches-pop"></button>` +
@@ -21,7 +21,6 @@
   const batchesLink = $(".pv-batches-link", editBanner), batchesPop = $(".pv-batches-pop", editBanner);
   const menuBatches = $(".pv-edits-batches", editsMenu);
 
-  // A `seen` stamp is local time; an edit not seen yet is newer than any.
   const seenAt = (e) => (e.seen ? new Date(e.seen.replace(" ", "T")).getTime() : Date.now());
   function editBatches() {
     const out = [];
@@ -34,7 +33,6 @@
     for (const batch of out) batch.edits.sort((a, b) => order.get(a) - order.get(b));
     return out.reverse();
   }
-  // The top-level sections a batch's marks are in, in page order.
   function sectionsOf(list) {
     const names = [];
     for (const e of list) {

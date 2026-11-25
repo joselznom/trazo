@@ -100,8 +100,6 @@ def ensure() -> dict[str, Any]:
 
 
 def baseline(store: dict[str, Any], name: str, text: str) -> str:
-    """What the author last reviewed of a file whose text is now `text`,
-    with its figures, tables and equations as they are now."""
     return edit_blocks.take_blocks(store["files"].get(name, ""), text)
 
 
@@ -122,7 +120,7 @@ def reader() -> tuple[Callable[[Path], str] | None, Callable[[], None]]:
         return None, lambda: None
     names = {path.resolve(): name for name, path in tracked().items()}
     seen: dict[str, list[str]] = {}
-    taken: dict[str, tuple[str, str]] = {}  # name -> (baseline, with the blocks taken)
+    taken: dict[str, tuple[str, str]] = {}
 
     def read(path: Path) -> str:
         text = exact_text(Path(path))
@@ -259,9 +257,6 @@ def change_edits(request: Any) -> dict[str, Any]:
 
 
 def undo_accept(request: dict[str, Any]) -> dict[str, Any]:
-    """Make the edits of the last accept pending again, with the times they
-    were first seen. Baseline changes made since (the author's saves, blocks
-    taken) stay. With `expect`, only if that accept is still the last."""
     with review_lock():
         store = load()
         last = store.get("accepted") if store else None

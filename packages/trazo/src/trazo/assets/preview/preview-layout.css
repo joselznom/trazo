@@ -45,7 +45,6 @@
 .pv-edits-menu .ck { width: 14px; color: var(--pv-ok); }
 .pv-edits-menu .danger { color: var(--pv-err); }
 .pv-edits-menu hr { margin: 4px 2px; border: 0; border-top: 1px solid var(--pv-line); }
-/* The banner over the page while edits are pending, and their batches (preview-edit-batches.js). */
 .pv-edit-banner {
   position: relative; display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin: 8px 0 0; padding: 7px 10px 7px 12px;
   border: 1px solid color-mix(in srgb, var(--pv-ok-dot) 45%, transparent); border-radius: 8px; background: var(--pv-add-bg); color: var(--pv-ink); font: 13px/1.4 var(--pv-sans);

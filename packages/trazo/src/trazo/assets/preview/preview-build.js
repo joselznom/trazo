@@ -52,8 +52,6 @@
   document.addEventListener("mousedown", hideTip);
   window.addEventListener("resize", hideTip);
 
-  // Links inside the page (references, "Figure 1") scroll within the page;
-  // false when `a` points elsewhere.
   function followLink(a) {
     let id = a.getAttribute("href").slice(1);
     try { id = decodeURIComponent(id); } catch (err) { /* keep as is */ }

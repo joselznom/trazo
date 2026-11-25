@@ -156,8 +156,6 @@ def reject(current: str, chosen: list[Edit]) -> str:
 
 
 def _kept(before: str, start: int, end: int, removed: list[tuple[int, int, str, bool]]) -> str:
-    """before[start:end] without the parts `removed` deletes, except the
-    spaces inside a line, which keep the words around them apart."""
     out, at = [], start
     for b0, b1, _, _ in sorted(removed):
         if b1 <= at or b0 >= end:
@@ -370,7 +368,7 @@ def edit_marks(current: str, found: list[Edit]) -> list[tuple[int, int, str]]:
         new_blocks = _blocks_inserted(current, e.c0, e.c1) if new_text else []
         first = e.c0 + len(e.new) - len(e.new.lstrip())
         if new_text and not old_text and re.search(r"(?:^|\n[ \t\r]*\n)[ \t]*$", current[:first]):
-            new_blocks = list(dict.fromkeys([first, *new_blocks]))  # it starts a block too
+            new_blocks = list(dict.fromkeys([first, *new_blocks]))
         for start in new_blocks:
             at = lines.block_mark_at(start)
             if at is not None:
