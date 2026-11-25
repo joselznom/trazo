@@ -15,7 +15,7 @@ import re
 from difflib import SequenceMatcher
 from typing import Literal, NamedTuple
 
-from .expand import TABLE_ROW, TABLE_RULE
+from .expand import TABLE_ROW, TABLE_RULE, fenced_lines
 from .preview_edits import RULE, closing, markdown_context
 
 BLANK_RUN = re.compile(r"\n(?:[ \t\r]*\n)+")
@@ -24,6 +24,7 @@ CAPTION = re.compile(r" {0,3}(?:Table:|:)\s")
 PIPE_RULE = re.compile(r" {0,3}\|?\s*:?-+:?\s*(?:\|\s*:?-+:?\s*)+\|?\s*$")
 MATH = re.compile(r"\$\$[\s\S]*?\$\$\s*(?:\{[^{}]*\})?")
 ATTRIBUTES = re.compile(r"\s*(?:\{[^{}]*\})?")
+CAPTION_TEXT = re.compile(r"( {0,3}(?:Table:|:)\s+)([\s\S]*?)(\s*\{[^{}]*\})?")
 LABEL = re.compile(r"\{[^{}]*#((?:fig|tbl|eq):[^\s{}]+)")
 
 
@@ -56,16 +57,18 @@ def take_blocks(base: str, current: str) -> str:
             out += [Piece(old[i].text, i, j1 + i - i1) for i in range(i1, i2)]
             continue
         prose = [Piece(old[i].text, i, None) for i in range(i1, i2) if not old[i].kind]
-        blocks = [old[i] for i in range(i1, i2) if old[i].kind]
-        claimed = {_label(c) for c in new[j1:j2] if c.kind}
+        blocks = [i for i in range(i1, i2) if old[i].kind]
+        claimed = {_label(c) for c in new[j1:j2] if c.kind} - {None}
         for j in range(j1, j2):
             if not new[j].kind:
                 if prose:
                     out.append(prose.pop(0))
                 continue
-            reviewed = _same_block(new[j], blocks, claimed)
-            if reviewed:
-                blocks.remove(reviewed)
+            at = _same_block(new[j], [old[i] for i in blocks], claimed)
+            place = blocks.pop(at) if at is not None else None
+            reviewed = old[place] if place is not None else None
+            while place is not None and prose and prose[0].old < place:
+                out.append(prose.pop(0))
             out.append(Piece(_with_reviewed_caption(new[j], reviewed), None, j))
         out += prose
     return _joined(out)
@@ -76,11 +79,11 @@ def _label(chunk: Chunk) -> str | None:
     return found[1] if found else None
 
 
-def _same_block(block: Chunk, blocks: list[Chunk], claimed: set[str | None]) -> Chunk | None:
-    same = [c for c in blocks if c.kind == block.kind]
+def _same_block(block: Chunk, blocks: list[Chunk], claimed: set[str | None]) -> int | None:
+    same = [i for i, c in enumerate(blocks) if c.kind == block.kind]
     label = _label(block)
-    return (next((c for c in same if label and _label(c) == label), None)
-            or next((c for c in same if _label(c) not in claimed), None))
+    return next((i for i in same if label and _label(blocks[i]) == label),
+                next((i for i in same if _label(blocks[i]) not in claimed), None))
 
 
 def _chunks(text: str) -> list[Chunk]:
@@ -88,7 +91,7 @@ def _chunks(text: str) -> list[Chunk]:
     cuts = {0, len(text), *(m.end() for m in BLANK_RUN.finditer(text)
                             if masked[m.start()] == masked[m.end() - 1] == "\n")}
     starts = [0, *(m.end() for m in re.finditer("\n", text))]
-    code = [bool(text[a:b].strip()) and not masked[a:b].strip() for a, b in zip(starts, [*starts[1:], len(text)])]
+    code = [literal for _, literal in fenced_lines(text.split("\n"))]
     cuts |= {starts[i] for i in range(1, len(starts)) if code[i] != code[i - 1]}
     edges = sorted(cuts)
     pieces = [(text[a:b], masked[a:b]) for a, b in zip(edges, edges[1:]) if a < b]
@@ -153,7 +156,7 @@ def _with_reviewed_caption(block: Chunk, reviewed: Chunk | None) -> str:
     if reviewed is None or block.kind == "math":
         return block.text
     if block.kind == "caption":
-        return reviewed.text
+        return _with_caption_text(block.text, reviewed.text)
     if block.kind == "figure":
         new, old = _figure_caption_span(block.masked), _figure_caption_span(reviewed.masked)
         assert new and old
@@ -162,10 +165,22 @@ def _with_reviewed_caption(block: Chunk, reviewed: Chunk | None) -> str:
     new_lines, old_lines = core.split("\n"), reviewed.text.strip().split("\n")
     new_rows, old_rows = _table_rows(new_lines), _table_rows(old_lines)
     assert new_rows and old_rows
-    head = old_lines[:old_rows.start] if old_rows.start and new_rows.start else new_lines[:new_rows.start]
-    old_tail, new_tail = old_lines[old_rows.stop:], new_lines[new_rows.stop:]
-    lines = head + new_lines[new_rows.start:new_rows.stop] + (old_tail if old_tail and new_tail else new_tail)
-    return block.text[:lead] + "\n".join(lines) + block.text[lead + len(core):]
+    parts = ["\n".join(new_lines[:new_rows.start]), "\n".join(new_lines[new_rows.start:new_rows.stop]),
+             "\n".join(new_lines[new_rows.stop:])]
+    if old_rows.start and new_rows.start:
+        parts[0] = _with_caption_text(parts[0], "\n".join(old_lines[:old_rows.start]))
+    if old_lines[old_rows.stop:] and parts[2]:
+        parts[2] = _with_caption_text(parts[2], "\n".join(old_lines[old_rows.stop:]))
+    return block.text[:lead] + "\n".join(part for part in parts if part) + block.text[lead + len(core):]
+
+
+def _with_caption_text(new: str, old: str) -> str:
+    """The caption paragraph `new` with the words of `old`."""
+    lead, core = len(new) - len(new.lstrip()), new.strip()
+    mine, theirs = CAPTION_TEXT.fullmatch(core), CAPTION_TEXT.fullmatch(old.strip())
+    if not (mine and theirs):
+        return old
+    return new[:lead + mine.start(2)] + theirs[2] + new[lead + mine.end(2):]
 
 
 def _joined(pieces: list[Piece]) -> str:

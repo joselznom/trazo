@@ -53,6 +53,26 @@ class TakeBlocksTests(unittest.TestCase):
         self.assertEqual(pending(base, base.replace("flow.png", "flow2.png")), [])
         self.assertEqual(take_blocks(base, base.replace("flow.png", "flow2.png")), base.replace("flow.png", "flow2.png"))
 
+    def test_unlabeled_blocks_keep_their_captions_reviewed(self):
+        self.assertEqual(pending("![Old caption.](a.png)\n", "![New caption.](b.png)\n"), [("Old", "New")])
+        table = TABLE + "\nTable: Counts.\n"
+        self.assertEqual(pending(table, table.replace("Counts", "All counts")), [("Counts", "All counts")])
+
+    def test_a_relabeled_table_keeps_only_its_caption_text_reviewed(self):
+        table = TABLE + "\nTable: Counts. {#tbl:a}\n"
+        self.assertEqual(pending(table, table.replace("Counts", "All counts").replace("tbl:a", "tbl:b")),
+                         [("Counts", "All counts")])
+
+    def test_code_removed_before_a_figure_comes_back_before_it(self):
+        base = f"```\nprint(1)\n```\n\n{FIGURE}"
+        current = FIGURE.replace("flow.png", "flow2.png")
+        found = edit_diff.edits(take_blocks(base, current), current)
+        self.assertEqual(edit_diff.reject(current, found), base.replace("flow.png", "flow2.png"))
+
+    def test_inline_code_over_two_lines_keeps_an_image_in_its_paragraph(self):
+        base = "![A flow.](a.png)\n`some\ncode`\n"
+        self.assertEqual(pending(base, base.replace("a.png", "b.png")), [("a", "b")])
+
     def test_a_rule_before_a_paragraph_is_no_table(self):
         base = "-----  -----\nOld text here.\n"
         self.assertEqual(pending(base, base.replace("Old", "New")), [("Old", "New")])
