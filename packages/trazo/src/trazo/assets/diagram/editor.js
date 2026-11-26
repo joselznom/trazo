@@ -3569,7 +3569,7 @@
     if (name === S.name && S.diagram) return;
     routing++;
     try {
-      if (S.diagram && name !== S.name) {
+      if (S.diagram) {
         await save(false);
         // A failed or still-running save must not clear the only local copy.
         if (S.saving || S.drag || JSON.stringify(S.diagram) !== S.disk.json) {
@@ -3622,8 +3622,7 @@
     style.textContent = DiagramRenderer.fontFaceCss(S.tokens, "/" + window.TRAZO_CONFIG.paths.figure_fonts + "/");
     document.head.appendChild(style);
     await DiagramRenderer.fontsReady(S.tokens);
-    App.watch(pollStatus);
-    await route();
+    await route().finally(() => App.watch(pollStatus));
   }
 
   /* For scripted checks in headless Chrome. */
