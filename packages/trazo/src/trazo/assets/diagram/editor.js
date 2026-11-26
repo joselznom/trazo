@@ -1384,7 +1384,7 @@
   viewport.addEventListener("pointerdown", (e) => {
     hideMenu();
     $("#tip").hidden = true;
-    if (!S.diagram || S.editing) return;
+    if (!S.diagram || !S.geo || S.editing) return;
     viewport.focus({ preventScroll: true });
     if (e.button === 1 || (e.button === 0 && S.space)) {
       S.drag = { type: "pan", sx: e.clientX, sy: e.clientY, vx: S.view.x, vy: S.view.y };
@@ -1692,7 +1692,7 @@
   });
 
   viewport.addEventListener("dblclick", (e) => {
-    if (!S.diagram || S.editing) return;
+    if (!S.diagram || !S.geo || S.editing) return;
     const role = e.target.dataset && e.target.dataset.role;
     const p = clientToMm(e);
     if ((role === "waypoint" || role === "waypoint-add") && isLocked(e.target.dataset.edge)) return toast("Locked", "lock");
@@ -1740,7 +1740,7 @@
   viewport.addEventListener("contextmenu", (e) => {
     e.preventDefault();
     $("#tip").hidden = true;
-    if (!S.diagram || S.editing) return;
+    if (!S.diagram || !S.geo || S.editing) return;
     const p = clientToMm(e);
     const leaf = hitTest(p);
     if (leaf) {
@@ -3407,6 +3407,9 @@
       S.undo = [];
       S.redo = [];
       S.sel = [];
+      S.geo = null;
+      S.boxes = {};
+      S.hover = null;
     } else if (S.diagram) {
       S.undo.push({ label: "load from disk", before: JSON.stringify(S.diagram), after: S.disk.json,
         time: performance.now(), selBefore: S.sel.slice(), selAfter: [] });
@@ -3467,7 +3470,26 @@
     routed = true;
   }
 
+  function clearDiagram() {
+    S.name = null;
+    S.diagram = null;
+    S.geo = null;
+    S.boxes = {};
+    S.hover = null;
+    S.sel = [];
+    window.dispatchEvent(new Event("diagramchange"));
+    paper.replaceChildren();
+    overlay.replaceChildren();
+    $("#docname").textContent = "";
+    renderInspector();
+    renderLayers();
+    renderLint();
+    updateStatus();
+  }
+
   async function openDiagram(name) {
+    finishTextEdit(false);
+    clearDiagram();
     document.body.classList.remove("is-landing");
     $("#landing").hidden = true;
     $("#banner").hidden = true;
@@ -3490,76 +3512,15 @@
     revealSwitch(viewport);
   }
 
+  const { renderLanding } = DiagramLanding({ S, $, h, api, fileUrl, segmented, toast, revealSwitch, paths: PATHS });
+
   async function showLanding(message) {
     finishTextEdit(false);
     document.title = "Diagram editor";
     document.body.classList.add("is-landing");
     setTool("select");
-    S.name = null;
-    S.diagram = null;
-    window.dispatchEvent(new Event("diagramchange"));
-    paper.replaceChildren();
-    overlay.replaceChildren();
-    $("#docname").textContent = "";
-    renderInspector();
-    renderLayers();
-    renderLint();
-    updateStatus();
-    const r = await api("GET", "list");
-    const list = r.ok && Array.isArray(r.data) ? r.data : [];
-    const ago = (ns) => {
-      if (!ns) return "";
-      const sec = Math.max(0, (Date.now() - ns / 1e6) / 1000);
-      if (sec < 90) return "edited just now";
-      if (sec < 5400) return `edited ${Math.round(sec / 60)} min ago`;
-      if (sec < 129600) return `edited ${Math.round(sec / 3600)} h ago`;
-      return `edited ${Math.round(sec / 86400)} d ago`;
-    };
-    const card = (d) => {
-      const thumb = h("div", { class: "thumb" });
-      const img = h("img", { alt: "", loading: "lazy", src: `/${PATHS.diagram_output}/${encodeURIComponent(d.name)}.png?v=${d.mtime_ns || 0}` });
-      img.addEventListener("error", () => img.replaceWith(Icons.node("file", 32)));
-      thumb.append(img);
-      return h("a", { class: "dcard", href: `#${encodeURIComponent(d.name)}` }, thumb,
-        h("div", { class: "info" }, h("b", {}, d.name), h("span", {}, ago(d.mtime_ns))));
-    };
-    const nameInput = h("input", { type: "text", class: "input mono", placeholder: "fig3_new_diagram", pattern: "[a-z0-9][a-z0-9_\\-]*",
-      required: true, title: "Lower-case letters, digits, - and _" });
-    const width = segmented(Object.entries(S.tokens.widths_mm || { single: 89, double: 183 }).map(([n, w]) => (
-      { value: String(w), label: `${w}`, title: `${n} column, ${w} mm` })), "183", (v) => {
-      width.dataset.value = v;
-      for (const b of width.querySelectorAll("button")) b.classList.toggle("on", b.title.endsWith(`${v} mm`));
-    }, "new-width");
-    width.dataset.value = "183";
-    const height = h("input", { type: "number", class: "input", value: "60", min: "5", step: "1" });
-    const form = h("form", { onsubmit: async (e) => {
-      e.preventDefault();
-      const name = nameInput.value.trim();
-      if (list.some((d) => d.name === name)) {
-        toast(`${name} already exists; pick another name`, "warning");
-        nameInput.focus();
-        return;
-      }
-      const diagram = { schema_version: 1, canvas: { width_mm: Number(width.dataset.value), height_mm: Number(height.value), grid: 1 },
-        panels: [], nodes: [], edges: [], raw: [] };
-      const res = await api("POST", fileUrl(name), { diagram, base_sha256: null });
-      if (res.ok) location.hash = name;
-      else if (res.status === 409) toast(`${name} already exists; pick another name`, "warning");
-      else toast((res.data && res.data.error) || `HTTP ${res.status}`, "error");
-    } },
-    h("div", { class: "new-head" }, Icons.node("plus", 18), "New diagram"),
-    h("div", {}, h("span", { class: "lab", style: { display: "block", fontSize: "11px", color: "var(--text-3)", marginBottom: "3px" } }, "Name"), nameInput),
-    h("div", {}, h("span", { class: "lab", style: { display: "block", fontSize: "11px", color: "var(--text-3)", marginBottom: "3px" } }, "Width (mm)"), width),
-    h("div", {}, h("span", { class: "lab", style: { display: "block", fontSize: "11px", color: "var(--text-3)", marginBottom: "3px" } }, "Height (mm)"), height),
-    h("button", { type: "submit", class: "btn primary" }, "Create"));
-    const landing = $("#landing");
-    landing.replaceChildren(h("div", { class: "wrap" },
-      h("div", { class: "lhead" }, h("div", {}, h("h1", {}, "Diagrams"),
-        h("p", {}, `${list.length} in ${PATHS.diagrams} · exported to ${PATHS.diagram_output}`))),
-      message ? h("div", { class: "msg" }, message) : null,
-      h("div", { class: "cards" }, ...list.map(card), h("div", { class: "dcard new" }, form))));
-    landing.hidden = false;
-    revealSwitch(landing);
+    clearDiagram();
+    await renderLanding(message);
   }
 
   let routing = 0;
