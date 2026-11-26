@@ -162,8 +162,10 @@ def summarize_trace(trace_path: Path, cov_path: Path) -> dict[str, Any]:
         ) as proc,
     ):
         assert proc.stdout is not None
-        try:
-            for line in proc.stdout:
+        for line in proc.stdout:
+            if trace_error is not None:
+                continue
+            try:
                 record = json.loads(line)
                 states += 1
                 meta = record["metadata"]
@@ -173,8 +175,8 @@ def summarize_trace(trace_path: Path, cov_path: Path) -> dict[str, Any]:
                     hit_branches.add(int(branch_id))
                 for violation in meta.get("violations", []):
                     violations.append({"state": record["index"], "url": state["url"], "detail": violation})
-        except (json.JSONDecodeError, KeyError, TypeError, ValueError) as exc:
-            trace_error = f"failed to parse trace output: {exc}"
+            except (json.JSONDecodeError, KeyError, TypeError, ValueError) as exc:
+                trace_error = f"failed to parse trace output: {exc}"
         proc.wait()
         if proc.returncode != 0:
             err_file.seek(0)

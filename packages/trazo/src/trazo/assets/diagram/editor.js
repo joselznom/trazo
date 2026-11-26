@@ -3622,8 +3622,8 @@
     style.textContent = DiagramRenderer.fontFaceCss(S.tokens, "/" + window.TRAZO_CONFIG.paths.figure_fonts + "/");
     document.head.appendChild(style);
     await DiagramRenderer.fontsReady(S.tokens);
-    await route();
     App.watch(pollStatus);
+    await route();
   }
 
   /* For scripted checks in headless Chrome. */

@@ -94,6 +94,20 @@ class FuzzRunnerTests(unittest.TestCase):
             self.assertEqual(summary["states"], 0)
             self.assertEqual(summary["trace_error"], "trace contained 0 states")
 
+    def test_summarize_trace_drains_large_stdout_after_invalid_line(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            trace = root / "trace.bin"
+            trace.write_bytes(b"bad")
+            fake_bin = _write_fake_bombadil(
+                root,
+                "import sys; sys.stdout.write('not-json\\n' + ('x' * 1024 + '\\n') * 1200)",
+            )
+            with mock.patch.object(fuzz_run, "BOMBADIL_BIN", fake_bin):
+                summary = fuzz_run.summarize_trace(trace, root / "coverage.jsonl")
+            self.assertEqual(summary["states"], 0)
+            self.assertIn("failed to parse trace output", summary["trace_error"])
+
 
 if __name__ == "__main__":
     unittest.main()
