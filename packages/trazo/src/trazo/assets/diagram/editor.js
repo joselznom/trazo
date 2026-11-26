@@ -335,32 +335,29 @@
     return true;
   }
 
-  function setDiagram(d) {
-    S.diagram = d;
+  function syncView() {
     render();
     updateUi();
     scheduleCheck();
   }
 
-  function undo() {
-    const entry = S.undo.pop();
-    if (!entry) return;
-    S.redo.push(entry);
-    S.sel = entry.selBefore;
-    setDiagram(JSON.parse(entry.before));
-    scheduleAutosave();
-    toast(`Undo: ${entry.label}`);
+  function setDiagram(d) {
+    S.diagram = d;
+    syncView();
   }
 
-  function redo() {
-    const entry = S.redo.pop();
+  function stepHistory(from, to, selKey, stateKey, name) {
+    const entry = from.pop();
     if (!entry) return;
-    S.undo.push(entry);
-    S.sel = entry.selAfter;
-    setDiagram(JSON.parse(entry.after));
+    finishTextEdit(false);
+    to.push(entry);
+    S.sel = entry[selKey];
+    setDiagram(JSON.parse(entry[stateKey]));
     scheduleAutosave();
-    toast(`Redo: ${entry.label}`);
+    toast(`${name}: ${entry.label}`);
   }
+  const undo = () => stepHistory(S.undo, S.redo, "selBefore", "before", "Undo");
+  const redo = () => stepHistory(S.redo, S.undo, "selAfter", "after", "Redo");
 
   /* Move nodes (all leaves of selected groups), panels and edge waypoints by dx, dy. */
   function applyMove(d, ids, dx, dy) {
@@ -994,7 +991,7 @@
       return;
     }
     const dirty = JSON.stringify(S.diagram) !== S.disk.json;
-    const got = await api("GET", `file/${encodeURIComponent(S.name)}`);
+    const got = await api("GET", fileUrl());
     if (!got.ok || !got.data || !got.data.diagram || S.saving || S.drag || S.editing) return;
     if (got.data.sha256 === S.disk.sha) return;
     if (!dirty) {
@@ -1215,17 +1212,18 @@
 
   /* The leaf node, edge or panel under a point (topmost first), or null. */
   function hitTest(p) {
+    if (!S.geo) return null;
     const tol = HIT_PX / S.view.zoom;
-    for (const e of [...S.geo.edges].reverse()) {
-      if (e.hidden || isHidden(e.id)) continue;
+    const vis = (x) => !x.hidden && !isHidden(x.id);
+    for (const e of S.geo.edges.filter(vis).reverse()) {
       const pts = e.points || [];
       for (let i = 1; i < pts.length; i++) if (segDist(p, pts[i - 1], pts[i]) <= tol) return e.id;
       if (e.label && inBox(e.label.box, p, 0)) return e.id;
     }
-    const leaves = S.geo.nodes.filter((n) => n.kind !== "group" && !n.hidden && !isHidden(n.id));
-    for (const n of [...leaves].reverse()) if (inBox(n.box, p, 0)) return n.id;
-    for (const panel of [...S.geo.panels].reverse()) {
-      if (panel.hidden || isHidden(panel.id)) continue;
+    for (const n of S.geo.nodes.filter((n) => n.kind !== "group" && vis(n)).reverse()) {
+      if (inBox(n.box, p, 0)) return n.id;
+    }
+    for (const panel of S.geo.panels.filter(vis).reverse()) {
       if (inBox(panel.box, p, 0)) return panel.id;
     }
     return null;
@@ -1819,6 +1817,7 @@
   }
 
   function startTextEdit(id, selectAll) {
+    if (routing) return;
     const found = findItem(id);
     if (!found || !TEXT_KINDS.has(found.item.kind)) return;
     if (isLocked(id)) return toast("Locked", "lock");
@@ -2072,9 +2071,10 @@
     editing.el.remove();
     if (editing.bar) editing.bar.remove();
     if (keep && !commit(`edit text ${editing.id}`, (d) => {
-      const node = findItem(editing.id, d).item;
-      if (text === undefined) delete node.text;
-      else node.text = text;
+      const found = findItem(editing.id, d);
+      if (!found) return false;
+      if (text === undefined) delete found.item.text;
+      else found.item.text = text;
     })) {
       render();
     }
@@ -3272,6 +3272,7 @@
   const API = "/__diagrams/";
 
   const api = (method, url, body) => App.api(API + url, body, method);
+  const fileUrl = (name = S.name) => `file/${encodeURIComponent(name)}`;
 
   const { exportDiagram, exportAfterSave } = DiagramExport({ S, $, api, save, updateStatus, toast, showBanner, isDraft,
     hasErrors: () => displayedIssues().some((i) => i.level === "error"), output: PATHS.diagram_output });
@@ -3316,7 +3317,7 @@
     updateStatus();
     let res;
     try {
-      res = await api("POST", `file/${encodeURIComponent(S.name)}`, {
+      res = await api("POST", fileUrl(), {
         diagram: JSON.parse(json), base_sha256: S.disk.sha, autosave: auto, client: S.clientId });
     } catch (err) {
       res = { status: 0, data: { error: String(err) } };
@@ -3356,7 +3357,7 @@
     const sha = S.conflict && S.conflict.sha256;
     if (!sha || !S.diagram) return;
     const json = JSON.stringify(S.diagram);
-    const res = await api("POST", `file/${encodeURIComponent(S.name)}`, {
+    const res = await api("POST", fileUrl(), {
       diagram: JSON.parse(json), base_sha256: sha, autosave: false, client: S.clientId, label: "keep mine" });
     if (res.status === 200) {
       S.disk = { sha: res.data.sha256, json };
@@ -3381,7 +3382,7 @@
   }
 
   async function loadTheirs() {
-    const res = await api("GET", `file/${encodeURIComponent(S.name)}`);
+    const res = await api("GET", fileUrl());
     if (res.ok && res.data && res.data.diagram) {
       S.conflict = null;
       await applyDiskVersion(res.data.diagram, res.data.sha256, { resetHistory: false });
@@ -3392,12 +3393,13 @@
   }
 
   async function reloadFromDisk() {
-    const r = await api("GET", `file/${encodeURIComponent(S.name)}`);
+    const r = await api("GET", fileUrl());
     if (r.ok && r.data.diagram) applyDiskVersion(r.data.diagram, r.data.sha256, { resetHistory: false });
   }
 
   /* Adopt a version from disk (initial load, reload; live reload hooks in here). */
   function applyDiskVersion(diagram, sha, opts = {}) {
+    finishTextEdit(false);
     S.disk = { sha, json: JSON.stringify(diagram) };
     S.blocked = null;
     $("#banner").hidden = true;
@@ -3411,11 +3413,7 @@
       S.redo = [];
     }
     S.diagram = diagram;
-    return refreshInputs().then(() => {
-      render();
-      updateUi();
-      scheduleCheck();
-    });
+    return refreshInputs().then(syncView);
   }
 
   async function loadAssets() {
@@ -3458,9 +3456,7 @@
     await DiagramRenderer.fontsReady(S.tokens);
     await loadAssets();
     if (S.name !== name || seq !== inputLoadSeq) return false;
-    render();
-    updateUi();
-    scheduleCheck();
+    syncView();
     return true;
   }
 
@@ -3475,14 +3471,12 @@
     document.body.classList.remove("is-landing");
     $("#landing").hidden = true;
     $("#banner").hidden = true;
-    const r = await api("GET", `file/${encodeURIComponent(name)}`);
+    const r = await api("GET", fileUrl(name));
     if (!r.ok) {
       showLanding(`Cannot open ${name}: ${(r.data && r.data.error) || r.status}`);
       return;
     }
     if (!r.data.diagram || typeof r.data.diagram !== "object") {
-      S.name = null;
-      S.diagram = null;
       showLanding(`${r.data.file} is not valid JSON (${r.data.parse_error}); fix the file first.`);
       return;
     }
@@ -3497,6 +3491,7 @@
   }
 
   async function showLanding(message) {
+    finishTextEdit(false);
     document.title = "Diagram editor";
     document.body.classList.add("is-landing");
     setTool("select");
@@ -3547,7 +3542,7 @@
       }
       const diagram = { schema_version: 1, canvas: { width_mm: Number(width.dataset.value), height_mm: Number(height.value), grid: 1 },
         panels: [], nodes: [], edges: [], raw: [] };
-      const res = await api("POST", `file/${encodeURIComponent(name)}`, { diagram, base_sha256: null });
+      const res = await api("POST", fileUrl(name), { diagram, base_sha256: null });
       if (res.ok) location.hash = name;
       else if (res.status === 409) toast(`${name} already exists; pick another name`, "warning");
       else toast((res.data && res.data.error) || `HTTP ${res.status}`, "error");
@@ -3567,21 +3562,27 @@
     revealSwitch(landing);
   }
 
+  let routing = 0;
   async function route() {
     const name = decodeURIComponent(location.hash.slice(1));
     if (S.editing) finishTextEdit(true);
-    if (S.diagram && name !== S.name) {
-      await save(false);
-      // A failed or still-running save must not clear the only local copy.
-      if (S.saving || S.drag || JSON.stringify(S.diagram) !== S.disk.json) {
-        history.replaceState(null, "", `#${encodeURIComponent(S.name)}`);
-        if (!S.blocked) toast("Finish saving before leaving this diagram", "info");
-        return;
-      }
-    }
     if (name === S.name && S.diagram) return;
-    if (!name) showLanding();
-    else openDiagram(name);
+    routing++;
+    try {
+      if (S.diagram) {
+        await save(false);
+        // A failed or still-running save must not clear the only local copy.
+        if (S.saving || S.drag || JSON.stringify(S.diagram) !== S.disk.json) {
+          history.replaceState(null, "", `#${encodeURIComponent(S.name)}`);
+          if (!S.blocked) toast("Finish saving before leaving this diagram", "info");
+          return;
+        }
+      }
+      if (!name) await showLanding();
+      else await openDiagram(name);
+    } finally {
+      routing--;
+    }
   }
 
   window.addEventListener("beforeunload", (e) => {
@@ -3621,8 +3622,7 @@
     style.textContent = DiagramRenderer.fontFaceCss(S.tokens, "/" + window.TRAZO_CONFIG.paths.figure_fonts + "/");
     document.head.appendChild(style);
     await DiagramRenderer.fontsReady(S.tokens);
-    await route();
-    App.watch(pollStatus);
+    await route().finally(() => App.watch(pollStatus));
   }
 
   /* For scripted checks in headless Chrome. */

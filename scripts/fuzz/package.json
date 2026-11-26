@@ -1,0 +1,8 @@
+{
+  "name": "trazo-ui-fuzz",
+  "private": true,
+  "description": "Property-based UI fuzzing for trazo preview and editors using Bombadil.",
+  "devDependencies": {
+    "@antithesishq/bombadil": "0.8.0"
+  }
+}

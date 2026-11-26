@@ -18,15 +18,13 @@ CHANGED_FROM ?=
 ACCEPTANCE_ARGS ?=
 ACCEPTANCE_FILTER = $(if $(CHANGED_FROM),--changed-from $(CHANGED_FROM)) $(ACCEPTANCE_ARGS)
 
-.PHONY: hooks lint typecheck typecheck-strict test test-package test-template test-update test-linux test-acceptance acceptance acceptance-auto template-agents template-diagrams template-reference template-variants clean help
+.PHONY: hooks lint typecheck typecheck-strict test test-package test-template test-update test-linux test-acceptance test-fuzz fuzz acceptance acceptance-auto template-agents template-diagrams template-reference template-variants clean help
 
 test: test-package test-template
 
-# Lint trazo and the acceptance harness with trazo's ruff config; the pre-commit hook lints
-# staged files of trazo only.
 lint:
 	cd "$(TRAZO_DIR)" && uv run --quiet ruff check
-	cd "$(TRAZO_DIR)" && uv run --quiet ruff check --config pyproject.toml "$(CURDIR)/scripts/acceptance"
+	cd "$(TRAZO_DIR)" && uv run --quiet ruff check --config pyproject.toml "$(CURDIR)/scripts/acceptance" "$(CURDIR)/scripts/fuzz"
 
 # mypy on trazo; reports only. typecheck-strict (run by CI) fails on errors in the modules of
 # the strict override in pyproject.toml.
@@ -106,6 +104,16 @@ test-update:
 test-acceptance:
 	$(TRAZO_PYTHON) -m unittest discover -s scripts/acceptance/tests
 
+test-fuzz:
+	$(TRAZO_PYTHON) -m unittest discover -s scripts/fuzz
+
+FUZZ_TIME ?= 45s
+FUZZ_TARGET ?=
+FUZZ_ARGS ?=
+fuzz:
+	test -x scripts/fuzz/node_modules/.bin/bombadil || (cd scripts/fuzz && npm ci)
+	$(TRAZO_PYTHON) scripts/fuzz/run.py --time "$(FUZZ_TIME)" $(if $(FUZZ_TARGET),--suite "$(FUZZ_TARGET)") $(FUZZ_ARGS)
+
 # Acceptance levels n1 (the plugin driven like the apps do, offline) and n2 (the real claude and
 # codex CLIs in throwaway config; reads the owner's login, see scripts/acceptance/README.md).
 # The report path and its summary line are the evidence for a PR.
@@ -149,13 +157,15 @@ clean:
 
 help:
 	@echo "make hooks           test every pushed commit first (.githooks/pre-push)"
-	@echo "make lint            ruff check on trazo and scripts/acceptance"
+	@echo "make lint            ruff check on trazo, scripts/acceptance and scripts/fuzz"
 	@echo "make typecheck       mypy on trazo (reports only)"
 	@echo "make typecheck-strict  fail on mypy errors in the strict modules (CI runs it)"
 	@echo "make test-package    trazo unit tests, a process per module (JOBS=N at a time, SHARD=I/N one part)"
 	@echo "make test-template   render the template (with and without the example), verify builds"
 	@echo "make test-update     update a v0.6.0 trazo new paper to HEAD, verify; trazo update between tags"
 	@echo "make test-acceptance  unit tests of the acceptance harness"
+	@echo "make test-fuzz       unit tests of the Bombadil UI fuzz runner"
+	@echo "make fuzz            run Bombadil UI fuzz suites (FUZZ_TIME=45s, FUZZ_TARGET=preview|diagram|table)"
 	@echo "make acceptance      acceptance n1 + n2 (CHANGED_FROM=<ref> limits it; ACCEPTANCE_ARGS=--online makes the seed)"
 	@echo "make acceptance-auto  automatic acceptance: AUTO=push|tag (pre-push runs it); cached"
 	@echo "make test-linux      the CI steps in a Debian container (needs Docker)"
