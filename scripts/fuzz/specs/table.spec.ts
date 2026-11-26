@@ -1,4 +1,4 @@
-import { always } from "@antithesishq/bombadil";
+import { always, eventually } from "@antithesishq/bombadil";
 import * as defaultActions from "@antithesishq/bombadil/browser/defaults/actions";
 import { actions, extract, weighted } from "@antithesishq/bombadil/browser";
 import { clickAndDoubleClick, clickTarget, queryTargets } from "./shared.ts";
@@ -15,7 +15,8 @@ export {
 const tableState = extract((state) => {
   const ready = state.document.readyState === "complete";
   const onTablePage = state.window.location.pathname === "/tables";
-  const isLoading = !!state.document.querySelector("#te-page .te-empty");
+  const emptyText = (state.document.querySelector("#te-page .te-empty")?.textContent ?? "").trim();
+  const isLoading = emptyText === "Loading…";
   const hasTable = !!state.document.querySelector("#te-page table");
   const saveText = (state.document.querySelector("#te-save")?.textContent ?? "").trim();
   const fatalSaveError =
@@ -34,7 +35,7 @@ const tableState = extract((state) => {
     minY: 50,
     maxY: 700,
   });
-  const tableLinks = queryTargets(state.document, "#te-list button, #te-list a", {
+  const tableLinks = queryTargets(state.document, '#te-list li[role="link"]', {
     limit: 6,
     minSize: 10,
     minY: 40,
@@ -56,8 +57,12 @@ const tableState = extract((state) => {
 
 export const tableRemainsRendered = always(() => {
   const s = tableState.current;
-  if (!s.ready || !s.onTablePage || s.isLoading) return true;
-  return s.hasTable;
+  if (!s.ready || !s.onTablePage) return true;
+  if (s.hasTable) return true;
+  if (!s.isLoading) return false;
+  return eventually(
+    () => !tableState.current.onTablePage || tableState.current.hasTable,
+  ).within(5, "seconds");
 });
 
 export const noTableSaveError = always(() => !tableState.current.fatalSaveError);

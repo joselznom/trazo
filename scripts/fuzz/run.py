@@ -6,10 +6,10 @@ import datetime as dt
 import json
 import os
 import re
-import shutil
 import socket
 import subprocess
 import sys
+import tempfile
 import time
 import urllib.error
 import urllib.request
@@ -106,7 +106,7 @@ def run_trazo(args: list[str], cwd: Path) -> None:
 
 def prepare_paper(paper_dir: Path) -> None:
     if paper_dir.exists():
-        shutil.rmtree(paper_dir)
+        raise FuzzError(f"paper directory already exists: {paper_dir}")
     run_trazo(["new", str(paper_dir)], cwd=REPO_ROOT)
     seed_hand_table(paper_dir)
     run_trazo(["table", "render", "hand_example"], cwd=paper_dir)
@@ -132,7 +132,14 @@ def wait_for_http(url: str, proc: subprocess.Popen[str], timeout: float = 20.0) 
 
 def summarize_trace(trace_path: Path, cov_path: Path) -> dict[str, Any]:
     if not trace_path.is_file():
-        return {"states": 0, "violations": [], "branches_hit": 0, "branches_total": 0, "urls": {}}
+        return {
+            "states": 0,
+            "violations": [],
+            "branches_hit": 0,
+            "branches_total": 0,
+            "urls": {},
+            "trace_error": f"trace file missing: {trace_path}",
+        }
 
     syms: set[int] = set()
     if cov_path.is_file():
@@ -143,25 +150,39 @@ def summarize_trace(trace_path: Path, cov_path: Path) -> dict[str, Any]:
     violations: list[dict[str, Any]] = []
     hit_branches: set[int] = set()
     states = 0
-    with subprocess.Popen(
-        [str(BOMBADIL_BIN), "trace", "--json", str(trace_path)],
-        cwd=FUZZ_DIR,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.DEVNULL,
-        text=True,
-    ) as proc:
+    trace_error: str | None = None
+    with (
+        tempfile.TemporaryFile(mode="w+", encoding="utf-8") as err_file,
+        subprocess.Popen(
+            [str(BOMBADIL_BIN), "trace", "--json", str(trace_path)],
+            cwd=FUZZ_DIR,
+            stdout=subprocess.PIPE,
+            stderr=err_file,
+            text=True,
+        ) as proc,
+    ):
         assert proc.stdout is not None
-        for line in proc.stdout:
-            record = json.loads(line)
-            states += 1
-            meta = record["metadata"]
-            state = meta["state"]
-            urls[str(state["url"])] += 1
-            for branch_id in state.get("branches", []):
-                hit_branches.add(int(branch_id))
-            for violation in meta.get("violations", []):
-                violations.append({"state": record["index"], "url": state["url"], "detail": violation})
+        try:
+            for line in proc.stdout:
+                record = json.loads(line)
+                states += 1
+                meta = record["metadata"]
+                state = meta["state"]
+                urls[str(state["url"])] += 1
+                for branch_id in state.get("branches", []):
+                    hit_branches.add(int(branch_id))
+                for violation in meta.get("violations", []):
+                    violations.append({"state": record["index"], "url": state["url"], "detail": violation})
+        except (json.JSONDecodeError, KeyError, TypeError, ValueError) as exc:
+            trace_error = f"failed to parse trace output: {exc}"
         proc.wait()
+        if proc.returncode != 0:
+            err_file.seek(0)
+            detail = err_file.read().strip()
+            trace_error = f"bombadil trace exited {proc.returncode}" + (f": {detail}" if detail else "")
+
+    if trace_error is None and states == 0:
+        trace_error = "trace contained 0 states"
 
     return {
         "states": states,
@@ -169,6 +190,7 @@ def summarize_trace(trace_path: Path, cov_path: Path) -> dict[str, Any]:
         "branches_hit": len(hit_branches),
         "branches_total": len(syms),
         "urls": dict(urls.most_common(10)),
+        "trace_error": trace_error,
     }
 
 
@@ -249,6 +271,8 @@ def run_suite(
     log_scan = scan_server_log(server_log.read_text(encoding="utf-8"))
     passed = (
         result.returncode == 0
+        and summary["trace_error"] is None
+        and summary["states"] > 0
         and not summary["violations"]
         and not log_scan.fatal_lines
         and not server_died
@@ -267,6 +291,7 @@ def run_suite(
         "branches_hit": summary["branches_hit"],
         "branches_total": summary["branches_total"],
         "violations": summary["violations"],
+        "trace_error": summary["trace_error"],
         "server_died": server_died,
         "server_fatal_lines": log_scan.fatal_lines,
         "background_job_nonzero_exits": log_scan.nonzero_bg_job_lines,
@@ -303,10 +328,18 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 2
 
-    selected = [SUITES[name] for name in (args.suite or list(SUITES))]
+    selected = [SUITES[name] for name in dict.fromkeys(args.suite or SUITES)]
     stamp = dt.datetime.now(dt.UTC).strftime("%Y%m%dT%H%M%SZ")
     out_dir = (args.output_dir or (REPO_ROOT / ".build" / "fuzz" / stamp)).resolve()
-    out_dir.mkdir(parents=True, exist_ok=True)
+    if out_dir.exists():
+        if not out_dir.is_dir() or any(out_dir.iterdir()):
+            print(
+                f"fuzz: output directory already exists and is not empty: {out_dir}",
+                file=sys.stderr,
+            )
+            return 2
+    else:
+        out_dir.mkdir(parents=True, exist_ok=True)
 
     results: list[dict[str, Any]] = []
     for suite in selected:
@@ -332,6 +365,8 @@ def main(argv: list[str] | None = None) -> int:
             flush=True,
         )
         if not record["passed"]:
+            if record["trace_error"]:
+                print(f"  trace:   {record['trace_error']}", flush=True)
             if record["trace"]:
                 print(
                     f"  inspect: cd scripts/fuzz && npx bombadil browser inspect '{record['trace']}'",

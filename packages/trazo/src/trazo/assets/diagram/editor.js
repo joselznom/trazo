@@ -335,17 +335,21 @@
     return true;
   }
 
-  function setDiagram(d) {
-    finishTextEdit(false);
-    S.diagram = d;
+  function syncView() {
     render();
     updateUi();
     scheduleCheck();
   }
 
+  function setDiagram(d) {
+    S.diagram = d;
+    syncView();
+  }
+
   function stepHistory(from, to, selKey, stateKey, name) {
     const entry = from.pop();
     if (!entry) return;
+    finishTextEdit(false);
     to.push(entry);
     S.sel = entry[selKey];
     setDiagram(JSON.parse(entry[stateKey]));
@@ -987,7 +991,7 @@
       return;
     }
     const dirty = JSON.stringify(S.diagram) !== S.disk.json;
-    const got = await api("GET", `file/${encodeURIComponent(S.name)}`);
+    const got = await api("GET", fileUrl());
     if (!got.ok || !got.data || !got.data.diagram || S.saving || S.drag || S.editing) return;
     if (got.data.sha256 === S.disk.sha) return;
     if (!dirty) {
@@ -1813,6 +1817,7 @@
   }
 
   function startTextEdit(id, selectAll) {
+    if (routing) return;
     const found = findItem(id);
     if (!found || !TEXT_KINDS.has(found.item.kind)) return;
     if (isLocked(id)) return toast("Locked", "lock");
@@ -3267,6 +3272,7 @@
   const API = "/__diagrams/";
 
   const api = (method, url, body) => App.api(API + url, body, method);
+  const fileUrl = (name = S.name) => `file/${encodeURIComponent(name)}`;
 
   const { exportDiagram, exportAfterSave } = DiagramExport({ S, $, api, save, updateStatus, toast, showBanner, isDraft,
     hasErrors: () => displayedIssues().some((i) => i.level === "error"), output: PATHS.diagram_output });
@@ -3311,7 +3317,7 @@
     updateStatus();
     let res;
     try {
-      res = await api("POST", `file/${encodeURIComponent(S.name)}`, {
+      res = await api("POST", fileUrl(), {
         diagram: JSON.parse(json), base_sha256: S.disk.sha, autosave: auto, client: S.clientId });
     } catch (err) {
       res = { status: 0, data: { error: String(err) } };
@@ -3351,7 +3357,7 @@
     const sha = S.conflict && S.conflict.sha256;
     if (!sha || !S.diagram) return;
     const json = JSON.stringify(S.diagram);
-    const res = await api("POST", `file/${encodeURIComponent(S.name)}`, {
+    const res = await api("POST", fileUrl(), {
       diagram: JSON.parse(json), base_sha256: sha, autosave: false, client: S.clientId, label: "keep mine" });
     if (res.status === 200) {
       S.disk = { sha: res.data.sha256, json };
@@ -3376,7 +3382,7 @@
   }
 
   async function loadTheirs() {
-    const res = await api("GET", `file/${encodeURIComponent(S.name)}`);
+    const res = await api("GET", fileUrl());
     if (res.ok && res.data && res.data.diagram) {
       S.conflict = null;
       await applyDiskVersion(res.data.diagram, res.data.sha256, { resetHistory: false });
@@ -3387,12 +3393,13 @@
   }
 
   async function reloadFromDisk() {
-    const r = await api("GET", `file/${encodeURIComponent(S.name)}`);
+    const r = await api("GET", fileUrl());
     if (r.ok && r.data.diagram) applyDiskVersion(r.data.diagram, r.data.sha256, { resetHistory: false });
   }
 
   /* Adopt a version from disk (initial load, reload; live reload hooks in here). */
   function applyDiskVersion(diagram, sha, opts = {}) {
+    finishTextEdit(false);
     S.disk = { sha, json: JSON.stringify(diagram) };
     S.blocked = null;
     $("#banner").hidden = true;
@@ -3406,11 +3413,7 @@
       S.redo = [];
     }
     S.diagram = diagram;
-    return refreshInputs().then(() => {
-      render();
-      updateUi();
-      scheduleCheck();
-    });
+    return refreshInputs().then(syncView);
   }
 
   async function loadAssets() {
@@ -3453,9 +3456,7 @@
     await DiagramRenderer.fontsReady(S.tokens);
     await loadAssets();
     if (S.name !== name || seq !== inputLoadSeq) return false;
-    render();
-    updateUi();
-    scheduleCheck();
+    syncView();
     return true;
   }
 
@@ -3470,14 +3471,12 @@
     document.body.classList.remove("is-landing");
     $("#landing").hidden = true;
     $("#banner").hidden = true;
-    const r = await api("GET", `file/${encodeURIComponent(name)}`);
+    const r = await api("GET", fileUrl(name));
     if (!r.ok) {
       showLanding(`Cannot open ${name}: ${(r.data && r.data.error) || r.status}`);
       return;
     }
     if (!r.data.diagram || typeof r.data.diagram !== "object") {
-      S.name = null;
-      S.diagram = null;
       showLanding(`${r.data.file} is not valid JSON (${r.data.parse_error}); fix the file first.`);
       return;
     }
@@ -3492,6 +3491,7 @@
   }
 
   async function showLanding(message) {
+    finishTextEdit(false);
     document.title = "Diagram editor";
     document.body.classList.add("is-landing");
     setTool("select");
@@ -3542,7 +3542,7 @@
       }
       const diagram = { schema_version: 1, canvas: { width_mm: Number(width.dataset.value), height_mm: Number(height.value), grid: 1 },
         panels: [], nodes: [], edges: [], raw: [] };
-      const res = await api("POST", `file/${encodeURIComponent(name)}`, { diagram, base_sha256: null });
+      const res = await api("POST", fileUrl(name), { diagram, base_sha256: null });
       if (res.ok) location.hash = name;
       else if (res.status === 409) toast(`${name} already exists; pick another name`, "warning");
       else toast((res.data && res.data.error) || `HTTP ${res.status}`, "error");
@@ -3562,21 +3562,27 @@
     revealSwitch(landing);
   }
 
+  let routing = 0;
   async function route() {
     const name = decodeURIComponent(location.hash.slice(1));
     if (S.editing) finishTextEdit(true);
-    if (S.diagram && name !== S.name) {
-      await save(false);
-      // A failed or still-running save must not clear the only local copy.
-      if (S.saving || S.drag || JSON.stringify(S.diagram) !== S.disk.json) {
-        history.replaceState(null, "", `#${encodeURIComponent(S.name)}`);
-        if (!S.blocked) toast("Finish saving before leaving this diagram", "info");
-        return;
-      }
-    }
     if (name === S.name && S.diagram) return;
-    if (!name) showLanding();
-    else openDiagram(name);
+    routing++;
+    try {
+      if (S.diagram && name !== S.name) {
+        await save(false);
+        // A failed or still-running save must not clear the only local copy.
+        if (S.saving || S.drag || JSON.stringify(S.diagram) !== S.disk.json) {
+          history.replaceState(null, "", `#${encodeURIComponent(S.name)}`);
+          if (!S.blocked) toast("Finish saving before leaving this diagram", "info");
+          return;
+        }
+      }
+      if (!name) await showLanding();
+      else await openDiagram(name);
+    } finally {
+      routing--;
+    }
   }
 
   window.addEventListener("beforeunload", (e) => {

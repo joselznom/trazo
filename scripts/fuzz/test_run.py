@@ -1,11 +1,25 @@
 from __future__ import annotations
 
+import contextlib
+import io
 import json
+import shlex
+import stat
+import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 import run as fuzz_run
+
+
+def _write_fake_bombadil(directory: Path, body: str) -> Path:
+    script = directory / "bombadil"
+    cmd = f"exec {shlex.quote(sys.executable)} -c {shlex.quote(body)}"
+    script.write_text(f"#!/bin/sh\n{cmd}\n", encoding="utf-8")
+    script.chmod(script.stat().st_mode | stat.S_IXUSR)
+    return script
 
 
 class FuzzRunnerTests(unittest.TestCase):
@@ -36,9 +50,49 @@ class FuzzRunnerTests(unittest.TestCase):
         for suite in fuzz_run.SUITES.values():
             self.assertTrue((fuzz_run.SPECS_DIR / suite.spec_file).is_file(), suite.spec_file)
 
-    def test_free_port_returns_positive_port(self) -> None:
-        port = fuzz_run.free_port()
-        self.assertGreater(port, 0)
+    def test_main_refuses_nonempty_output_dir_without_deleting_files(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            fake_bin = _write_fake_bombadil(root, "import sys; sys.exit(0)")
+            out_dir = root / "out"
+            keep = out_dir / "preview" / "paper" / "keep.txt"
+            keep.parent.mkdir(parents=True)
+            keep.write_text("keep", encoding="utf-8")
+            stderr = io.StringIO()
+            with (
+                mock.patch.object(fuzz_run, "BOMBADIL_BIN", fake_bin),
+                contextlib.redirect_stderr(stderr),
+            ):
+                rc = fuzz_run.main(["--suite", "preview", "--output-dir", str(out_dir)])
+            self.assertEqual(rc, 2)
+            self.assertIn("not empty", stderr.getvalue())
+            self.assertEqual(keep.read_text(encoding="utf-8"), "keep")
+
+    def test_summarize_trace_keeps_diagnostic_when_bombadil_trace_fails(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            trace = root / "trace.bin"
+            trace.write_bytes(b"corrupt")
+            fake_bin = _write_fake_bombadil(
+                root,
+                "import sys; sys.stderr.write('not a bombadil trace\\n'); sys.exit(1)",
+            )
+            with mock.patch.object(fuzz_run, "BOMBADIL_BIN", fake_bin):
+                summary = fuzz_run.summarize_trace(trace, root / "coverage.jsonl")
+            self.assertEqual(summary["states"], 0)
+            self.assertIn("exited 1", summary["trace_error"])
+            self.assertIn("not a bombadil trace", summary["trace_error"])
+
+    def test_summarize_trace_rejects_empty_trace(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            trace = root / "trace.bin"
+            trace.write_bytes(b"")
+            fake_bin = _write_fake_bombadil(root, "import sys; sys.exit(0)")
+            with mock.patch.object(fuzz_run, "BOMBADIL_BIN", fake_bin):
+                summary = fuzz_run.summarize_trace(trace, root / "coverage.jsonl")
+            self.assertEqual(summary["states"], 0)
+            self.assertEqual(summary["trace_error"], "trace contained 0 states")
 
 
 if __name__ == "__main__":
