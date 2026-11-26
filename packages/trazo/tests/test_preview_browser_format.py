@@ -1,5 +1,6 @@
 """Bold and italic while writing, in Chrome: real keys and the bar against the real page and server."""
 
+import json
 import unittest
 from unittest.mock import patch
 
@@ -214,6 +215,71 @@ class FormatTests(WritingCase):
             self.chord("b", 66)
             self.evaluate("new Promise(resolve => setTimeout(resolve, 200))")
         build.assert_not_called()
+
+    def drag_in_writing(self, word):
+        start, end = self.evaluate(f"""(() => {{
+          const word = {json.dumps(word)};
+          const walker = document.createTreeWalker(document.querySelector('.pv-writing'), NodeFilter.SHOW_TEXT);
+          while (walker.nextNode()) {{
+            const at = walker.currentNode.data.indexOf(word);
+            if (at < 0) continue;
+            const range = document.createRange();
+            range.setStart(walker.currentNode, at); range.setEnd(walker.currentNode, at + word.length);
+            const box = range.getBoundingClientRect();
+            return [[box.left + 1, box.top + box.height / 2], [box.right - 1, box.top + box.height / 2]];
+          }}
+        }})()""")
+        self.mouse("mousePressed", *start)
+        self.mouse("mouseMoved", *end)
+        self.mouse("mouseReleased", *end)
+        self.evaluate("new Promise(resolve => setTimeout(resolve, 100))")
+
+    def submit_fab_comment(self, text):
+        self.wait_for("document.querySelector('.pv-fab').hidden === false")
+        self.click_text(".pv-fab [data-select=comment]")
+        self.wait_for("document.querySelector('.pv-editor').hidden === false")
+        self.evaluate(f"""(() => {{
+          const area = document.querySelector('.pv-editor textarea');
+          area.value = {json.dumps(text)};
+          area.dispatchEvent(new KeyboardEvent('keydown', {{key: 'Enter', metaKey: true, bubbles: true}}));
+        }})()""")
+        self.wait_for("document.querySelectorAll('.pv-card').length === 1")
+
+    def test_selecting_again_after_bold_in_writing_mode_uses_fresh_text_nodes(self):
+        text = (
+            "Alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu nu xi omicron pi rho "
+            "tau upsilon phi chi psi omega one two three four five six seven eight nine ten eleven "
+            "twelve thirteen fourteen fifteen sixteen seventeen eighteen nineteen twenty sigma end.\n"
+        )
+        self.build(text)
+        self.select("epsilon")
+        self.wait_for("document.querySelector('.pv-fab [data-select=strong]')")
+        self.click_text(".pv-fab [data-select=strong]")
+        self.wait_for("document.querySelector('.pv-writing strong')?.textContent === 'epsilon'")
+        self.saved(text.replace("epsilon", "**epsilon**"))
+        self.drag_in_writing("sigma")
+        self.assertEqual(self.evaluate("window.__trazoTestErrors"), [])
+        self.assertEqual(self.evaluate("getSelection().toString()"), "sigma")
+        self.submit_fab_comment("Check sigma")
+        added = preview.load_comments()[-1]
+        self.assertEqual(added["quote"], "sigma")
+        self.assertTrue(added["anchor"]["prefix"].endswith("twenty "))
+        self.assertTrue(added["anchor"]["suffix"].startswith(" end."))
+
+    def test_selecting_again_after_deleting_text_in_writing_mode_uses_fresh_text_nodes(self):
+        self.build("First word and several extra words before the final target word here.\n")
+        self.select("several")
+        self.wait_for("document.querySelector('.pv-fab').hidden === false")
+        self.key("Backspace", 8)
+        self.wait_for("document.querySelector('.pv-fab').hidden === true")
+        self.drag_in_writing("target")
+        self.assertEqual(self.evaluate("window.__trazoTestErrors"), [])
+        self.submit_fab_comment("Check target")
+        added = preview.load_comments()[-1]
+        self.assertEqual(added["quote"], "target")
+        self.assertNotIn("several", added["anchor"]["text"])
+        self.assertTrue(added["anchor"]["prefix"].endswith("final "))
+        self.assertTrue(added["anchor"]["suffix"].startswith(" word"))
 
 
 if __name__ == "__main__":

@@ -20,10 +20,21 @@
   };
 
   // Whitespace-squashed text of an element, mapped back to its text nodes.
-  // The page text changes only when the author writes in it (forgetPageText),
-  // so it is computed once.
   let flatCache = new WeakMap();
+  let contextCache = new WeakMap();
+  let wordIndexCache = new WeakMap();
+  function forgetPageText() {
+    flatCache = new WeakMap();
+    contextCache = new WeakMap();
+    wordIndexCache = new WeakMap();
+  }
+  const pageTextMutations = new MutationObserver(forgetPageText);
+  pageTextMutations.observe(page, { childList: true, subtree: true, characterData: true });
+  function freshPageText() {
+    if (pageTextMutations.takeRecords().length) forgetPageText();
+  }
   function flatText(el) {
+    freshPageText();
     let entry = flatCache.get(el);
     if (entry) return entry;
     const nodes = textNodes(el);
@@ -40,13 +51,6 @@
     entry = { nodes, flat, map };
     flatCache.set(el, entry);
     return entry;
-  }
-
-  // All of it: a paragraph's text is also part of its neighbours' context and of the word index.
-  function forgetPageText() {
-    flatCache = new WeakMap();
-    contextCache = new WeakMap();
-    wordIndexCache = new WeakMap();
   }
 
   const SURROUND = 32;
@@ -87,8 +91,8 @@
 
   // Locating every comment compares it with every labelled element, so an
   // element's context and its word sets are computed once, like flatText.
-  let contextCache = new WeakMap();
   const contextOf = (a, el) => {
+    freshPageText();
     let entry = contextCache.get(el);
     if (entry) return entry;
     const i = a.labelled.indexOf(el);
@@ -140,8 +144,8 @@
   // many elements, so looking each word up per element dominates a pass. An
   // index from each word to the elements that have it counts the shared words
   // of every element in one walk over the comment's words.
-  let wordIndexCache = new WeakMap();  // analysis -> {lists: Map(word -> element indexes), sizes}
   function wordIndexOf(a) {
+    freshPageText();
     let index = wordIndexCache.get(a);
     if (index) return index;
     const lists = new Map(), sizes = new Int32Array(a.labelled.length);
