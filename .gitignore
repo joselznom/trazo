@@ -8,6 +8,7 @@
 __pycache__/
 *.py[cod]
 dist/
+scripts/fuzz/node_modules/
 
 # Kanvas board and its agent skill (shared by all worktrees; see AGENTS.md)
 /kanvas.json
