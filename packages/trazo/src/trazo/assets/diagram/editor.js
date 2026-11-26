@@ -336,31 +336,24 @@
   }
 
   function setDiagram(d) {
+    finishTextEdit(false);
     S.diagram = d;
     render();
     updateUi();
     scheduleCheck();
   }
 
-  function undo() {
-    const entry = S.undo.pop();
+  function stepHistory(from, to, selKey, stateKey, name) {
+    const entry = from.pop();
     if (!entry) return;
-    S.redo.push(entry);
-    S.sel = entry.selBefore;
-    setDiagram(JSON.parse(entry.before));
+    to.push(entry);
+    S.sel = entry[selKey];
+    setDiagram(JSON.parse(entry[stateKey]));
     scheduleAutosave();
-    toast(`Undo: ${entry.label}`);
+    toast(`${name}: ${entry.label}`);
   }
-
-  function redo() {
-    const entry = S.redo.pop();
-    if (!entry) return;
-    S.undo.push(entry);
-    S.sel = entry.selAfter;
-    setDiagram(JSON.parse(entry.after));
-    scheduleAutosave();
-    toast(`Redo: ${entry.label}`);
-  }
+  const undo = () => stepHistory(S.undo, S.redo, "selBefore", "before", "Undo");
+  const redo = () => stepHistory(S.redo, S.undo, "selAfter", "after", "Redo");
 
   /* Move nodes (all leaves of selected groups), panels and edge waypoints by dx, dy. */
   function applyMove(d, ids, dx, dy) {
@@ -1215,17 +1208,18 @@
 
   /* The leaf node, edge or panel under a point (topmost first), or null. */
   function hitTest(p) {
+    if (!S.geo) return null;
     const tol = HIT_PX / S.view.zoom;
-    for (const e of [...S.geo.edges].reverse()) {
-      if (e.hidden || isHidden(e.id)) continue;
+    const vis = (x) => !x.hidden && !isHidden(x.id);
+    for (const e of S.geo.edges.filter(vis).reverse()) {
       const pts = e.points || [];
       for (let i = 1; i < pts.length; i++) if (segDist(p, pts[i - 1], pts[i]) <= tol) return e.id;
       if (e.label && inBox(e.label.box, p, 0)) return e.id;
     }
-    const leaves = S.geo.nodes.filter((n) => n.kind !== "group" && !n.hidden && !isHidden(n.id));
-    for (const n of [...leaves].reverse()) if (inBox(n.box, p, 0)) return n.id;
-    for (const panel of [...S.geo.panels].reverse()) {
-      if (panel.hidden || isHidden(panel.id)) continue;
+    for (const n of S.geo.nodes.filter((n) => n.kind !== "group" && vis(n)).reverse()) {
+      if (inBox(n.box, p, 0)) return n.id;
+    }
+    for (const panel of S.geo.panels.filter(vis).reverse()) {
       if (inBox(panel.box, p, 0)) return panel.id;
     }
     return null;
@@ -2072,9 +2066,10 @@
     editing.el.remove();
     if (editing.bar) editing.bar.remove();
     if (keep && !commit(`edit text ${editing.id}`, (d) => {
-      const node = findItem(editing.id, d).item;
-      if (text === undefined) delete node.text;
-      else node.text = text;
+      const found = findItem(editing.id, d);
+      if (!found) return false;
+      if (text === undefined) delete found.item.text;
+      else found.item.text = text;
     })) {
       render();
     }
