@@ -26,8 +26,7 @@ test: test-package test-template
 # hook lints staged files of trazo only.
 lint:
 	cd "$(TRAZO_DIR)" && uv run --quiet ruff check
-	cd "$(TRAZO_DIR)" && uv run --quiet ruff check --config pyproject.toml "$(CURDIR)/scripts/acceptance"
-	cd "$(TRAZO_DIR)" && uv run --quiet ruff check --config pyproject.toml "$(CURDIR)/scripts/fuzz"
+	cd "$(TRAZO_DIR)" && uv run --quiet ruff check --config pyproject.toml "$(CURDIR)/scripts/acceptance" "$(CURDIR)/scripts/fuzz"
 
 # mypy on trazo; reports only. typecheck-strict (run by CI) fails on errors in the modules of
 # the strict override in pyproject.toml.
@@ -163,7 +162,7 @@ clean:
 
 help:
 	@echo "make hooks           test every pushed commit first (.githooks/pre-push)"
-	@echo "make lint            ruff check on trazo and scripts/acceptance"
+	@echo "make lint            ruff check on trazo, scripts/acceptance and scripts/fuzz"
 	@echo "make typecheck       mypy on trazo (reports only)"
 	@echo "make typecheck-strict  fail on mypy errors in the strict modules (CI runs it)"
 	@echo "make test-package    trazo unit tests, a process per module (JOBS=N at a time, SHARD=I/N one part)"

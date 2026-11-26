@@ -138,37 +138,34 @@ def summarize_trace(trace_path: Path, cov_path: Path) -> dict[str, Any]:
     if not trace_path.is_file():
         return {"states": 0, "violations": [], "branches_hit": 0, "branches_total": 0, "urls": {}}
 
-    syms: dict[int, str] = {}
+    syms: set[int] = set()
     if cov_path.is_file():
         with cov_path.open(encoding="utf-8") as handle:
-            for line in handle:
-                if line.strip():
-                    item = json.loads(line)
-                    syms[int(item["id"])] = str(item["script"])
+            syms = {int(json.loads(line)["id"]) for line in handle if line.strip()}
 
-    proc = subprocess.Popen(
-        [str(BOMBADIL_BIN), "trace", "--json", str(trace_path)],
-        cwd=FUZZ_DIR,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
-    )
-    assert proc.stdout is not None
     urls: collections.Counter[str] = collections.Counter()
     violations: list[dict[str, Any]] = []
     hit_branches: set[int] = set()
     states = 0
-    for line in proc.stdout:
-        record = json.loads(line)
-        states += 1
-        meta = record["metadata"]
-        state = meta["state"]
-        urls[str(state["url"])] += 1
-        for branch_id in state.get("branches", []):
-            hit_branches.add(int(branch_id))
-        for violation in meta.get("violations", []):
-            violations.append({"state": record["index"], "url": state["url"], "detail": violation})
-    proc.wait()
+    with subprocess.Popen(
+        [str(BOMBADIL_BIN), "trace", "--json", str(trace_path)],
+        cwd=FUZZ_DIR,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.DEVNULL,
+        text=True,
+    ) as proc:
+        assert proc.stdout is not None
+        for line in proc.stdout:
+            record = json.loads(line)
+            states += 1
+            meta = record["metadata"]
+            state = meta["state"]
+            urls[str(state["url"])] += 1
+            for branch_id in state.get("branches", []):
+                hit_branches.add(int(branch_id))
+            for violation in meta.get("violations", []):
+                violations.append({"state": record["index"], "url": state["url"], "detail": violation})
+        proc.wait()
 
     return {
         "states": states,
@@ -261,10 +258,9 @@ def run_suite(
         and not server_died
     )
 
+    if passed and not keep_traces:
+        trace_path.unlink(missing_ok=True)
     trace_kept: str | None = str(trace_path) if trace_path.is_file() else None
-    if passed and not keep_traces and trace_path.exists():
-        trace_path.unlink()
-        trace_kept = None
 
     return {
         "suite": suite.name,

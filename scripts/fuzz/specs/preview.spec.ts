@@ -1,6 +1,7 @@
-import { always, extract, actions, weighted } from "@antithesishq/bombadil";
+import { always } from "@antithesishq/bombadil";
 import * as defaultActions from "@antithesishq/bombadil/browser/defaults/actions";
-import { getFingerprint, type ActionTemplate, type State } from "@antithesishq/bombadil/browser";
+import { actions, extract, getFingerprint, weighted } from "@antithesishq/bombadil/browser";
+import { clickTarget } from "./shared.ts";
 
 export {
   noHttpErrorCodes,
@@ -11,40 +12,42 @@ export {
   shellOrEditorPresent,
 } from "./shared.ts";
 
-const previewState = extract((state: State) => {
+const previewState = extract((state) => {
   const ready = state.document.readyState === "complete";
   const isWriting = !!state.document.querySelector(".pv-writing");
   const strayEditable = state.document.querySelectorAll('[contenteditable="plaintext-only"]').length;
 
   const writableParagraphs = Array.from(state.document.querySelectorAll(".pv-page p.pv-can-write"))
     .slice(0, 8)
-    .map((el) => {
+    .flatMap((el) => {
       const r = el.getBoundingClientRect();
-      return {
-        fingerprint: getFingerprint(el),
-        left: r.left,
-        right: r.right,
-        x: r.left + Math.min(r.width * 0.35, 140),
-        y: r.top + Math.min(r.height * 0.5, 24),
-        w: r.width,
-        h: r.height,
-      };
-    })
-    .filter((r) => r.w > 40 && r.h > 12 && r.y > 70 && r.y < 680);
+      const y = r.top + Math.min(r.height * 0.5, 24);
+      if (!(r.width > 40 && r.height > 12 && y > 70 && y < 680)) return [];
+      return [
+        {
+          fingerprint: getFingerprint(el),
+          left: r.left,
+          right: r.right,
+          x: r.left + Math.min(r.width * 0.35, 140),
+          y,
+        },
+      ];
+    });
 
   const blurTargets = Array.from(state.document.querySelectorAll(".pv-top, .pv-page h1"))
     .slice(0, 2)
-    .map((el) => {
+    .flatMap((el) => {
       const r = el.getBoundingClientRect();
-      return {
-        fingerprint: getFingerprint(el),
-        x: r.left + Math.min(r.width * 0.5, 120),
-        y: r.top + r.height / 2,
-        w: r.width,
-        h: r.height,
-      };
-    })
-    .filter((r) => r.w > 10 && r.h > 10 && r.y >= 0 && r.y < 700);
+      const y = r.top + r.height / 2;
+      if (!(r.width > 10 && r.height > 10 && y >= 0 && y < 700)) return [];
+      return [
+        {
+          fingerprint: getFingerprint(el),
+          x: r.left + Math.min(r.width * 0.5, 120),
+          y,
+        },
+      ];
+    });
 
   return { ready, isWriting, strayEditable, writableParagraphs, blurTargets };
 });
@@ -56,16 +59,11 @@ export const noStrayContentEditable = always(
     previewState.current.strayEditable === 0,
 );
 
-const clickParagraphToWrite = actions<ActionTemplate>(() =>
-  previewState.current.writableParagraphs.map((p) => ({
-    Click: {
-      fingerprint: p.fingerprint,
-      point: { x: p.x, y: p.y },
-    },
-  })),
+const clickParagraphToWrite = actions(() =>
+  previewState.current.writableParagraphs.map(clickTarget),
 );
 
-const dragSelectText = actions<ActionTemplate>(() =>
+const dragSelectText = actions(() =>
   previewState.current.writableParagraphs.slice(0, 4).map((p) => ({
     MouseDrag: {
       from: { x: p.left + 12, y: p.y },
@@ -76,24 +74,18 @@ const dragSelectText = actions<ActionTemplate>(() =>
   })),
 );
 
-const editWhileWriting = actions<ActionTemplate>(() => {
+const editWhileWriting = actions(() => {
   if (!previewState.current.isWriting) return [];
-  const blurClicks: ActionTemplate[] = previewState.current.blurTargets.map((t) => ({
-    Click: {
-      fingerprint: t.fingerprint,
-      point: { x: t.x, y: t.y },
-    },
-  }));
   return [
     { TypeText: { text: { Regexp: "[a-zA-Z0-9 .,]{1,12}" } } },
     { PressKey: { code: 8 } },
     { PressKey: { code: 13 } },
     { PressKey: { code: 27 } },
-    ...blurClicks,
+    ...previewState.current.blurTargets.map(clickTarget),
   ];
 });
 
-export const explore = weighted<ActionTemplate>([
+export const explore = weighted([
   [5, defaultActions.clicks],
   [2, defaultActions.inputs],
   [1, defaultActions.scroll],

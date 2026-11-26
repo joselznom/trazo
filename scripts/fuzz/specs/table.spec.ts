@@ -1,6 +1,7 @@
-import { always, extract, actions, weighted } from "@antithesishq/bombadil";
+import { always } from "@antithesishq/bombadil";
 import * as defaultActions from "@antithesishq/bombadil/browser/defaults/actions";
-import { getFingerprint, type ActionTemplate, type State } from "@antithesishq/bombadil/browser";
+import { actions, extract, weighted } from "@antithesishq/bombadil/browser";
+import { clickAndDoubleClick, clickTarget, queryTargets } from "./shared.ts";
 
 export {
   noHttpErrorCodes,
@@ -11,7 +12,7 @@ export {
   shellOrEditorPresent,
 } from "./shared.ts";
 
-const tableState = extract((state: State) => {
+const tableState = extract((state) => {
   const ready = state.document.readyState === "complete";
   const onTablePage = state.window.location.pathname === "/tables";
   const isLoading = !!state.document.querySelector("#te-page .te-empty");
@@ -21,47 +22,24 @@ const tableState = extract((state: State) => {
     saveText.startsWith("Error:") || saveText.includes("network or server error");
   const hasCellInput = !!state.document.querySelector(".te-cellin");
 
-  const headers = Array.from(state.document.querySelectorAll("#te-page thead th[data-id]"))
-    .slice(0, 6)
-    .map((el) => {
-      const r = el.getBoundingClientRect();
-      return {
-        fingerprint: getFingerprint(el),
-        x: r.left + r.width / 2,
-        y: r.top + r.height / 2,
-        w: r.width,
-        h: r.height,
-      };
-    })
-    .filter((r) => r.w > 10 && r.h > 10 && r.y > 50 && r.y < 700);
-
-  const cells = Array.from(state.document.querySelectorAll("#te-page tbody td[data-row]"))
-    .slice(0, 8)
-    .map((el) => {
-      const r = el.getBoundingClientRect();
-      return {
-        fingerprint: getFingerprint(el),
-        x: r.left + r.width / 2,
-        y: r.top + r.height / 2,
-        w: r.width,
-        h: r.height,
-      };
-    })
-    .filter((r) => r.w > 10 && r.h > 10 && r.y > 50 && r.y < 700);
-
-  const tableLinks = Array.from(state.document.querySelectorAll("#te-list button, #te-list a"))
-    .slice(0, 6)
-    .map((el) => {
-      const r = el.getBoundingClientRect();
-      return {
-        fingerprint: getFingerprint(el),
-        x: r.left + r.width / 2,
-        y: r.top + r.height / 2,
-        w: r.width,
-        h: r.height,
-      };
-    })
-    .filter((r) => r.w > 10 && r.h > 10 && r.y > 40 && r.y < 720);
+  const headers = queryTargets(state.document, "#te-page thead th[data-id]", {
+    limit: 6,
+    minSize: 10,
+    minY: 50,
+    maxY: 700,
+  });
+  const cells = queryTargets(state.document, "#te-page tbody td[data-row]", {
+    limit: 8,
+    minSize: 10,
+    minY: 50,
+    maxY: 700,
+  });
+  const tableLinks = queryTargets(state.document, "#te-list button, #te-list a", {
+    limit: 6,
+    minSize: 10,
+    minY: 40,
+    maxY: 720,
+  });
 
   return {
     ready,
@@ -84,21 +62,11 @@ export const tableRemainsRendered = always(() => {
 
 export const noTableSaveError = always(() => !tableState.current.fatalSaveError);
 
-const interactHeaders = actions<ActionTemplate>(() =>
-  tableState.current.headers.flatMap((hdr) => [
-    { Click: { fingerprint: hdr.fingerprint, point: { x: hdr.x, y: hdr.y } } },
-    { DoubleClick: { fingerprint: hdr.fingerprint, point: { x: hdr.x, y: hdr.y } } },
-  ]),
-);
+const interactHeaders = actions(() => tableState.current.headers.flatMap(clickAndDoubleClick));
 
-const interactCells = actions<ActionTemplate>(() =>
-  tableState.current.cells.flatMap((cell) => [
-    { Click: { fingerprint: cell.fingerprint, point: { x: cell.x, y: cell.y } } },
-    { DoubleClick: { fingerprint: cell.fingerprint, point: { x: cell.x, y: cell.y } } },
-  ]),
-);
+const interactCells = actions(() => tableState.current.cells.flatMap(clickAndDoubleClick));
 
-const editActiveCell = actions<ActionTemplate>(() => {
+const editActiveCell = actions(() => {
   if (!tableState.current.hasCellInput) return [];
   return [
     { TypeText: { text: { Regexp: "[a-zA-Z0-9 .%]{1,10}" } } },
@@ -107,13 +75,9 @@ const editActiveCell = actions<ActionTemplate>(() => {
   ];
 });
 
-const switchTables = actions<ActionTemplate>(() =>
-  tableState.current.tableLinks.map((item) => ({
-    Click: { fingerprint: item.fingerprint, point: { x: item.x, y: item.y } },
-  })),
-);
+const switchTables = actions(() => tableState.current.tableLinks.map(clickTarget));
 
-export const explore = weighted<ActionTemplate>([
+export const explore = weighted([
   [4, defaultActions.clicks],
   [2, defaultActions.inputs],
   [1, defaultActions.scroll],

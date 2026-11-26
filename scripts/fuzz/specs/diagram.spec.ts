@@ -1,6 +1,7 @@
-import { always, eventually, extract, actions, weighted } from "@antithesishq/bombadil";
+import { always, eventually } from "@antithesishq/bombadil";
 import * as defaultActions from "@antithesishq/bombadil/browser/defaults/actions";
-import { getFingerprint, type ActionTemplate, type State } from "@antithesishq/bombadil/browser";
+import { actions, extract, weighted } from "@antithesishq/bombadil/browser";
+import { clickTarget, queryTargets } from "./shared.ts";
 
 export {
   noHttpErrorCodes,
@@ -11,7 +12,7 @@ export {
   shellOrEditorPresent,
 } from "./shared.ts";
 
-const diagramState = extract((state: State) => {
+const diagramState = extract((state) => {
   const ready = state.document.readyState === "complete";
   const onDiagramPage = state.window.location.pathname === "/diagrams";
   const isLanding = state.document.body?.classList.contains("is-landing") ?? false;
@@ -27,33 +28,11 @@ const diagramState = extract((state: State) => {
     }
   }
 
-  const tools = Array.from(state.document.querySelectorAll("#tools button[data-tool]"))
-    .map((el) => {
-      const r = el.getBoundingClientRect();
-      return {
-        fingerprint: getFingerprint(el),
-        x: r.left + r.width / 2,
-        y: r.top + r.height / 2,
-        w: r.width,
-        h: r.height,
-      };
-    })
-    .filter((r) => r.w > 0 && r.h > 0);
-
-  const historyButtons = Array.from(
-    state.document.querySelectorAll('button[data-action="undo"], button[data-action="redo"]'),
-  )
-    .map((el) => {
-      const r = el.getBoundingClientRect();
-      return {
-        fingerprint: getFingerprint(el),
-        x: r.left + r.width / 2,
-        y: r.top + r.height / 2,
-        w: r.width,
-        h: r.height,
-      };
-    })
-    .filter((r) => r.w > 0 && r.h > 0);
+  const tools = queryTargets(state.document, "#tools button[data-tool]");
+  const historyButtons = queryTargets(
+    state.document,
+    'button[data-action="undo"], button[data-action="redo"]',
+  );
 
   return { ready, onDiagramPage, isLanding, hasOverlay, hasPaperSvg, viewport, tools, historyButtons };
 });
@@ -70,25 +49,11 @@ export const svgCanvasPresent = always(() => {
   ).within(5, "seconds");
 });
 
-const switchTool = actions<ActionTemplate>(() =>
-  diagramState.current.tools.map((t) => ({
-    Click: {
-      fingerprint: t.fingerprint,
-      point: { x: t.x, y: t.y },
-    },
-  })),
-);
+const switchTool = actions(() => diagramState.current.tools.map(clickTarget));
 
-const historyActions = actions<ActionTemplate>(() =>
-  diagramState.current.historyButtons.map((b) => ({
-    Click: {
-      fingerprint: b.fingerprint,
-      point: { x: b.x, y: b.y },
-    },
-  })),
-);
+const historyActions = actions(() => diagramState.current.historyButtons.map(clickTarget));
 
-const canvasDrag = actions<ActionTemplate>(() => {
+const canvasDrag = actions(() => {
   const vp = diagramState.current.viewport;
   if (!vp || diagramState.current.isLanding) return [];
   const x1 = vp.x + vp.w * 0.3;
@@ -115,7 +80,7 @@ const canvasDrag = actions<ActionTemplate>(() => {
   ];
 });
 
-export const explore = weighted<ActionTemplate>([
+export const explore = weighted([
   [5, defaultActions.clicks],
   [2, defaultActions.inputs],
   [1, defaultActions.scroll],
