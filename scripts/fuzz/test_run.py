@@ -1,5 +1,3 @@
-"""Unit tests for the Bombadil fuzz runner (no browser or network)."""
-
 from __future__ import annotations
 
 import json
@@ -21,10 +19,10 @@ class FuzzRunnerTests(unittest.TestCase):
                 '127.0.0.1 - - [26/Nov/2026] "POST /__block HTTP/1.1" 500 -',
             ]
         )
-        fatal, bg_exits = fuzz_run.scan_server_log(log)
-        self.assertEqual(len(fatal), 2)
-        self.assertEqual(len(bg_exits), 1)
-        self.assertIn("diagram export", bg_exits[0])
+        scan = fuzz_run.scan_server_log(log)
+        self.assertEqual(len(scan.fatal_lines), 2)
+        self.assertEqual(len(scan.nonzero_bg_job_lines), 1)
+        self.assertIn("diagram export", scan.nonzero_bg_job_lines[0])
 
     def test_seed_hand_table_writes_valid_hand_spec(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

@@ -22,8 +22,6 @@ ACCEPTANCE_FILTER = $(if $(CHANGED_FROM),--changed-from $(CHANGED_FROM)) $(ACCEP
 
 test: test-package test-template
 
-# Lint trazo, the acceptance harness and the fuzz runner with trazo's ruff config; the pre-commit
-# hook lints staged files of trazo only.
 lint:
 	cd "$(TRAZO_DIR)" && uv run --quiet ruff check
 	cd "$(TRAZO_DIR)" && uv run --quiet ruff check --config pyproject.toml "$(CURDIR)/scripts/acceptance" "$(CURDIR)/scripts/fuzz"
@@ -106,12 +104,9 @@ test-update:
 test-acceptance:
 	$(TRAZO_PYTHON) -m unittest discover -s scripts/acceptance/tests
 
-# Unit tests of the Bombadil UI fuzz runner (no browser or network).
 test-fuzz:
 	$(TRAZO_PYTHON) -m unittest discover -s scripts/fuzz
 
-# Property-based UI fuzzing with Bombadil (scripts/fuzz/run.py).
-# FUZZ_TIME=30s sets duration per suite; FUZZ_TARGET=preview|diagram|table runs one suite.
 FUZZ_TIME ?= 45s
 FUZZ_TARGET ?=
 FUZZ_ARGS ?=

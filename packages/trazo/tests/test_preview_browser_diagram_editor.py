@@ -1,9 +1,6 @@
-"""Diagram editor regressions in Chrome: pointer events before load and undo while editing text."""
-
 import json
 import unittest
 
-import _support  # noqa: F401  (sets TRAZO_ROOT before trazo loads)
 from _preview_browser import PreviewBrowserTestCase
 
 from trazo import diagram

@@ -1,12 +1,3 @@
-"""Run Bombadil property-based UI fuzz suites against a throwaway trazo paper.
-
-Each suite starts from a fresh copy of the example paper (plus a hand-edited
-table spec so both table editor modes are reachable), serves it via
-`trazo preview serve` on a free localhost port, runs Bombadil headlessly, and
-checks both Bombadil's property violations and the server log for tracebacks or
-5xx errors.
-"""
-
 from __future__ import annotations
 
 import argparse
@@ -40,7 +31,13 @@ BG_JOB_EXIT_RE = re.compile(r"^\[(build|export)\]\s+.*:\s+exit\s+(\d+)")
 
 
 class FuzzError(RuntimeError):
-    """Raised when the fuzz runner cannot start or complete a suite."""
+    pass
+
+
+@dataclass(frozen=True)
+class ServerLogScan:
+    fatal_lines: list[str]
+    nonzero_bg_job_lines: list[str]
 
 
 @dataclass(frozen=True)
@@ -86,8 +83,7 @@ def seed_hand_table(paper_dir: Path) -> Path:
     return spec_path
 
 
-def scan_server_log(log_text: str) -> tuple[list[str], list[str]]:
-    """Return (fatal_lines, nonzero_bg_job_lines) from a preview server log."""
+def scan_server_log(log_text: str) -> ServerLogScan:
     fatal: list[str] = []
     bg_exits: list[str] = []
     for line in log_text.splitlines():
@@ -96,7 +92,7 @@ def scan_server_log(log_text: str) -> tuple[list[str], list[str]]:
         match = BG_JOB_EXIT_RE.match(line)
         if match and int(match.group(2)) != 0:
             bg_exits.append(line)
-    return fatal, bg_exits
+    return ServerLogScan(fatal_lines=fatal, nonzero_bg_job_lines=bg_exits)
 
 
 def run_trazo(args: list[str], cwd: Path) -> None:
@@ -250,11 +246,11 @@ def run_suite(
             stop_server(server)
 
     summary = summarize_trace(trace_path, cov_path)
-    fatal_server_lines, bg_job_exits = scan_server_log(server_log.read_text(encoding="utf-8"))
+    log_scan = scan_server_log(server_log.read_text(encoding="utf-8"))
     passed = (
         result.returncode == 0
         and not summary["violations"]
-        and not fatal_server_lines
+        and not log_scan.fatal_lines
         and not server_died
     )
 
@@ -272,8 +268,8 @@ def run_suite(
         "branches_total": summary["branches_total"],
         "violations": summary["violations"],
         "server_died": server_died,
-        "server_fatal_lines": fatal_server_lines,
-        "background_job_nonzero_exits": bg_job_exits,
+        "server_fatal_lines": log_scan.fatal_lines,
+        "background_job_nonzero_exits": log_scan.nonzero_bg_job_lines,
         "urls": summary["urls"],
         "trace": trace_kept,
         "server_log": str(server_log),
