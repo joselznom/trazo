@@ -46,31 +46,18 @@ Instructions for AI agents working on the trazo suite.
 - Every change: `make lint` (it also lints `scripts/acceptance`),
   `make test-package` and `make test-template`. Report the exact commands
   and results before claiming a change works.
-- Acceptance harness (`scripts/acceptance/`): it runs by itself, chosen by
-  the files a change touches, as the `areas` of
-  `scripts/acceptance/catalog.toml` say. Passes are cached by content, so a
-  scenario whose files did not change is not run again.
-  - **Push:** `pre-push` runs `make acceptance-auto AUTO=push` (n1 and n2
-    for the files this branch changed since develop) on each pushed tip after
-    the tests. With nothing matching it ends at once. A missing data seed
-    (fresh clone, changed `setup.sh`) is downloaded by the run itself, once,
-    about 100 MB. A failure blocks the push: read the `report.md` it names
-    and fix the cause; never push with `--no-verify`. A skip (no login, a
-    usage limit) is listed, not blocking; an agent never logs in, so tell
-    the owner.
-  - Pushing a `vX.Y.Z` tag also needs n1 and n2 passing for what changed
-    since the previous release (a skip blocks here). The owner checks the
-    desktop apps by hand before a release; agents do not run manual app
-    checks.
-  - A failed scenario is retried once and a pass then says "on retry";
-    `--no-cache` forces a run. n2 uses the owner's real CLI logins.
-  - Edits to `scripts/acceptance/`: `make test-acceptance`.
-  - Paste the path of the `report.md` that `make acceptance*` prints and its
-    summary line. A skipped, cached or "not automated" scenario is not a
-    fresh pass: say which ones were.
-  - The harness reads the owner's Claude login (one read-only keychain
-    item) and a temporary copy of Codex's `auth.json`. Never run `claude`
-    or `codex` login, logout or `setup-token`, and never write the keychain.
+- Acceptance harness (`scripts/acceptance/`): `pre-push` runs
+  `make acceptance-auto AUTO=push` (n1 and n2 for files changed since
+  `develop`), and pushing a `vX.Y.Z` tag runs `AUTO=tag` since the previous
+  release (where skips also block; see `scripts/acceptance/README.md` for
+  arguments). A failure blocks the push; read its `report.md` and fix the
+  cause, never push with `--no-verify`. Edits to `scripts/acceptance/` also
+  require `make test-acceptance`. Paste the `report.md` path and summary
+  line, and state any skipped, cached or "not automated" scenario. Never run
+  `claude` or `codex` login, logout or `setup-token`, and never write the
+  keychain; if a scenario skips for a missing login or usage limit, tell the
+  owner. Details (cache, seed, retries, credentials):
+  `scripts/acceptance/README.md`.
 - A change to a module listed under `[[tool.mypy.overrides]]` in
   `packages/trazo/pyproject.toml`: `make typecheck` reports nothing for
   it. The other modules' errors are known and do not block yet.
@@ -140,9 +127,9 @@ that contains it: generated files stay low inside `template/`, and
 
 ## Planning
 
-- Plan and track work on the Kanvas board; follow
-  `.agents/skills/kanvas/SKILL.md`. The board (`kanvas.json`) and the
-  skill sit in the main checkout and are git-ignored, so all worktrees
+- When the user asks to plan, track or update tasks on the Kanvas board,
+  follow `.agents/skills/kanvas/SKILL.md`. The board (`kanvas.json`) and
+  the skill sit in the main checkout and are git-ignored, so all worktrees
   share one live board. From a worktree in `.claude/worktrees/`, read the
   skill at `../../../.agents/skills/kanvas/SKILL.md` and run `kanvas`
   (the per-user install) where it says `kanvas.py`.
